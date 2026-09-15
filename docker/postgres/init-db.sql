@@ -1,0 +1,11 @@
+CREATE DATABASE user_db;
+CREATE DATABASE application_db;
+CREATE DATABASE account_db;
+CREATE DATABASE transaction_db;
+CREATE DATABASE payment_db;
+CREATE DATABASE statistics_db;
+CREATE DATABASE fraud_db;
+CREATE DATABASE notification_db;
+CREATE DATABASE credit_card_db;
+CREATE DATABASE loan_db;
+CREATE DATABASE integration_db;

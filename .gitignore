@@ -1,0 +1,101 @@
+# ---------- Build output ----------
+target/
+build/
+out/
+dist/
+bin/
+*.class
+*.jar
+*.war
+*.ear
+*.jar.original
+# Keep the Maven wrapper jar if one is ever added
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---------- Environment / secrets ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*.crt
+secrets.yml
+application-local.yml
+application-secret.yml
+
+# ---------- Terraform state & vars (may contain secrets) ----------
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+crash.log
+
+# ---------- IDE ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+*.swo
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Logs ----------
+*.log
+logs/
+hs_err_pid*
+replay_pid*
+
+# ---------- Local databases / data ----------
+*.db
+*.sqlite
+*.sqlite3
+*.mv.db
+*.trace.db
+pgdata/
+data/
+volumes/
+
+# ---------- Frontend / Python (if added later) ----------
+node_modules/
+coverage/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# ---------- Tooling ----------
+.claude/settings.local.json
+
+# ---------- Private study / learning material (LOCAL ONLY, never published) ----------
+STUDY_NOTE.md
+STUDY_NOTES.md
+study_note.md
+study_notes.md
+study_notes/
+study-notes/
+study_notes/**
+study-notes/**
+STUDY_NOTE*.pdf
+STUDY_NOTES*.pdf
+study-notes*.pdf
+study_notes*.pdf
+*study-artifact*
+*study_artifact*
+interview-prep/
+interview_prep/
+INTERVIEW*.md
+ROADMAP.md
