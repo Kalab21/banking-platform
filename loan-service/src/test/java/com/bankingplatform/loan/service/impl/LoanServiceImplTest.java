@@ -534,15 +534,16 @@ class LoanServiceImplTest {
         }
 
         /**
-         * Documents a known defect rather than endorsing it: {@code earlyPayoff} zeroes
-         * {@code remainingBalance} on the loan before reading it back into the repayment
-         * record, so the stored {@code principalPaid} is always zero even though the
-         * customer did repay the principal. The payoff amount itself is correct, so this
-         * affects reporting rather than money movement. Tracked in the README roadmap.
+         * Regression test for a defect where {@code earlyPayoff} zeroed the loan's
+         * {@code remainingBalance} before reading it back into the repayment record,
+         * persisting {@code principalPaid} as 0.00 on every payoff. The money collected
+         * was always correct; the settlement record was not, so payoffs could not be
+         * reconciled. This pins the whole record, not just the one field, so the
+         * outstanding principal cannot silently go missing from it again.
          */
         @Test
-        @DisplayName("known defect: records zero principal paid on the payoff record")
-        void knownDefectPrincipalPaidRecordedAsZero() {
+        @DisplayName("records the settled principal, the accrued interest and the total on the payoff record")
+        void payoffRecordReportsPrincipalAndInterestSeparately() {
             when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
             when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
@@ -550,7 +551,42 @@ class LoanServiceImplTest {
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
 
             verify(repaymentRepository).save(savedRepayment.capture());
-            assertThat(savedRepayment.getValue().getPrincipalPaid()).isEqualByComparingTo("0.00");
+            LoanRepayment repayment = savedRepayment.getValue();
+
+            // outstanding principal 9,189.34 + accrued interest 45.95 = 9,235.29
+            assertThat(repayment.getPrincipalPaid()).isEqualByComparingTo("9189.34");
+            assertThat(repayment.getInterestPaid()).isEqualByComparingTo("45.95");
+            assertThat(repayment.getAmount()).isEqualByComparingTo("9235.29");
+            assertThat(repayment.getIsEarlyPayoff()).isTrue();
+
+            // the record must reconcile: principal + interest == amount collected
+            assertThat(repayment.getPrincipalPaid().add(repayment.getInterestPaid()))
+                    .isEqualByComparingTo(repayment.getAmount());
+
+            // and the amount collected must be what the customer was actually debited
+            verify(accountClient).debit(eq(ACCOUNT_ID), eq(new BigDecimal("9235.29")), any());
+
+            // loan is settled and closed
+            verify(loanRepository).save(savedLoan.capture());
+            assertThat(savedLoan.getValue().getRemainingBalance()).isEqualByComparingTo("0.00");
+            assertThat(savedLoan.getValue().getStatus()).isEqualTo(LoanStatus.PAID_OFF);
+            verify(eventProducer).publishLoanPaidOff(LOAN_ID, USER_ID);
+        }
+
+        @Test
+        @DisplayName("still reports the settled principal when no source account is debited")
+        void payoffRecordIsCorrectWithoutSourceAccount() {
+            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
+            when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
+
+            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", null));
+
+            verify(accountClient, never()).debit(anyLong(), any(), any());
+
+            verify(repaymentRepository).save(savedRepayment.capture());
+            assertThat(savedRepayment.getValue().getPrincipalPaid()).isEqualByComparingTo("9189.34");
+            assertThat(savedRepayment.getValue().getAmount()).isEqualByComparingTo("9235.29");
         }
     }
 

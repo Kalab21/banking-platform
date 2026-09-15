@@ -187,10 +187,14 @@ public class LoanServiceImpl implements LoanService {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
 
+        // Capture the outstanding principal before the balance is cleared below,
+        // so the repayment record reports what was actually settled.
+        BigDecimal principalPaid = loan.getRemainingBalance();
+
         // Accrued interest for current period
         BigDecimal monthlyRate = loan.getInterestRate().divide(new BigDecimal("1200"), 10, RoundingMode.HALF_UP);
-        BigDecimal accruedInterest = loan.getRemainingBalance().multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal payoffAmount = loan.getRemainingBalance().add(accruedInterest);
+        BigDecimal accruedInterest = principalPaid.multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal payoffAmount = principalPaid.add(accruedInterest);
 
         if (request.getSourceAccountId() != null) {
             accountClient.debit(request.getSourceAccountId(), payoffAmount, "Early loan payoff — loanId=" + loanId);
@@ -211,7 +215,7 @@ public class LoanServiceImpl implements LoanService {
                 .loan(loan)
                 .paymentRef(generateRef())
                 .amount(payoffAmount)
-                .principalPaid(loan.getRemainingBalance())
+                .principalPaid(principalPaid)
                 .interestPaid(accruedInterest)
                 .sourceAccountId(request.getSourceAccountId())
                 .isEarlyPayoff(true)

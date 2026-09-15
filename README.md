@@ -19,7 +19,7 @@ This project models that problem end to end:
 - **A single authenticated entry point** — an API gateway that validates JWTs once and forwards trusted identity headers downstream.
 - **An auditable trail** — every state-changing operation writes an `audit_log` row alongside its domain write, inside the same transaction.
 
-**By the numbers:** 13 services, 290 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 12 Flyway migrations, 53 automated tests.
+**By the numbers:** 13 services, 290 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 12 Flyway migrations, 54 automated tests.
 
 ---
 
@@ -215,8 +215,7 @@ These are the honest gaps between this project and a production ledger, and they
 - **Balance updates have no optimistic or pessimistic locking.** `updateBalance` is a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so concurrent debits on the same account can interleave and lose an update.
 - **No idempotency keys.** A retried transfer will apply twice.
 - **No circuit breakers or retries** on Feign calls (Resilience4j is not on the classpath), so a slow downstream service propagates latency upstream.
-- **Test coverage is deliberately narrow.** Balances and loan arithmetic are covered by 53 automated tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
-- **`earlyPayoff` records zero principal paid.** The loan's `remainingBalance` is zeroed before it is read back into the repayment record, so `principalPaid` on an early-payoff row is always `0.00`. The amount actually collected is correct, so this is a reporting defect rather than a money-movement one. Pinned by a test named as a known defect rather than silently accepted.
+- **Test coverage is deliberately narrow.** Balances and loan arithmetic are covered by 54 automated tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
 
 ---
 
@@ -227,12 +226,12 @@ These are the honest gaps between this project and a production ledger, and they
 | Layer | Tooling | Scope | Result |
 |---|---|---|---|
 | Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | **21 passing** |
-| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | **26 passing** |
+| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | **27 passing** |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | Manual, needs the stack up |
 | CI | GitHub Actions | `mvn -B clean verify` on JDK 17 plus Compose validation | Every push and pull request |
 
-**53 automated tests, all passing** under a single command:
+**54 automated tests, all passing** under a single command:
 
 ```bash
 mvn -B --no-transfer-progress clean verify
@@ -243,7 +242,7 @@ Unit tests run in the `test` phase; integration tests are named `*IT` and bound 
 **What the unit tests actually pin down.** They assert on the entity handed to the repository, which is the state the service commits, rather than on mapper output. Money is compared with `isEqualByComparingTo`, so a difference in `BigDecimal` scale can never pass for a difference in value.
 
 - *Accounts* — credit and debit arithmetic; the boundary where a debit drains the balance to exactly zero without tripping overdraft; insufficient-funds rejection, including head-room already consumed by an existing overdraft; the overdraft path (deficit moved to `overdraftBalance`, `OVERDRAWN` status, `$35.00` fee, event published); full and partial overdraft repayment, and the transition back to `ACTIVE`; `FROZEN` and `CLOSED` accounts rejecting both directions; closed accounts refusing to reopen; and the audit row plus event being written on success — and *not* written on a rejected debit.
-- *Loans* — the amortised monthly payment for $10,000 at 6.00% APR over 12 months, checked against the external reference value of **$860.66** rather than against the implementation's own formula; a 12-row schedule whose principal portions sum exactly to the amount borrowed and whose final balance is zero; zero-interest loans splitting evenly; interest-before-principal allocation; `PAID` versus `PARTIAL` instalment marking; overpayment capped at the payoff figure; loan closure on the final instalment; and early payoff settling balance plus accrued interest.
+- *Loans* — the amortised monthly payment for $10,000 at 6.00% APR over 12 months, checked against the external reference value of **$860.66** rather than against the implementation's own formula; a 12-row schedule whose principal portions sum exactly to the amount borrowed and whose final balance is zero; zero-interest loans splitting evenly; interest-before-principal allocation; `PAID` versus `PARTIAL` instalment marking; overpayment capped at the payoff figure; loan closure on the final instalment; and early payoff settling balance plus accrued interest, with the payoff record asserted to reconcile (principal + interest equals the amount debited).
 
 **What the integration test proves that a mock cannot.** It runs `@DataJpaTest` against a real PostgreSQL 16 container: the Flyway migrations apply to an empty database, the JPA mappings agree with the migrated schema (the service runs `ddl-auto: validate`, so entity/migration drift fails the test at startup), `DECIMAL(19,2)` survives a round trip without losing scale, a negative balance and overdraft position persist correctly, and the unique constraint on `account_number` is enforced by the database itself.
 
@@ -407,10 +406,9 @@ Ordered by what would most improve the system, not by what is easiest:
 1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts and loans to the remaining services, and add MockMvc controller and Spring Security slice tests.
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
-4. **Fix the `earlyPayoff` principal-paid record** so settlement reporting reconciles.
-5. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
-6. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
-7. **Extend CI** — run the end-to-end suite against a Compose stack and publish images to a registry.
+4. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
+5. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
+6. **Extend CI** — run the end-to-end suite against a Compose stack and publish images to a registry.
 
 ---
 
