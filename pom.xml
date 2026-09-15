@@ -40,6 +40,7 @@
         <jjwt.version>0.12.6</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
+        <maven-failsafe.version>3.5.4</maven-failsafe.version>
     </properties>
 
     <dependencyManagement>
@@ -85,6 +86,25 @@
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <!-- Integration tests are named *IT and run in the `verify` phase, so
+                 `mvn verify` exercises unit and integration tests together. Keeping
+                 them off `mvn test` means the fast loop needs no Docker daemon. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${maven-failsafe.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
         <pluginManagement>
             <plugins>
                 <plugin>

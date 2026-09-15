@@ -1,5 +1,7 @@
 # Banking Platform
 
+[![CI](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml)
+
 A distributed, event-driven **retail banking back end** built as 13 Spring Boot microservices — covering accounts, transactions, payments, credit cards, loans, fraud detection, KYC and notifications, fronted by an API gateway and deployable to AWS via Terraform.
 
 > **Portfolio / learning project.** This is a self-built demonstration system, **not** a real bank and not production-certified financial software. It handles no real money, holds no real customer data, and has not undergone regulatory, audit or penetration review. It exists to demonstrate backend architecture, distributed-systems design and Spring Boot engineering practice.
@@ -17,7 +19,7 @@ This project models that problem end to end:
 - **A single authenticated entry point** — an API gateway that validates JWTs once and forwards trusted identity headers downstream.
 - **An auditable trail** — every state-changing operation writes an `audit_log` row alongside its domain write, inside the same transaction.
 
-**By the numbers:** 13 services, 302 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 26 Flyway migrations.
+**By the numbers:** 13 services, 290 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 12 Flyway migrations, 53 automated tests.
 
 ---
 
@@ -136,12 +138,13 @@ Only features actually implemented in this repository are listed.
 | Framework | Spring Boot 3.3.6 |
 | Cloud / distributed | Spring Cloud 2023.0.3 — Gateway, Netflix Eureka, OpenFeign (8 services) |
 | Security | Spring Security, JJWT 0.12.6, BCrypt, `dev.samstevens.totp` |
-| Persistence | Spring Data JPA / Hibernate, PostgreSQL 16, Flyway (26 migrations) |
+| Persistence | Spring Data JPA / Hibernate, PostgreSQL 16, Flyway (12 migrations) |
 | Messaging | Apache Kafka (Confluent `cp-kafka` 7.6.1) |
 | Caching / counters | Redis 7 |
 | Mapping / boilerplate | MapStruct 1.5.5, Lombok |
 | API docs | springdoc-openapi 2.6.0 (12 services) |
 | Observability | Spring Boot Actuator (all 13 services) |
+| Testing | JUnit 5, Mockito, AssertJ, Testcontainers (PostgreSQL) |
 | Build | Maven multi-module |
 | CI | GitHub Actions — `mvn verify` on JDK 17 plus Docker Compose validation |
 | Containers | Docker, Docker Compose |
@@ -212,21 +215,41 @@ These are the honest gaps between this project and a production ledger, and they
 - **Balance updates have no optimistic or pessimistic locking.** `updateBalance` is a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so concurrent debits on the same account can interleave and lose an update.
 - **No idempotency keys.** A retried transfer will apply twice.
 - **No circuit breakers or retries** on Feign calls (Resilience4j is not on the classpath), so a slow downstream service propagates latency upstream.
-- **No automated unit or integration tests.** See [Testing](#testing).
+- **Test coverage is deliberately narrow.** Balances and loan arithmetic are covered by 53 automated tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
+- **`earlyPayoff` records zero principal paid.** The loan's `remainingBalance` is zeroed before it is read back into the repayment record, so `principalPaid` on an early-payoff row is always `0.00`. The amount actually collected is correct, so this is a reporting defect rather than a money-movement one. Pinned by a test named as a known defect rather than silently accepted.
 
 ---
 
 ## Testing
 
-**Current state, stated plainly:**
+### Automated testing
 
-| Kind | Status |
-|---|---|
-| Maven build (`mvn clean package`, 13 modules) | Passing |
-| Unit tests | **None** — Surefire reports `No tests to run` |
-| Integration tests (Testcontainers / `@SpringBootTest`) | None |
-| End-to-end suite (`e2e-tests.ps1`) | Present — a PowerShell suite with pass/fail assertions covering 8 flows against the running stack |
-| CI (`.github/workflows/ci.yml`) | Runs `mvn -B clean verify` on JDK 17 and validates both Compose files on every push and pull request |
+| Layer | Tooling | Scope | Result |
+|---|---|---|---|
+| Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | **21 passing** |
+| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | **26 passing** |
+| Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | Manual, needs the stack up |
+| CI | GitHub Actions | `mvn -B clean verify` on JDK 17 plus Compose validation | Every push and pull request |
+
+**53 automated tests, all passing** under a single command:
+
+```bash
+mvn -B --no-transfer-progress clean verify
+```
+
+Unit tests run in the `test` phase; integration tests are named `*IT` and bound to Failsafe in the `verify` phase. There is no separate test command to forget — CI runs exactly the line above.
+
+**What the unit tests actually pin down.** They assert on the entity handed to the repository, which is the state the service commits, rather than on mapper output. Money is compared with `isEqualByComparingTo`, so a difference in `BigDecimal` scale can never pass for a difference in value.
+
+- *Accounts* — credit and debit arithmetic; the boundary where a debit drains the balance to exactly zero without tripping overdraft; insufficient-funds rejection, including head-room already consumed by an existing overdraft; the overdraft path (deficit moved to `overdraftBalance`, `OVERDRAWN` status, `$35.00` fee, event published); full and partial overdraft repayment, and the transition back to `ACTIVE`; `FROZEN` and `CLOSED` accounts rejecting both directions; closed accounts refusing to reopen; and the audit row plus event being written on success — and *not* written on a rejected debit.
+- *Loans* — the amortised monthly payment for $10,000 at 6.00% APR over 12 months, checked against the external reference value of **$860.66** rather than against the implementation's own formula; a 12-row schedule whose principal portions sum exactly to the amount borrowed and whose final balance is zero; zero-interest loans splitting evenly; interest-before-principal allocation; `PAID` versus `PARTIAL` instalment marking; overpayment capped at the payoff figure; loan closure on the final instalment; and early payoff settling balance plus accrued interest.
+
+**What the integration test proves that a mock cannot.** It runs `@DataJpaTest` against a real PostgreSQL 16 container: the Flyway migrations apply to an empty database, the JPA mappings agree with the migrated schema (the service runs `ddl-auto: validate`, so entity/migration drift fails the test at startup), `DECIMAL(19,2)` survives a round trip without losing scale, a negative balance and overdraft position persist correctly, and the unique constraint on `account_number` is enforced by the database itself.
+
+Running it needs a working Docker daemon. `mvn test` skips it, so the fast inner loop stays Docker-free.
+
+### End-to-end suite
 
 `e2e-tests.ps1` exercises real HTTP against the gateway: user registration and login, the overdraft lifecycle, credit-card application through approval to purchase, loan application through amortization to repayment, beneficiary plus recurring payment, SWIFT transfer and FX conversion, KYC document submission and review authorization, and Kafka-driven credit-score propagation — including a native TOTP implementation so it can complete 2FA.
 
@@ -235,7 +258,9 @@ docker compose up -d      # wait for all services to report healthy
 .\e2e-tests.ps1
 ```
 
-**This is the single largest gap in the project.** A live-stack script is not a substitute for a test pyramid. The next work item is JUnit 5 and Mockito unit tests on the service layer — starting with `AccountServiceImpl` overdraft arithmetic and loan amortization — plus Testcontainers integration tests for the JPA and Kafka layers.
+### Where coverage stops
+
+This is a deliberate foundation, not a finished pyramid. Coverage is deep on the two services holding the most consequential arithmetic — balances and amortization — and absent elsewhere. The remaining 11 services have no unit tests, there are no controller or security slice tests, and only `account-service` has an integration test. Extending the same pattern outward is roadmap item 1.
 
 ---
 
@@ -246,7 +271,7 @@ docker compose up -d      # wait for all services to report healthy
 ### Option A — full stack in Docker (recommended)
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/Kalab21/banking-platform.git
 cd banking-platform
 
 cp .env.example .env        # then edit the values
@@ -379,12 +404,13 @@ com.bankingplatform.<service>/
 
 Ordered by what would most improve the system, not by what is easiest:
 
-1. **Test pyramid** — JUnit 5 and Mockito service-layer tests, Testcontainers for JPA and Kafka, MockMvc slices for controllers.
+1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts and loans to the remaining services, and add MockMvc controller and Spring Security slice tests.
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
-4. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
-5. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
-6. **Extend CI** — run the end-to-end suite against a Compose stack and publish images to a registry.
+4. **Fix the `earlyPayoff` principal-paid record** so settlement reporting reconciles.
+5. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
+6. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
+7. **Extend CI** — run the end-to-end suite against a Compose stack and publish images to a registry.
 
 ---
 
