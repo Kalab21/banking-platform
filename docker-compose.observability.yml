@@ -1,0 +1,93 @@
+# Local observability stack: Prometheus, Grafana and Zipkin.
+#
+# Kept in its own file rather than bolted onto docker-compose.yml for two
+# reasons. The banking stack is already eighteen containers and most of them
+# are JVMs, so machines that can just about run the platform should not be
+# forced to run the monitoring too. And observability is genuinely optional:
+# the application behaves identically whether or not anything is scraping it.
+#
+#   docker compose up -d                                     # platform only
+#   docker compose -f docker-compose.observability.yml up -d  # plus telemetry
+#
+# It joins the network the main file creates, so Prometheus can reach the
+# services by container name. Start the main stack first.
+#
+# Services keep running when this stack is down: Micrometer simply buffers and
+# drops spans it cannot deliver, and an unscraped metric costs nothing.
+
+name: banking-platform
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: banking-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Local dashboards do not need months of history, and an unbounded TSDB
+      # on a developer machine is a slow-motion disk-space incident.
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: banking-grafana
+    restart: unless-stopped
+    environment:
+      # Local-only credentials for a container holding no data of its own.
+      # Anonymous viewing is on so the dashboard opens without a login prompt
+      # while demoing; editing still requires signing in.
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  zipkin:
+    image: openzipkin/zipkin:3.4
+    container_name: banking-zipkin
+    restart: unless-stopped
+    environment:
+      # In-memory storage: traces are for looking at right now, and this keeps
+      # the container to one process with no database behind it.
+      STORAGE_TYPE: mem
+    ports:
+      - "9411:9411"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9411/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  prometheus_data:
+  grafana_data:

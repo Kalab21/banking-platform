@@ -1,0 +1,96 @@
+name: Security Scan
+
+# Dependency and configuration scanning with Trivy.
+#
+# Scope, stated plainly: this scans the repository filesystem — the Maven and
+# npm dependency trees, the Dockerfiles and the Compose files. It does NOT
+# build and scan the thirteen service images. Building them on every push would
+# add roughly fifteen minutes for very little extra signal, because all thirteen
+# share one base image and one dependency tree, both of which are already
+# covered here. The base image itself is scanned separately below, which is the
+# one thing the filesystem scan genuinely cannot see.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Weekly. A CVE published against an unchanged dependency still matters,
+    # and nobody should have to push a commit to find out about it.
+    - cron: '23 5 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  dependencies:
+    name: Dependencies and IaC
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Scan filesystem for vulnerable dependencies and misconfiguration
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          # SARIF so findings land in the Security tab with code annotations
+          # rather than scrolling past in a log.
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH
+          # Report rather than fail. A CRITICAL in a transitive test-scoped
+          # dependency should be triaged, not used to block an unrelated
+          # documentation change. The findings are reviewed in the Security
+          # tab; see "Security scanning" in the README.
+          exit-code: '0'
+          ignore-unfixed: true
+
+      - name: Upload dependency findings
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+  base-image:
+    name: Runtime base image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Resolve the shared base image
+        id: base
+        # All thirteen services run on the one base image named in the root
+        # Dockerfile, so scanning it once covers the OS layer for every
+        # service image the project produces.
+        run: |
+          image=$(grep -m1 '^FROM ' Dockerfile | awk '{print $2}')
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Scanning shared runtime base: $image"
+
+      - name: Scan base image for OS vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.base.outputs.image }}
+          format: sarif
+          output: trivy-base.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+          ignore-unfixed: true
+
+      - name: Upload base image findings
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-base.sarif
+          category: trivy-base-image

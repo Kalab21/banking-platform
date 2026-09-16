@@ -1,0 +1,52 @@
+# Scrape configuration for the local Banking Platform stack.
+#
+# Every service exposes /actuator/prometheus and tags its metrics with
+# `application`, so one job per service is enough and Grafana can break any
+# panel down by service without further wiring.
+#
+# Container names are used as hostnames: this file only ever runs on the
+# Compose network, where Docker resolves them.
+
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    stack: banking-platform-local
+
+scrape_configs:
+  - job_name: banking-services
+    metrics_path: /actuator/prometheus
+    # A service that is still starting, or deliberately not running, should
+    # show as a down target rather than failing the whole scrape.
+    honor_labels: true
+    static_configs:
+      - targets: ["banking-api-gateway:8080"]
+        labels: { service: api-gateway, tier: edge }
+      - targets: ["banking-user-service:8081"]
+        labels: { service: user-service, tier: core }
+      - targets: ["banking-application-service:8082"]
+        labels: { service: application-service, tier: core }
+      - targets: ["banking-account-service:8083"]
+        labels: { service: account-service, tier: core }
+      - targets: ["banking-transaction-service:8084"]
+        labels: { service: transaction-service, tier: core }
+      - targets: ["banking-payment-service:8085"]
+        labels: { service: payment-service, tier: core }
+      - targets: ["banking-statistics-service:8086"]
+        labels: { service: statistics-service, tier: derived }
+      - targets: ["banking-notification-service:8087"]
+        labels: { service: notification-service, tier: derived }
+      - targets: ["banking-fraud-service:8088"]
+        labels: { service: fraud-detection-service, tier: derived }
+      - targets: ["banking-credit-card-service:8089"]
+        labels: { service: credit-card-service, tier: core }
+      - targets: ["banking-loan-service:8090"]
+        labels: { service: loan-service, tier: core }
+      - targets: ["banking-integration-service:8091"]
+        labels: { service: integration-service, tier: external }
+      - targets: ["banking-eureka:8761"]
+        labels: { service: eureka-server, tier: platform }
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

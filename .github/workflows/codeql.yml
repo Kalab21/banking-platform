@@ -1,0 +1,73 @@
+name: CodeQL
+
+# Static analysis for the two languages this repository actually ships.
+#
+# Separate from ci.yml on purpose: CodeQL builds the whole Maven reactor and
+# takes several minutes, so keeping it out of the main workflow means a typo in
+# a README still gets fast feedback from CI.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Weekly, so newly published rules reach an untouched repository. Monday
+    # early morning UTC keeps it clear of weekday pushes.
+    - cron: '17 4 * * 1'
+
+# Least privilege: the analysis needs to read the code and write its findings
+# to the Security tab, and nothing else.
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            # The JS analyser reads sources directly; building Next.js first
+            # would only add minutes without improving the results.
+            build-mode: none
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-and-quality is noisier than the default; the extra
+          # queries are what make this worth running on a codebase handling
+          # authentication and money.
+          queries: security-and-quality
+
+      - name: Build Java sources
+        if: matrix.language == 'java-kotlin'
+        # Compile only: tests add several minutes and CodeQL analyses the
+        # bytecode it observes being produced, not the test results.
+        run: mvn -B --no-transfer-progress -DskipTests compile
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

@@ -22,8 +22,9 @@ the platform only through the gateway — the browser never holds a bearer token
 | **Data** | PostgreSQL, database-per-service, 24 Flyway migrations, `ddl-auto: validate` |
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, role-based access |
-| **Testing** | 160 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
-| **Delivery** | Docker Compose for the full stack, GitHub Actions CI, Terraform for AWS |
+| **Testing** | 187 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Observability** | Micrometer metrics → Prometheus → Grafana, `X-Request-Id` correlation, Brave tracing → Zipkin |
+| **Delivery** | Docker Compose for the full stack, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 ---
 
@@ -59,7 +60,7 @@ This project models that problem end to end:
 - **A single authenticated entry point** — an API gateway that validates JWTs once and forwards trusted identity headers downstream.
 - **An auditable trail** — every state-changing operation writes an `audit_log` row alongside its domain write, inside the same transaction.
 
-**By the numbers:** 13 backend services plus a Next.js console, 291 Java source files, 25 REST controllers, 93 endpoints, 8 Kafka topics, 24 Flyway migrations, 18 frontend routes, 160 automated tests in CI.
+**By the numbers:** 13 backend services plus a Next.js console, 291 Java source files, 25 REST controllers, 93 endpoints, 8 Kafka topics, 24 Flyway migrations, 18 frontend routes, 187 automated tests in CI.
 
 ---
 
@@ -172,6 +173,26 @@ flowchart TB
     gw --> redis
 ```
 
+Telemetry runs alongside, in its own Compose file, and the application does not
+depend on it:
+
+```mermaid
+flowchart LR
+    svc["Gateway + 13 services<br/>Micrometer · Actuator"]
+
+    subgraph obs["Observability stack"]
+        prom["Prometheus<br/>scrapes /actuator/prometheus"]
+        graf["Grafana<br/>provisioned dashboard"]
+        zip["Zipkin<br/>trace storage"]
+    end
+
+    svc -- "metrics, scraped every 10s" --> prom
+    prom --> graf
+    svc -- "spans, pushed" --> zip
+    zip -.-> graf
+    svc -- "X-Request-Id on every hop" --> svc
+```
+
 Infrastructure is defined separately and applies to the same services:
 
 ```mermaid
@@ -263,7 +284,8 @@ flowchart LR
 | Caching / counters | Redis 7 |
 | Mapping / boilerplate | MapStruct 1.5.5, Lombok |
 | API docs | springdoc-openapi 2.6.0 (12 services) |
-| Observability | Spring Boot Actuator (all 13 services) |
+| Observability | Spring Boot Actuator, Micrometer, Prometheus, Grafana, Micrometer Tracing (Brave) → Zipkin |
+| Resilience | Resilience4j circuit breaker on `transaction-service` → `account-service` |
 | Frontend | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, Recharts 3, Zod |
 | Testing | JUnit 5, Mockito, AssertJ, Testcontainers (PostgreSQL); Vitest, React Testing Library |
 | Build | Maven multi-module |
@@ -346,8 +368,35 @@ The PostgreSQL credentials in `application.yml` and `docker-compose.yml` are **t
 - Centralised `@RestControllerAdvice` exception handling in all 11 services that expose controllers, returning structured error payloads with timestamp, status, message and path.
 - Flyway versioned migrations with `ddl-auto: validate` — the schema is reviewed SQL, never auto-generated at runtime.
 - SLF4J structured logging (`@Slf4j`) on business-significant events such as overdraft triggers and fraud alerts.
-- Actuator health/info endpoints on all services, with Docker Compose `healthcheck` gating and `depends_on: service_healthy` ordering.
+- Actuator liveness and readiness probes on all 13 services, with a Docker Compose `healthcheck` on each and `depends_on: service_healthy` ordering.
 - Kafka producers pinned to `max.block.ms: 1000` and `request.timeout.ms: 1000`, so a broker outage fails fast instead of blocking request threads for the 60-second default.
+- **A circuit breaker and a tightened timeout on `transaction-service` → `account-service`** — and only that path. See below.
+
+### What the circuit breaker actually covers
+
+Resilience4j guards exactly one hop: the Feign calls from `transaction-service`
+to `account-service`, which are the synchronous debit and credit inside every
+transfer. That call also gets a shorter timeout than the platform default —
+2s connect, 5s read instead of 5s/15s — so a stalled `account-service` surfaces
+in seconds rather than tying up request threads.
+
+**No other Feign path in the platform is protected.** The other seven services
+that make Feign calls still fail the way they always did.
+
+**There is deliberately no retry**, and this is the important part. `updateBalance`
+is not idempotent and carries no idempotency key, so a retry after a timeout
+could debit an account twice — the first attempt may have succeeded with only
+the response lost. Timeout plus circuit breaker fails fast; adding retry would
+trade a visible error for a silent double-debit. Retry becomes safe only once
+idempotency keys exist.
+
+Business rejections are excluded from the failure rate. A 422 for insufficient
+funds is `account-service` working correctly, and counting it would let one
+customer repeatedly overdrawing trip the breaker for everybody.
+
+When the breaker is open the caller gets `503` with `Retry-After`, and the
+message says no money was moved — which is true, because the call never left
+`transaction-service`.
 
 **Known limitations — stated rather than hidden**
 
@@ -356,14 +405,160 @@ These are the honest gaps between this project and a production ledger, and they
 - **Cross-service transfers are not atomic.** The debit and the credit are two separate Feign calls with no saga, compensating transaction or outbox. A failure after a successful debit leaves funds withdrawn but not credited. A production build needs a transactional outbox plus a compensating-credit saga.
 - **Balance updates have no optimistic or pessimistic locking.** `updateBalance` is a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so concurrent debits on the same account can interleave and lose an update.
 - **No idempotency keys.** A retried transfer will apply twice.
-- **No circuit breakers or retries** on Feign calls (Resilience4j is not on the classpath), so a slow downstream service propagates latency upstream.
+- **Only one Feign path is protected.** `transaction-service` → `account-service` has a circuit breaker and timeout; the other Feign callers (`application`, `credit-card`, `loan`, `payment`, `fraud-detection`, `integration`, `account`) have neither, so a slow downstream service still propagates latency upstream there.
 - **The console is read-mostly for staff.** Employees can review KYC documents, but the backend has
   no endpoint listing all pending documents, so review is per customer rather than a queue. Application
   and fraud views are read-only because no review endpoint is wired into the console yet.
 - **Playwright's live suite does not run on every CI push.** Starting 13 services on every push is
   not a sensible trade, so only the offline suite is wired into CI. The 9 live scenarios are just as
   automated, but are triggered on demand against a running stack. See [Testing](#testing).
-- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking, the 2FA gate and the shared API error contract are covered by 77 backend tests, and the console by 83 frontend tests (70 unit/component plus 13 offline end-to-end); the other 9 services have none, and there are no security slice tests. See [Testing](#testing).
+- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking, the 2FA gate, the shared API error contract, request correlation and the circuit-breaker policy are covered by 104 backend tests, and the console by 83 frontend tests (70 unit/component plus 13 offline end-to-end); the other 9 services have no service-layer tests, and there are no security slice tests. See [Testing](#testing).
+
+---
+
+## Observability
+
+Three questions decide whether a distributed system is operable: is it healthy,
+which part is slow, and what happened to *this* request. Each has a tool here.
+
+| Concern | Tool | Where |
+|---|---|---|
+| Metrics | Micrometer → Prometheus | <http://localhost:9090> |
+| Dashboards | Grafana (provisioned) | <http://localhost:3001> |
+| Traces | Micrometer Tracing (Brave) → Zipkin | <http://localhost:9411> |
+| Per-request correlation | `X-Request-Id` | response header and every log line |
+
+The telemetry stack lives in its own Compose file. The platform is eighteen
+containers already, and the application behaves identically whether or not
+anything is watching it:
+
+```bash
+docker compose up -d                                      # platform
+docker compose -f docker-compose.observability.yml up -d  # Prometheus, Grafana, Zipkin
+```
+
+### Metrics
+
+Every service exposes exactly three actuator endpoints — `health`, `info` and
+`prometheus`. Everything else (`env`, `beans`, `heapdump`, `loggers`) stays
+closed, so adding metrics widened no public surface.
+
+Each service tags its metrics with `application`, so one scrape config and one
+dashboard cover all thirteen:
+
+```bash
+curl -s http://localhost:8083/actuator/prometheus | grep http_server_requests_seconds_count
+```
+
+Prometheus scrapes all 13 services every 10s; check
+<http://localhost:9090/targets> for what it can currently see.
+
+### The dashboard
+
+![Grafana service-health dashboard](docs/screenshots/07-observability.png)
+
+*Captured from the running stack. The target-health tile reads 38% because the
+capture was taken with five services up: this machine has 6 GB allotted to
+Docker and could not hold all thirteen plus Prometheus, Grafana and Zipkin at
+once. Every other panel is live data from that run.*
+
+Grafana provisions its datasources and one dashboard from
+`observability/grafana/`, so a fresh `up` needs no clicking. **Banking Platform
+— Service Health** is organised around the three questions above:
+
+- *Is the system healthy?* — services up, request rate, 5xx rate, p99, and the
+  state of the `account-service` circuit breaker.
+- *Which service is slow?* — request rate, p95 and the ten slowest endpoints,
+  broken down by service.
+- *Runtime* — JVM heap, process CPU, and active/pending HikariCP connections.
+
+The error-rate panels count only `outcome="SERVER_ERROR"`. A 4xx is a caller
+mistake — a rejected overdraft is the platform working correctly — and mixing
+those into an error rate makes the dashboard cry wolf.
+
+### Correlation IDs
+
+Every request carries an `X-Request-Id` from the edge to the database:
+
+```
+browser → BFF → gateway (mints or reuses) → service → Feign → downstream service
+```
+
+The gateway mints one when a request arrives without it, and reuses a valid
+inbound id so a correlation started upstream survives. The value is
+attacker-controlled, so it is validated before being forwarded or logged —
+bounded to 64 characters and restricted to `[A-Za-z0-9_-]`. Without that, an id
+containing a newline would let a caller forge log entries. An invalid id is
+replaced rather than rejected: a malformed header is not a reason to fail a
+banking request.
+
+Propagation is carried by Micrometer Tracing baggage rather than a thread-local.
+That detail earned itself: Spring Cloud CircuitBreaker can run the Feign call on
+a different thread from the one serving the request, where an MDC lookup finds
+nothing, and the id was being silently regenerated at the boundary. Baggage
+travels with the trace context, which crosses both the thread hop and the
+service boundary.
+
+The id reaches the MDC, every downstream call, and the response:
+
+```bash
+curl -si http://localhost:8080/api/auth/login -H 'Content-Type: application/json'   -d '{"username":"x","password":"y"}' | grep -i x-request-id
+
+docker compose logs user-service | grep <that-id>
+```
+
+Log lines carry `[service, requestId, traceId, spanId]`, so one id pulls a
+request's whole story out of the logs.
+
+### Following one trace
+
+Micrometer Tracing (Brave) instruments the gateway, each service and the Feign
+calls between them, reporting to Zipkin.
+
+1. Start both Compose files and seed a customer (`./scripts/seed-demo.sh`).
+2. Perform a transfer in the console at <http://localhost:3000>, or any
+   authenticated API call.
+3. Open <http://localhost:9411>, press **Run Query**, and open the newest trace.
+
+A transfer shows the request entering the gateway, the span in
+`transaction-service`, and the nested `account-service` spans for the debit and
+the credit — the same shape the architecture diagram claims, confirmed from
+runtime rather than asserted.
+
+Sampling is set to 1.0 because this is a demo stack and a trace you cannot find
+is worse than no tracing; a real deployment would sample far below that.
+
+### What is not covered
+
+- Logs are plain-text with correlation fields, not JSON, and go to stdout only.
+  There is no log aggregator — `docker compose logs` is the query interface.
+- Traces are stored in memory and vanish when Zipkin restarts.
+- Kafka consumers inherit trace context from Spring Kafka's own
+  instrumentation; the asynchronous hops are not separately verified here.
+- There are no alerting rules. The dashboard is read by a human who is looking.
+
+---
+
+## Security scanning
+
+Three automated checks run alongside the build, each with a deliberately stated
+scope:
+
+| Check | Covers | Does not cover |
+|---|---|---|
+| **CodeQL** | Java and TypeScript sources, `security-and-quality` query suite | Configuration, dependencies |
+| **Trivy (filesystem)** | Maven and npm dependency trees, Dockerfiles, Compose files, committed secrets | Built service images |
+| **Trivy (base image)** | OS packages in `eclipse-temurin:17-jre-alpine`, the runtime base all 13 services share | Application layers of each image |
+
+The thirteen service images are **not** built and scanned on every push. They
+share one base image and one dependency tree, both already covered, so building
+them would add roughly fifteen minutes of CI for almost no extra signal.
+
+Findings are reported to the Security tab rather than failing the build. A
+CRITICAL in a transitive test-scoped dependency should be triaged on its merits,
+not used to block an unrelated documentation change — and a scan configured to
+fail loudly tends to get switched off. Dependabot opens grouped weekly PRs for
+Maven, npm, GitHub Actions and Docker.
 
 ---
 
@@ -378,19 +573,23 @@ These are the honest gaps between this project and a production ledger, and they
 | Unit | JUnit 5, Mockito, AssertJ | `CreditCardMasking` PAN masking and `last4` derivation | **12 passing** |
 | Unit | JUnit 5, Mockito, AssertJ | `LoginTwoFactor` TOTP gate at sign-in | **6 passing** |
 | Web slice | JUnit 5, MockMvc | `ApiErrorContract` — bad input is 4xx, and errors leak no internals | **5 passing** |
+| Unit | JUnit 5, AssertJ | `RequestIdPropagation` — id minted, preserved, sanitised, forwarded over Feign | **18 passing** |
+| Unit | JUnit 5, Resilience4j | `AccountServiceCircuitBreaker` — opens on outage, ignores business 4xx, keeps a 422 a 422, never retries a debit | **9 passing** |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
 | Unit | Vitest, React Testing Library | Frontend formatting, masking, JWT decode, validation, role nav, API errors, UI components | **70 passing** |
 | End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout, token never in HTML | **13 passing, in CI** |
 | End-to-end | Playwright (live) | Sign-in, accounts, transfer confirmation, loan schedule, card masking, staff access, sign-out | **9, on demand** |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | On demand, needs the stack up |
 | CI | GitHub Actions | Backend `mvn clean verify`; frontend lint, typecheck, tests, production build | Every push and pull request |
+| Security | CodeQL (Java, TypeScript) | Static analysis, `security-and-quality` queries | Every push, PR and weekly |
+| Security | Trivy | Dependency, secret and IaC scan of the tree, plus the shared runtime base image | Every push, PR and weekly |
 
-**160 automated tests run in CI, all passing** — 77 backend, 70 frontend unit/component,
+**187 automated tests run in CI, all passing** — 104 backend, 70 frontend unit/component,
 13 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**, because
 they need all 13 services up; they are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 71 unit + 6 integration = 77
+mvn -B --no-transfer-progress clean verify   # backend: 98 unit + 6 integration = 104
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -428,7 +627,7 @@ Running it needs a working Docker daemon. `mvn test` skips it, so the fast inner
   dashboard showing real balances, account and transaction history, the transfer review and
   confirmation step, loan amortization, card masking, staff-route denial for a customer,
   sign-out, and a phone viewport. Starting 13 services on every push is not a sensible trade,
-  so these are **not** in CI and are not counted in the 160.
+  so these are **not** in CI and are not counted in the 187.
 
 ```bash
 # offline — no backend required
@@ -500,6 +699,18 @@ argument rather than committed. Everywhere else, the default build is unchanged.
 | Kafka UI | <http://localhost:8095> |
 
 Register a customer at <http://localhost:3000/register> to get started.
+
+Telemetry is a second, optional Compose file — see [Observability](#observability):
+
+```bash
+docker compose -f docker-compose.observability.yml up -d
+```
+
+| Endpoint | URL |
+|---|---|
+| Grafana dashboard | <http://localhost:3001> |
+| Prometheus | <http://localhost:9090> |
+| Zipkin traces | <http://localhost:9411> |
 
 ### Option B — infrastructure in Docker, services in your IDE
 
@@ -581,7 +792,8 @@ banking-platform/
 ├── pom.xml                      # Maven parent - dependency and version management
 ├── docker-compose.yml           # Full stack: infrastructure + all 13 services
 ├── docker-compose.infra.yml     # Infrastructure only, for IDE-based development
-├── Dockerfile                   # Shared JRE 17 Alpine image, used per service
+├── docker-compose.observability.yml  # Prometheus, Grafana, Zipkin (optional)
+├── Dockerfile                   # Shared JRE 17 Alpine image, non-root, heap-bounded
 ├── e2e-tests.ps1                # End-to-end suite against the running stack
 ├── .env.example                 # Environment template - no real credentials
 │
@@ -592,6 +804,11 @@ banking-platform/
 │   ├── src/lib/api/             #   the only outbound HTTP layer (gateway only)
 │   └── Dockerfile               #   standalone production image, non-root
 │
+├── observability/               # Telemetry configuration, provisioned on startup
+│   ├── prometheus/              #   scrape config for all 13 services
+│   └── grafana/                 #   datasources + the service-health dashboard
+│
+├── common-observability/        # Shared X-Request-Id filter and Feign interceptor
 ├── eureka-server/               # Service discovery
 ├── api-gateway/                 # Edge: routing, JWT filter, rate limiting
 ├── user-service/                # Auth, JWT, 2FA, KYC, credit score
@@ -607,6 +824,7 @@ banking-platform/
 ├── integration-service/         # Wire/ACH/SWIFT stubs, FX
 │
 ├── docker/postgres/init-db.sql  # Creates one database per service
+├── .github/workflows/           # CI, CodeQL, Trivy security scan
 └── infrastructure/aws/          # Terraform: ECS, RDS, MSK, ElastiCache, ALB, WAF, Route 53
 ```
 
@@ -660,8 +878,8 @@ Ordered by what would most improve the system, not by what is easiest:
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
 4. **Add a pending-KYC-documents endpoint** so staff review is a real queue rather than a per-customer lookup.
-5. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
-6. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
+5. **Extend Resilience4j** beyond the `transaction-service` → `account-service` hop to the remaining Feign clients, and add bulkheads.
+6. **Finish observability** — JSON log output and a log aggregator, alerting rules on the Prometheus metrics, and durable trace storage. (Metrics, dashboards, correlation IDs and tracing are in place; see [Observability](#observability).)
 7. **Extend CI** — run the live Playwright suite and the PowerShell suite against a Compose stack in CI, and publish images to a registry. (The offline Playwright suite already runs on every push.)
 
 ---
