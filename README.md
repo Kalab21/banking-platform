@@ -19,10 +19,10 @@ the platform only through the gateway — the browser never holds a bearer token
 | **Backend** | 13 Spring Boot 3.3 services, Java 17, Spring Cloud Gateway + Eureka, OpenFeign |
 | **Frontend** | Next.js 16 console, React 19, TypeScript, Tailwind CSS 4, Recharts |
 | **Messaging** | Apache Kafka — 8 topics driving statistics, notifications and fraud scoring |
-| **Data** | PostgreSQL, database-per-service, 12 Flyway migrations, `ddl-auto: validate` |
+| **Data** | PostgreSQL, database-per-service, 24 Flyway migrations, `ddl-auto: validate` |
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, role-based access |
-| **Testing** | 143 automated tests: JUnit 5, Mockito, Testcontainers, Vitest, Playwright |
+| **Testing** | 155 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose for the full stack, GitHub Actions CI, Terraform for AWS |
 
 ---
@@ -48,8 +48,6 @@ drift from the running application.
 
 ---
 
----
-
 ## Overview
 
 Retail banking back ends are rarely one application. They are many bounded domains — identity, ledgers, cards, lending, risk — that must stay consistent, auditable and available while evolving independently.
@@ -61,7 +59,7 @@ This project models that problem end to end:
 - **A single authenticated entry point** — an API gateway that validates JWTs once and forwards trusted identity headers downstream.
 - **An auditable trail** — every state-changing operation writes an `audit_log` row alongside its domain write, inside the same transaction.
 
-**By the numbers:** 13 backend services plus a Next.js console, 290 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 12 Flyway migrations, 18 frontend routes, 123 automated tests.
+**By the numbers:** 13 backend services plus a Next.js console, 291 Java source files, 25 REST controllers, 93 endpoints, 8 Kafka topics, 24 Flyway migrations, 18 frontend routes, 155 automated tests in CI.
 
 ---
 
@@ -126,7 +124,7 @@ Only features actually implemented in this repository are listed.
 
 ### Edge — `api-gateway`
 
-- Spring Cloud Gateway with Eureka-backed load-balanced routing (`lb://`) to all 12 downstream services.
+- Spring Cloud Gateway with Eureka-backed load-balanced routing (`lb://`) to all 11 downstream services.
 - **JWT validation `GlobalFilter`** that rejects unauthenticated requests and injects `X-User-Id` / `X-User-Role`.
 - **Redis rate limiting** (replenish 20/s, burst 40) keyed per client IP.
 
@@ -260,7 +258,7 @@ flowchart LR
 | Framework | Spring Boot 3.3.6 |
 | Cloud / distributed | Spring Cloud 2023.0.3 — Gateway, Netflix Eureka, OpenFeign (8 services) |
 | Security | Spring Security, JJWT 0.12.6, BCrypt, `dev.samstevens.totp` |
-| Persistence | Spring Data JPA / Hibernate, PostgreSQL 16, Flyway (12 migrations) |
+| Persistence | Spring Data JPA / Hibernate, PostgreSQL 16, Flyway (24 migrations) |
 | Messaging | Apache Kafka (Confluent `cp-kafka` 7.6.1) |
 | Caching / counters | Redis 7 |
 | Mapping / boilerplate | MapStruct 1.5.5, Lombok |
@@ -362,9 +360,10 @@ These are the honest gaps between this project and a production ledger, and they
 - **The console is read-mostly for staff.** Employees can review KYC documents, but the backend has
   no endpoint listing all pending documents, so review is per customer rather than a queue. Application
   and fraud views are read-only because no review endpoint is wired into the console yet.
-- **Playwright's live suite does not run in CI.** Starting 13 services on every push is not a sensible
-  trade, so only the offline suite is automated. See [Testing](#testing).
-- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking and the 2FA gate are covered by 61 backend tests and the console by 82 frontend tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
+- **Playwright's live suite does not run on every CI push.** Starting 13 services on every push is
+  not a sensible trade, so only the offline suite is wired into CI. The 9 live scenarios are just as
+  automated, but are triggered on demand against a running stack. See [Testing](#testing).
+- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking and the 2FA gate are covered by 72 backend tests, and the console by 83 frontend tests (70 unit/component plus 13 offline end-to-end); the other 9 services have none, and there are no controller or security slice tests. See [Testing](#testing).
 
 ---
 
@@ -376,18 +375,22 @@ These are the honest gaps between this project and a production ledger, and they
 |---|---|---|---|
 | Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | **21 passing** |
 | Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | **27 passing** |
+| Unit | JUnit 5, Mockito, AssertJ | `CreditCardMasking` PAN masking and `last4` derivation | **12 passing** |
+| Unit | JUnit 5, Mockito, AssertJ | `LoginTwoFactor` TOTP gate at sign-in | **6 passing** |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
-| End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | Manual, needs the stack up |
-| Unit | Vitest, React Testing Library | Frontend formatting, masking, JWT decode, validation, role nav, API errors, UI components | **69 passing** |
+| Unit | Vitest, React Testing Library | Frontend formatting, masking, JWT decode, validation, role nav, API errors, UI components | **70 passing** |
 | End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout, token never in HTML | **13 passing, in CI** |
-| End-to-end | Playwright (live) | Sign-in, accounts, transfer confirmation, loan schedule, card masking, staff access, sign-out | **9, run manually** |
+| End-to-end | Playwright (live) | Sign-in, accounts, transfer confirmation, loan schedule, card masking, staff access, sign-out | **9, on demand** |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | On demand, needs the stack up |
 | CI | GitHub Actions | Backend `mvn clean verify`; frontend lint, typecheck, tests, production build | Every push and pull request |
 
-**143 automated tests, all passing** — 61 backend, 69 frontend unit, 13 offline end-to-end:
+**155 automated tests run in CI, all passing** — 72 backend, 70 frontend unit/component,
+13 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**, because
+they need all 13 services up; they are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 55 unit + 6 integration
-cd frontend && npm run test                  # frontend: 69 unit/component
+mvn -B --no-transfer-progress clean verify   # backend: 66 unit + 6 integration = 72
+cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
 
@@ -419,11 +422,12 @@ Running it needs a working Docker daemon. `mvn test` skips it, so the fast inner
   form validation, responsive layout, and two architecture guarantees — that the session cookie
   is httpOnly and that the token never appears in the HTML sent to the browser. No backend
   needed, so it runs on every push.
-- **Live (9 tests, run manually).** Needs all 13 services plus a seeded customer. Covers sign-in
-  to a dashboard showing real balances, account and transaction history, the transfer review and
-  confirmation step, loan amortization, card masking, staff-route denial for a customer, sign-out,
-  and a phone viewport. Starting 13 services on every push is not a sensible trade, so this is
-  **not** in CI.
+- **Live (9 tests, run on demand).** Fully automated Playwright scenarios, but triggered
+  manually because they need all 13 services plus a seeded customer. They cover sign-in to a
+  dashboard showing real balances, account and transaction history, the transfer review and
+  confirmation step, loan amortization, card masking, staff-route denial for a customer,
+  sign-out, and a phone viewport. Starting 13 services on every push is not a sensible trade,
+  so these are **not** in CI and are not counted in the 155.
 
 ```bash
 # offline — no backend required
@@ -445,7 +449,7 @@ docker compose up -d      # wait for all services to report healthy
 
 ### Where coverage stops
 
-This is a deliberate foundation, not a finished pyramid. Coverage is deep on the two services holding the most consequential arithmetic — balances and amortization — and absent elsewhere. The remaining 11 services have no unit tests, there are no controller or security slice tests, and only `account-service` has an integration test. Extending the same pattern outward is roadmap item 1.
+This is a deliberate foundation, not a finished pyramid. Coverage is deep on the services holding the most consequential arithmetic — balances and amortization — plus card masking and the 2FA gate, and absent elsewhere. The remaining 9 services have no unit tests, there are no controller or security slice tests, and only `account-service` has an integration test. Extending the same pattern outward is roadmap item 1.
 
 ---
 
@@ -630,13 +634,13 @@ a static bundle — it needs a Node process — which is the right trade for a b
 
 Ordered by what would most improve the system, not by what is easiest:
 
-1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts and loans to the remaining services, and add MockMvc controller and Spring Security slice tests.
+1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts, loans, cards and 2FA to the remaining 9 services, and add MockMvc controller and Spring Security slice tests.
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
 4. **Add a pending-KYC-documents endpoint** so staff review is a real queue rather than a per-customer lookup.
 5. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
 6. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
-7. **Extend CI** — add Playwright end-to-end coverage and run the PowerShell suite against a Compose stack and publish images to a registry.
+7. **Extend CI** — run the live Playwright suite and the PowerShell suite against a Compose stack in CI, and publish images to a registry. (The offline Playwright suite already runs on every push.)
 
 ---
 
