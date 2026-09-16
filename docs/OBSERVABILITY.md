@@ -49,13 +49,6 @@ No manual import is required.
 Error-rate panels count 5xx responses only; expected 4xx business rejections are
 excluded.
 
-![Grafana service-health dashboard](screenshots/07-observability.png)
-
-*Capture from a local run with 5 of the 13 services started; the target-health
-tile reads 38% for that reason. The remaining panels show live data from the
-same run. Docker on the capture machine had 6 GB allocated, which is not enough
-to run all 13 services alongside Prometheus, Grafana and Zipkin.*
-
 ## Request correlation
 
 Every request carries an `X-Request-Id` from the edge through to the database:
