@@ -47,23 +47,43 @@ public class CallerIdentityExceptionHandler {
     }
 
     /**
-     * The request path is attacker-controlled, so it is neutralised before it
-     * reaches a log line.
+     * The request path is attacker-controlled, so it is reduced to a known-safe
+     * alphabet before it reaches a log line or a response body.
      *
      * <p>A path containing CR or LF would otherwise let a caller append
      * fabricated entries to the log — the same forgery this platform already
-     * guards against on the correlation-id header. Other control characters go
-     * too, and the result is bounded so a very long URL cannot swamp the log.
+     * guards against on the correlation-id header.
+     *
+     * <p>Built as an allowlist of the characters RFC 3986 permits in a path
+     * rather than a denylist of control characters. A denylist of
+     * {@code \p{Cntrl}} would still pass through U+2028 and U+2029, which some
+     * log viewers and consoles render as line breaks. The result is also
+     * bounded, so a very long URL cannot swamp the line.
      */
     private static String safePath(HttpServletRequest request) {
         String path = request.getRequestURI();
         if (path == null) {
             return "(unknown)";
         }
-        String sanitised = path.replaceAll("[\\p{Cntrl}]", "_");
-        return sanitised.length() <= MAX_LOGGED_PATH
-                ? sanitised
-                : sanitised.substring(0, MAX_LOGGED_PATH) + "...";
+
+        int limit = Math.min(path.length(), MAX_LOGGED_PATH);
+        StringBuilder safe = new StringBuilder(limit);
+        for (int i = 0; i < limit; i++) {
+            char c = path.charAt(i);
+            safe.append(isPathSafe(c) ? c : '_');
+        }
+        if (path.length() > MAX_LOGGED_PATH) {
+            safe.append("...");
+        }
+        return safe.toString();
+    }
+
+    /** The unreserved and path characters of RFC 3986; everything else is replaced. */
+    private static boolean isPathSafe(char c) {
+        return (c >= 'a' && c <= 'z')
+                || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9')
+                || "/-._~:@!$&'()*+,;=%".indexOf(c) >= 0;
     }
 
     private ResponseEntity<Map<String, Object>> body(HttpStatus status, String message, HttpServletRequest request) {
