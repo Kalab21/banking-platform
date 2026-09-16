@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Scan filesystem for vulnerable dependencies and misconfiguration
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
@@ -78,7 +78,7 @@ jobs:
           echo "Scanning shared runtime base: $image"
 
       - name: Scan base image for OS vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.base.outputs.image }}
