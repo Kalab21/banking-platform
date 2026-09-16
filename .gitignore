@@ -77,9 +77,6 @@ __pycache__/
 .venv/
 venv/
 
-# ---------- Tooling ----------
-.claude/settings.local.json
-
 # ---------- Private study / learning material (LOCAL ONLY, never published) ----------
 STUDY_NOTE.md
 STUDY_NOTES.md
