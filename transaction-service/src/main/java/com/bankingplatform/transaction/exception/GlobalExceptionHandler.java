@@ -96,6 +96,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, extractFeignMessage(ex), req.getRequestURI());
     }
 
+    /**
+     * account-service refused the caller, so the caller is refused here too.
+     *
+     * <p>Without this the denial fell through to the catch-all and was reported
+     * as 500, which reads as a broken server rather than a correct refusal and
+     * hides an enforced security control behind what looks like a bug.
+     */
+    @ExceptionHandler(FeignException.Forbidden.class)
+    public ResponseEntity<ErrorResponse> handleFeignForbidden(FeignException ex, HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, "Not permitted to access this resource", req.getRequestURI());
+    }
+
+    @ExceptionHandler(FeignException.Unauthorized.class)
+    public ResponseEntity<ErrorResponse> handleFeignUnauthorized(FeignException ex, HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, "Authentication required", req.getRequestURI());
+    }
+
     @ExceptionHandler(FeignException.NotFound.class)
     public ResponseEntity<ErrorResponse> handleFeignNotFound(FeignException ex, HttpServletRequest req) {
         return build(HttpStatus.NOT_FOUND, extractFeignMessage(ex), req.getRequestURI());
