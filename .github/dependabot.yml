@@ -17,8 +17,18 @@ updates:
       # Routine version drift arrives as one reviewable PR.
       maven-minor-and-patch:
         update-types: [minor, patch]
-    # Majors still come through individually, because those are the ones that
-    # need reading rather than merging.
+    ignore:
+      # Framework majors are pinned deliberately, not neglected. This project
+      # targets Spring Boot 3.3 on Java 17; a Boot 4 or Spring Cloud 2025 bump
+      # is a migration with its own design work, not a dependency update, and
+      # Dependabot proposing one every week is noise that trains you to ignore
+      # the PRs that do matter.
+      - dependency-name: "org.springframework.boot:spring-boot-starter-parent"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.cloud:spring-cloud-dependencies"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springdoc:*"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "build(deps)"
 
@@ -33,6 +43,23 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Tied to the Next.js 16 / React 19 toolchain. These move when the
+      # framework moves, not independently.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "build(deps)"
 
@@ -59,5 +86,10 @@ updates:
       time: "05:00"
     open-pull-requests-limit: 2
     labels: [dependencies, docker]
+    ignore:
+      # The services are built for Java 17. Moving the JRE major is a runtime
+      # decision that belongs with a toolchain change, not a weekly bump.
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "build(deps)"

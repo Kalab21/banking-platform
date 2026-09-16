@@ -557,8 +557,14 @@ them would add roughly fifteen minutes of CI for almost no extra signal.
 Findings are reported to the Security tab rather than failing the build. A
 CRITICAL in a transitive test-scoped dependency should be triaged on its merits,
 not used to block an unrelated documentation change — and a scan configured to
-fail loudly tends to get switched off. Dependabot opens grouped weekly PRs for
-Maven, npm, GitHub Actions and Docker.
+fail loudly tends to get switched off.
+
+Dependabot opens grouped weekly PRs for Maven, npm, GitHub Actions and Docker.
+Framework majors are ignored deliberately: this project targets Spring Boot 3.3
+on Java 17, so a Boot 4 or TypeScript 7 PR is a migration with its own design
+work rather than a dependency bump, and a queue of PRs that can never merge
+trains you to stop reading them. Minor and patch updates arrive grouped, which
+is the signal actually worth acting on.
 
 ---
 
