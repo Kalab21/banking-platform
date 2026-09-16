@@ -51,7 +51,13 @@ function SingleAccountForm({
   }, [state.success]);
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-4" noValidate>
+    <form
+      ref={formRef}
+      action={formAction}
+      data-testid={`${kind}-form`}
+      className="space-y-4"
+      noValidate
+    >
       {state.error ? <FormError>{state.error}</FormError> : null}
       {state.success ? <SuccessNote>{state.success}</SuccessNote> : null}
 
@@ -113,7 +119,7 @@ function TransferForm({ accounts }: { accounts: Account[] }) {
   const canConfirm = from !== "" && to !== "" && from !== to && amount.trim() !== "";
 
   return (
-    <form action={formAction} className="space-y-4" noValidate>
+    <form action={formAction} data-testid="transfer-form" className="space-y-4" noValidate>
       {state.error ? <FormError>{state.error}</FormError> : null}
       {state.success ? <SuccessNote>{state.success}</SuccessNote> : null}
 

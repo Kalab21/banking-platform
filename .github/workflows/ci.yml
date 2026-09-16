@@ -63,3 +63,12 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # Offline suite only: it stubs the gateway by pointing at a dead port, so it
+      # needs no backend. The live suite requires all 13 services and is run
+      # manually — see the README.
+      - name: End-to-end tests (offline)
+        run: npm run test:e2e

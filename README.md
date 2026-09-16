@@ -2,9 +2,51 @@
 
 [![CI](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml)
 
-A full-stack, distributed **retail banking platform**: 13 Spring Boot microservices covering accounts, transactions, payments, credit cards, loans, fraud detection, KYC and notifications, behind an API gateway, with a Next.js/TypeScript banking console on the front and Terraform-defined AWS infrastructure underneath.
+A full-stack, event-driven retail banking platform: **13 Spring Boot microservices** handling
+accounts, payments, lending, cards, fraud and KYC behind an API gateway, with a **Next.js
+TypeScript console** on the front and **Terraform-defined AWS infrastructure** underneath. Money
+movement, amortisation and overdraft logic are covered by automated tests, and the console reaches
+the platform only through the gateway — the browser never holds a bearer token.
 
-> **Portfolio / learning project.** This is a self-built demonstration system, **not** a real bank and not production-certified financial software. It handles no real money, holds no real customer data, and has not undergone regulatory, audit or penetration review. It exists to demonstrate backend architecture, distributed-systems design and Spring Boot engineering practice.
+> **Portfolio / demonstration project.** Not a real bank and not production-certified financial
+> software. It handles no real money, holds no real customer data, and makes no regulatory,
+> compliance or certification claims.
+
+### At a glance
+
+| | |
+|---|---|
+| **Backend** | 13 Spring Boot 3.3 services, Java 17, Spring Cloud Gateway + Eureka, OpenFeign |
+| **Frontend** | Next.js 16 console, React 19, TypeScript, Tailwind CSS 4, Recharts |
+| **Messaging** | Apache Kafka — 8 topics driving statistics, notifications and fraud scoring |
+| **Data** | PostgreSQL, database-per-service, 12 Flyway migrations, `ddl-auto: validate` |
+| **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
+| **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, role-based access |
+| **Testing** | 143 automated tests: JUnit 5, Mockito, Testcontainers, Vitest, Playwright |
+| **Delivery** | Docker Compose for the full stack, GitHub Actions CI, Terraform for AWS |
+
+---
+
+## Screenshots
+
+Captured from the running application with seeded demo data — no mockups.
+
+| Sign in | Dashboard |
+|---|---|
+| ![Sign-in page](docs/screenshots/01-login.png) | ![Customer dashboard](docs/screenshots/02-dashboard.png) |
+
+| Account & transactions | Transfer confirmation |
+|---|---|
+| ![Account detail with transaction history](docs/screenshots/03-accounts-transactions.png) | ![Transfer review step](docs/screenshots/04-transfer.png) |
+
+| Loan detail & amortization | Mobile |
+|---|---|
+| ![Loan detail with amortization schedule](docs/screenshots/05-loan-details.png) | <img src="docs/screenshots/06-mobile.png" alt="Dashboard on a phone viewport" width="260"> |
+
+Screenshots are captured by the Playwright live suite (`npm run screenshots`), so they cannot
+drift from the running application.
+
+---
 
 ---
 
@@ -71,6 +113,8 @@ Only features actually implemented in this repository are listed.
 
 ### Console — `frontend` (Next.js)
 
+- Two-step sign-in: accounts with two-factor enabled are challenged for a TOTP code before any
+  session cookie is written.
 - Customer views: dashboard, accounts and account detail, transaction history with deposit /
   withdraw / transfer, payments and beneficiaries, loans with amortization schedule and payoff
   quote, credit cards with statements, notifications, profile and security.
@@ -89,6 +133,62 @@ Only features actually implemented in this repository are listed.
 ---
 
 ## Architecture
+
+```mermaid
+flowchart TB
+    browser["Browser"]
+
+    subgraph edge["Edge"]
+        bff["Next.js console (BFF)<br/>server-side rendering + actions"]
+        gw["Spring Cloud Gateway<br/>JWT filter · rate limiting"]
+    end
+
+    subgraph core["Microservices · Eureka discovery"]
+        auth["user-service<br/>auth · 2FA · KYC"]
+        acct["account-service<br/>balances · overdraft"]
+        tx["transaction-service<br/>deposits · transfers"]
+        lend["loan-service<br/>credit-card-service"]
+        pay["payment-service<br/>integration-service"]
+    end
+
+    subgraph derived["Event consumers"]
+        stats["statistics-service"]
+        notif["notification-service"]
+        fraud["fraud-detection-service"]
+    end
+
+    kafka[["Apache Kafka · 8 topics"]]
+    pg[("PostgreSQL<br/>database per service")]
+    redis[("Redis<br/>cache · limits · velocity")]
+
+    browser -- "httpOnly session cookie" --> bff
+    bff -- "Bearer JWT, server to server" --> gw
+    gw --> auth & acct & tx & lend & pay
+
+    auth & acct & tx & lend & pay -- publish --> kafka
+    kafka -- consume --> stats & notif & fraud
+
+    auth & acct & tx & lend & pay --> pg
+    stats & notif & fraud --> pg
+    stats & fraud --> redis
+    gw --> redis
+```
+
+Infrastructure is defined separately and applies to the same services:
+
+```mermaid
+flowchart LR
+    tf["Terraform<br/>infrastructure/aws"]
+    subgraph aws["AWS"]
+        net["VPC · ALB · WAF<br/>CloudFront · Route 53"]
+        run["ECS Fargate · ECR"]
+        data["RDS PostgreSQL · MSK<br/>ElastiCache · Secrets Manager"]
+    end
+    tf --> net --> run --> data
+```
+
+<details>
+<summary>Plain-text diagram (for terminals and diff review)</summary>
 
 ```
    browser
@@ -127,6 +227,8 @@ Only features actually implemented in this repository are listed.
 
   PostgreSQL - one database per service, migrated by Flyway
 ```
+
+</details>
 
 **Service inventory**
 
@@ -179,12 +281,13 @@ Only features actually implemented in this repository are listed.
 |---|---|
 | Authentication | JWT bearer tokens issued by `user-service`, signed with HS256 via JJWT |
 | Password storage | BCrypt (`BCryptPasswordEncoder`) |
-| Two-factor | TOTP (RFC 6238), 6-digit / 30-second window |
+| Two-factor | TOTP (RFC 6238) enforced **at sign-in**: a correct password alone issues no token when 2FA is enabled |
 | Edge enforcement | Gateway `GlobalFilter` validates the JWT before any route is reached; downstream identity arrives as `X-User-Id` / `X-User-Role` |
 | Authorization | Spring Security `@EnableMethodSecurity` with role checks (`CUSTOMER` / `EMPLOYEE` / `ADMIN`) — for example, KYC document review is employee/admin only |
 | Session model | Fully stateless (`SessionCreationPolicy.STATELESS`); CSRF disabled, as is appropriate for a token-authenticated API |
 | Input validation | Jakarta Bean Validation (`@Valid`) on request DTOs across 12 services |
 | Error hygiene | `@RestControllerAdvice` maps domain exceptions to typed responses; the catch-all returns a generic message rather than leaking stack traces |
+| Card data | The full card number never crosses the API boundary — responses carry only `•••• •••• •••• 1234` and `last4` |
 | Rate limiting | Redis token bucket at the gateway, keyed per IP |
 | Abuse detection | Fraud velocity rules with automatic account freeze |
 | Browser session | JWT held in an httpOnly, SameSite=Lax cookie; never readable by page JavaScript |
@@ -259,14 +362,9 @@ These are the honest gaps between this project and a production ledger, and they
 - **The console is read-mostly for staff.** Employees can review KYC documents, but the backend has
   no endpoint listing all pending documents, so review is per customer rather than a queue. Application
   and fraud views are read-only because no review endpoint is wired into the console yet.
-- **2FA is enrolment only.** The backend registers and verifies a TOTP secret, but `POST /api/auth/login`
-  does not challenge for a code, so enabling it does not add a second step at sign-in. The UI states this
-  rather than implying otherwise.
-- **Card numbers are returned unmasked by the backend.** `CreditCardResponse.cardNumber` carries the full
-  value; the console masks it everywhere, but the correct fix is to mask it server-side.
-- **No frontend end-to-end tests.** Playwright is not set up; the console was verified by hand against a
-  live stack. See Testing.
-- **Test coverage is deliberately narrow.** Balances and loan arithmetic are covered by 54 backend tests and the console by 69 frontend tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
+- **Playwright's live suite does not run in CI.** Starting 13 services on every push is not a sensible
+  trade, so only the offline suite is automated. See [Testing](#testing).
+- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking and the 2FA gate are covered by 61 backend tests and the console by 82 frontend tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
 
 ---
 
@@ -281,13 +379,16 @@ These are the honest gaps between this project and a production ledger, and they
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | Manual, needs the stack up |
 | Unit | Vitest, React Testing Library | Frontend formatting, masking, JWT decode, validation, role nav, API errors, UI components | **69 passing** |
+| End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout, token never in HTML | **13 passing, in CI** |
+| End-to-end | Playwright (live) | Sign-in, accounts, transfer confirmation, loan schedule, card masking, staff access, sign-out | **9, run manually** |
 | CI | GitHub Actions | Backend `mvn clean verify`; frontend lint, typecheck, tests, production build | Every push and pull request |
 
-**123 automated tests, all passing** — 54 backend, 69 frontend:
+**143 automated tests, all passing** — 61 backend, 69 frontend unit, 13 offline end-to-end:
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 47 unit + 6 integration
+mvn -B --no-transfer-progress clean verify   # backend: 55 unit + 6 integration
 cd frontend && npm run test                  # frontend: 69 unit/component
+cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
 
 Unit tests run in the `test` phase; integration tests are named `*IT` and bound to Failsafe in the `verify` phase. There is no separate test command to forget — CI runs exactly the line above.
@@ -310,6 +411,28 @@ They deliberately do not assert on markup structure or class names, so a restyle
 them.
 
 Running it needs a working Docker daemon. `mvn test` skips it, so the fast inner loop stays Docker-free.
+
+**End-to-end, split by cost.** The Playwright suites are deliberately separated:
+
+- **Offline (13 tests, runs in CI).** Drives a real production build of the console with the
+  gateway pointed at a dead port. It covers route protection, expired and malformed sessions,
+  form validation, responsive layout, and two architecture guarantees — that the session cookie
+  is httpOnly and that the token never appears in the HTML sent to the browser. No backend
+  needed, so it runs on every push.
+- **Live (9 tests, run manually).** Needs all 13 services plus a seeded customer. Covers sign-in
+  to a dashboard showing real balances, account and transaction history, the transfer review and
+  confirmation step, loan amortization, card masking, staff-route denial for a customer, sign-out,
+  and a phone viewport. Starting 13 services on every push is not a sensible trade, so this is
+  **not** in CI.
+
+```bash
+# offline — no backend required
+cd frontend && npm run test:e2e
+
+# live — requires the full stack
+docker compose up -d && ./scripts/seed-demo.sh
+cd frontend && E2E_USERNAME=<printed> E2E_PASSWORD=<printed> npm run test:e2e:live
+```
 
 ### End-to-end suite
 
@@ -370,6 +493,20 @@ npm run dev                       # http://localhost:3000
 ```
 
 Useful while working on the console: the backend runs in Docker, the frontend reloads locally.
+
+### Seeding a demo customer
+
+Fastest way to see a populated console:
+
+```bash
+./scripts/seed-demo.sh
+```
+
+It drives the public API through the gateway — no direct database writes, no production
+configuration — and prints the generated credentials. Seeds two accounts, nine transactions, a
+beneficiary, a loan with its amortization schedule and first repayment, and two KYC documents
+awaiting review. Names and numbers are obviously synthetic, and re-running creates a fresh
+customer.
 
 ### Smoke test
 
@@ -496,10 +633,20 @@ Ordered by what would most improve the system, not by what is easiest:
 1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts and loans to the remaining services, and add MockMvc controller and Spring Security slice tests.
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
-4. **Mask `cardNumber` server-side** and add a pending-KYC-documents endpoint so staff review is a real queue.
+4. **Add a pending-KYC-documents endpoint** so staff review is a real queue rather than a per-customer lookup.
 5. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
 6. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
 7. **Extend CI** — add Playwright end-to-end coverage and run the PowerShell suite against a Compose stack and publish images to a registry.
+
+---
+
+## Usage
+
+This repository is provided for portfolio and demonstration purposes only.
+All rights reserved. No permission is granted to copy, modify, redistribute,
+or reuse the source code without explicit written permission from the author.
+
+Copyright (c) 2026 Kalabe Kebede. All rights reserved.
 
 ---
 
