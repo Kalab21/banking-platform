@@ -11,7 +11,9 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# --no-audit/--no-fund cut work the image does not need; the lockfile is the
+# source of truth so the install stays reproducible.
+RUN npm ci --no-audit --no-fund
 
 FROM node:22-alpine AS builder
 WORKDIR /app

@@ -1,0 +1,37 @@
+# Keep the build context small. Without this, the local node_modules (~590MB)
+# and .next (~150MB) are uploaded to the daemon on every build, which is slow and
+# starves `npm ci` of resources inside the container.
+
+node_modules
+.next
+out
+build
+dist
+
+# Test and tooling output
+test-results
+playwright-report
+blob-report
+playwright/.cache
+coverage
+
+# Local environment — never bake secrets into an image
+.env
+.env.*
+!.env.example
+
+# VCS and editor noise
+.git
+.gitignore
+.vscode
+.idea
+*.log
+npm-debug.log*
+
+# Not needed to build or run the app
+README.md
+e2e
+playwright.config.ts
+vitest.config.mts
+Dockerfile
+.dockerignore

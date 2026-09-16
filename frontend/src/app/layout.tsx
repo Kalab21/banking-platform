@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
+/**
+ * Inter, self-hosted.
+ *
+ * Deliberately not `next/font/google`: that fetches the font from Google at
+ * build time, so an image build fails behind a proxy or on an air-gapped
+ * machine. Shipping the latin variable subset (48KB) keeps the build hermetic
+ * and removes a runtime request to a third party.
+ *
+ * Inter is licensed under the SIL Open Font License 1.1 — see fonts/OFL.txt.
+ */
+const inter = localFont({
+  src: "./fonts/Inter-Variable-latin.woff2",
+  weight: "100 900",
+  style: "normal",
   variable: "--font-inter",
   display: "swap",
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
 });
 
 export const metadata: Metadata = {

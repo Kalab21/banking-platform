@@ -5,6 +5,9 @@ import com.bankingplatform.creditcard.model.CardStatus;
 import com.bankingplatform.creditcard.model.CardType;
 import com.bankingplatform.creditcard.model.CreditCard;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -32,8 +35,27 @@ class CreditCardMaskingTest {
     private static final String FULL_PAN = "4111111111111234";
 
     private final CreditCardMapper mapper = new CreditCardMapperImpl();
-    /** `findAndRegisterModules` mirrors the JSR-310 support Spring Boot configures at runtime. */
-    private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+
+    /**
+     * Mirrors how Spring Boot serialises this DTO at runtime.
+     *
+     * <p>Two pieces are needed. {@link JavaTimeModule} lets Jackson handle the
+     * {@code LocalDate} on {@code paymentDueDate} at all — a bare
+     * {@code new ObjectMapper()} throws on it. Disabling
+     * {@link SerializationFeature#WRITE_DATES_AS_TIMESTAMPS} then produces the
+     * ISO-8601 string the API actually emits, rather than the numeric array
+     * Jackson would default to.
+     *
+     * <p>The module is registered explicitly rather than through
+     * {@code findAndRegisterModules()}: that relies on {@code ServiceLoader}
+     * discovery and silently registers nothing when the module is missing from
+     * the classpath, turning a dependency problem into a confusing
+     * serialisation failure.
+     */
+    private final ObjectMapper json = JsonMapper.builder()
+            .addModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .build();
 
     private static CreditCard card(String cardNumber) {
         return CreditCard.builder()
@@ -77,6 +99,19 @@ class CreditCardMaskingTest {
 
         assertThat(names).doesNotContain("cardNumber");
         assertThat(names).contains("maskedCardNumber", "last4");
+    }
+
+    @Test
+    @DisplayName("the test mapper serialises java.time fields the way the API does")
+    void testMapperMatchesProductionDateFormat() throws Exception {
+        // Guards the mapper configuration itself. Without JSR-310 this throws, and
+        // the masking assertions below would then fail for a reason that has
+        // nothing to do with masking. The ISO form is what clients receive — the
+        // frontend types `paymentDueDate` as a string on the strength of it.
+        String body = json.writeValueAsString(mapper.toResponse(card(FULL_PAN)));
+
+        assertThat(body).contains("paymentDueDate");
+        assertThat(body).contains("2026-02-01");
     }
 
     @Test

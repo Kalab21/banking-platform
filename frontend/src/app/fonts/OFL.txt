@@ -1,0 +1,9 @@
+Inter is Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+and is licensed under the SIL Open Font License, Version 1.1.
+
+The full licence text is available at:
+https://openfontlicense.org
+
+The file Inter-Variable-latin.woff2 in this directory is the latin variable
+subset as distributed by Google Fonts, vendored here so that container builds do
+not require network access to fonts.googleapis.com.
