@@ -16,6 +16,13 @@ import { fieldErrors, loginSchema, registerSchema } from "@/lib/validation";
 export interface AuthFormState {
   error?: string;
   fields?: Record<string, string>;
+  /**
+   * The password was accepted but the account carries a second factor. The form
+   * re-renders asking for a TOTP code; no session exists yet.
+   */
+  twoFactorRequired?: boolean;
+  /** Carried across the challenge step so the user does not retype it. */
+  username?: string;
 }
 
 export async function loginAction(
@@ -29,13 +36,36 @@ export async function loginAction(
 
   if (!parsed.success) return { fields: fieldErrors(parsed.error) };
 
+  const rawCode = String(formData.get("totpCode") ?? "").trim();
+  if (rawCode && !/^\d{6}$/.test(rawCode)) {
+    return {
+      twoFactorRequired: true,
+      username: parsed.data.username,
+      fields: { totpCode: "Enter the 6-digit code from your authenticator app" },
+    };
+  }
+
   try {
-    const auth = await apiLogin(parsed.data.username, parsed.data.password);
+    const auth = await apiLogin(parsed.data.username, parsed.data.password, rawCode || undefined);
+
+    // Password accepted, second factor still outstanding: no token was issued.
+    if (auth.twoFactorRequired || !auth.token) {
+      return { twoFactorRequired: true, username: parsed.data.username };
+    }
+
     await setSessionCookie(auth.token, auth.expiresIn);
   } catch (error) {
     if (error instanceof ApiError) {
-      // 401 here means bad credentials, not an expired session.
-      if (error.status === 401) return { error: "Incorrect username or password." };
+      if (error.status === 401) {
+        // The backend uses the same status for a bad password and a bad code.
+        return rawCode
+          ? {
+              twoFactorRequired: true,
+              username: parsed.data.username,
+              error: "That authentication code was not accepted. Try the current code.",
+            }
+          : { error: "Incorrect username or password." };
+      }
       return { error: error.userMessage };
     }
     if (error instanceof NetworkError) return { error: error.userMessage };
@@ -62,6 +92,7 @@ export async function registerAction(
 
   try {
     const auth = await apiRegister(parsed.data);
+    if (!auth.token) return { error: "Account created, but no session was issued. Please sign in." };
     await setSessionCookie(auth.token, auth.expiresIn);
   } catch (error) {
     if (error instanceof ApiError) {

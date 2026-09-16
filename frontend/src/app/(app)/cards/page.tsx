@@ -12,7 +12,7 @@ import {
   PageHeader,
   statusTone,
 } from "@/components/ui/primitives";
-import { formatCurrency, formatDate, formatPercent, humanise, maskCardNumber } from "@/lib/format";
+import { formatCurrency, formatDate, formatPercent, humanise } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Credit cards" };
 
@@ -64,7 +64,7 @@ export default async function CardsPage() {
                         {humanise(card.cardType)} card
                       </Link>
                       <p className="tabular mt-0.5 text-sm text-ink-subtle">
-                        {maskCardNumber(card.cardNumber)}
+                        {card.maskedCardNumber}
                       </p>
                     </div>
                     <Badge tone={statusTone(card.status)}>{humanise(card.status)}</Badge>

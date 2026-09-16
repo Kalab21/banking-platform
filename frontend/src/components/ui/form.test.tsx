@@ -15,7 +15,14 @@ describe("TextField", () => {
 
     const input = screen.getByLabelText("Username");
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input).toHaveAttribute("aria-describedby", "username-error");
+
+    // The described-by target must be the element actually carrying the message,
+    // whatever id was generated for it.
+    const describedBy = input.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy as string)).toHaveTextContent(
+      "Enter your username",
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("Enter your username");
   });
 
@@ -26,7 +33,26 @@ describe("TextField", () => {
 
   it("describes the input by its hint when one is given", () => {
     render(<TextField label="Phone" name="phone" hint="Optional" />);
-    expect(screen.getByLabelText("Phone")).toHaveAttribute("aria-describedby", "phone-hint");
+
+    const input = screen.getByLabelText("Phone");
+    const describedBy = input.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy as string)).toHaveTextContent("Optional");
+  });
+
+  it("gives each field a unique id, so repeated forms do not collide", () => {
+    render(
+      <>
+        <TextField label="Deposit amount" name="amount" />
+        <TextField label="Transfer amount" name="amount" />
+      </>,
+    );
+
+    const first = screen.getByLabelText("Deposit amount");
+    const second = screen.getByLabelText("Transfer amount");
+
+    expect(first.id).not.toBe(second.id);
+    expect(first).not.toBe(second);
   });
 });
 

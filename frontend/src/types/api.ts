@@ -12,13 +12,21 @@ export type Role = "CUSTOMER" | "EMPLOYEE" | "ADMIN";
 
 export type KycStatus = "NOT_STARTED" | "PENDING" | "IN_REVIEW" | "VERIFIED" | "REJECTED";
 
-/** `POST /api/auth/login` and `/api/auth/register`. */
+/**
+ * `POST /api/auth/login` and `/api/auth/register`.
+ *
+ * Two shapes: on success `token` is present; when the account has 2FA enabled
+ * and no valid code was supplied, `twoFactorRequired` is true and `token` is
+ * null — the caller must retry with a code.
+ */
 export interface AuthResponse {
-  token: string;
+  token: string | null;
   type: string;
+  userId: number;
   username: string;
-  role: Role;
+  role: Role | null;
   expiresIn: number;
+  twoFactorRequired: boolean;
 }
 
 /** Claims carried by the gateway-issued JWT. */
@@ -200,12 +208,15 @@ export type CardStatus = "ACTIVE" | "BLOCKED" | "CLOSED" | "EXPIRED";
 /**
  * `GET /api/credit-cards/{cardId}`.
  *
- * Note: the backend returns `cardNumber` in full. The UI must never render it
- * directly — use `maskCardNumber` so only the last four digits are shown.
+ * The full card number never crosses the API boundary: the service sends only a
+ * display mask and the last four digits.
  */
 export interface CreditCard {
   id: number;
-  cardNumber: string;
+  /** Display form, e.g. `•••• •••• •••• 1234`. */
+  maskedCardNumber: string;
+  /** Last four digits, or null when the stored value was unusable. */
+  last4: string | null;
   userId: number;
   applicationId: number | null;
   cardType: CardType;

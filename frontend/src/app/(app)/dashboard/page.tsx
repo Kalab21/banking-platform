@@ -29,7 +29,6 @@ import {
   humanise,
   isCredit,
   maskAccountNumber,
-  maskCardNumber,
 } from "@/lib/format";
 import { BalanceTrendChart, type BalancePoint } from "@/features/dashboard/BalanceTrendChart";
 
@@ -73,11 +72,24 @@ export default async function DashboardPage() {
   const cardBalance = cards.reduce((sum, c) => sum + c.currentBalance, 0);
   const currency = accounts[0]?.currency ?? "USD";
 
-  // The trend is drawn from one account's real recorded balances. With too few
-  // transactions a chart would be misleading, so the panel degrades to a summary.
-  const primaryAccount = accounts[0];
-  const recentPage = primaryAccount ? await getTransactions(primaryAccount.id, 0, 12) : null;
-  const recent = recentPage?.content ?? [];
+  // The trend is drawn from one account's real recorded balances. Pick whichever
+  // account actually has history rather than whichever happens to be first —
+  // charting an untouched savings account would say nothing. With too few
+  // transactions the panel still degrades to a summary rather than implying a trend.
+  const histories = await Promise.all(
+    accounts.map(async (account) => ({
+      account,
+      transactions: (await getTransactions(account.id, 0, 12))?.content ?? [],
+    })),
+  );
+  const busiest = histories.reduce<(typeof histories)[number] | undefined>(
+    (best, current) =>
+      best === undefined || current.transactions.length > best.transactions.length ? current : best,
+    undefined,
+  );
+
+  const primaryAccount = busiest?.account;
+  const recent = busiest?.transactions ?? [];
   const points: BalancePoint[] = [...recent]
     .reverse()
     .map((t) => ({ at: t.createdAt, balance: t.balanceAfter }));
@@ -252,7 +264,7 @@ export default async function DashboardPage() {
                           {humanise(c.cardType)}
                         </span>
                         <span className="tabular text-xs text-ink-subtle">
-                          {maskCardNumber(c.cardNumber)}
+                          {c.maskedCardNumber}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-ink-subtle">

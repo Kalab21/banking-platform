@@ -7,9 +7,11 @@ import com.bankingplatform.user.exception.ResourceNotFoundException;
 import com.bankingplatform.user.mapper.UserMapper;
 import com.bankingplatform.user.model.User;
 import com.bankingplatform.user.repository.UserRepository;
+import com.bankingplatform.user.service.TwoFactorService;
 import com.bankingplatform.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -28,6 +30,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
+    private final TwoFactorService twoFactorService;
 
     @Override
     @Transactional
@@ -48,6 +51,7 @@ public class UserServiceImpl implements UserService {
 
         return AuthResponse.builder()
                 .token(token)
+                .userId(saved.getId())
                 .username(saved.getUsername())
                 .role(saved.getRole().name())
                 .expiresIn(jwtUtil.getExpiration())
@@ -63,11 +67,28 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.getUsername()));
 
+        // Password accepted. If the account carries a second factor, no session is
+        // issued until a valid TOTP code is presented.
+        if (user.isTwoFactorEnabled()) {
+            String code = request.getTotpCode();
+            if (code == null || code.isBlank()) {
+                return AuthResponse.builder()
+                        .twoFactorRequired(true)
+                        .userId(user.getId())
+                        .username(user.getUsername())
+                        .build();
+            }
+            if (!twoFactorService.verifyCode(user.getId(), code)) {
+                throw new BadCredentialsException("Invalid authentication code");
+            }
+        }
+
         UserDetails userDetails = buildUserDetails(user);
         String token = jwtUtil.generateToken(userDetails, user.getId());
 
         return AuthResponse.builder()
                 .token(token)
+                .userId(user.getId())
                 .username(user.getUsername())
                 .role(user.getRole().name())
                 .expiresIn(jwtUtil.getExpiration())

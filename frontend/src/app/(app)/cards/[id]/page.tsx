@@ -23,7 +23,6 @@ import {
   formatDateTime,
   formatPercent,
   humanise,
-  maskCardNumber,
 } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Credit card" };
@@ -62,7 +61,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         title={`${humanise(card.cardType)} card`}
-        description={maskCardNumber(card.cardNumber)}
+        description={card.maskedCardNumber}
         action={
           <Link href="/cards" className="text-sm font-medium text-accent hover:underline">
             Back to cards

@@ -37,10 +37,20 @@ import type {
 
 // ---------------------------------------------------------------------- auth
 
-export function login(username: string, password: string): Promise<AuthResponse> {
+/**
+ * Sign in.
+ *
+ * `totpCode` is only needed by accounts with two-factor enabled. Omitting it on
+ * such an account returns `twoFactorRequired: true` and no token.
+ */
+export function login(
+  username: string,
+  password: string,
+  totpCode?: string,
+): Promise<AuthResponse> {
   return apiFetch<AuthResponse>("/api/auth/login", {
     method: "POST",
-    body: { username, password },
+    body: { username, password, totpCode },
     anonymous: true,
   });
 }

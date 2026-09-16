@@ -61,8 +61,9 @@ export function formatDateTime(iso: string | null | undefined): string {
 /**
  * Shows only the last four digits of a card number.
  *
- * The backend returns the full number on `CreditCardResponse`; nothing in this
- * UI may render it directly. Anything unexpected collapses to a safe mask
+ * The API no longer sends a full card number — `CreditCardResponse` carries a
+ * ready-made `maskedCardNumber`. This is kept as a defensive helper for any
+ * value of uncertain origin: anything unexpected collapses to a safe mask
  * rather than leaking the input.
  */
 export function maskCardNumber(cardNumber: string | null | undefined): string {

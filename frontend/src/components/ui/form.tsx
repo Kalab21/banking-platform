@@ -1,6 +1,13 @@
 "use client";
 
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import {
+  forwardRef,
+  useId,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+} from "react";
 import { cn } from "@/lib/cn";
 
 /** Interactive form primitives. Every field is label-bound and reports its own error. */
@@ -56,26 +63,43 @@ interface FieldProps {
   children?: ReactNode;
 }
 
+/**
+ * Field ids are generated, not taken from `name`.
+ *
+ * Several forms on one page legitimately share a field name — deposit, withdraw
+ * and transfer all submit an `amount` — and reusing the name as the DOM id would
+ * produce duplicate ids, which breaks label association for assistive technology
+ * and for anything that resolves a label to its control.
+ */
+function useFieldIds(name: string) {
+  const unique = useId();
+  const id = `${name}-${unique}`;
+  return { id, hintId: `${id}-hint`, errorId: `${id}-error` };
+}
+
 function FieldWrapper({
   label,
-  name,
+  ids,
   error,
   hint,
   children,
-}: FieldProps & { children: ReactNode }) {
+}: Omit<FieldProps, "name"> & {
+  ids: { id: string; hintId: string; errorId: string };
+  children: ReactNode;
+}) {
   return (
     <div>
-      <label htmlFor={name} className="block text-sm font-medium text-ink">
+      <label htmlFor={ids.id} className="block text-sm font-medium text-ink">
         {label}
       </label>
       {hint ? (
-        <p id={`${name}-hint`} className="mt-0.5 text-xs text-ink-subtle">
+        <p id={ids.hintId} className="mt-0.5 text-xs text-ink-subtle">
           {hint}
         </p>
       ) : null}
       <div className="mt-1.5">{children}</div>
       {error ? (
-        <p id={`${name}-error`} role="alert" className="mt-1.5 text-sm text-critical">
+        <p id={ids.errorId} role="alert" className="mt-1.5 text-sm text-critical">
           {error}
         </p>
       ) : null}
@@ -90,18 +114,18 @@ export const TextField = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement> & FieldProps
 >(function TextField({ label, name, error, hint, className, ...props }, ref) {
+  const ids = useFieldIds(name);
   return (
-    <FieldWrapper label={label} name={name} error={error} hint={hint}>
+    <FieldWrapper label={label} ids={ids} error={error} hint={hint}>
       <input
         {...props}
         ref={ref}
-        id={name}
+        id={ids.id}
         name={name}
         aria-invalid={error ? true : undefined}
         aria-describedby={
-          [hint ? `${name}-hint` : null, error ? `${name}-error` : null]
-            .filter(Boolean)
-            .join(" ") || undefined
+          [hint ? ids.hintId : null, error ? ids.errorId : null].filter(Boolean).join(" ") ||
+          undefined
         }
         className={cn(
           FIELD_CLASSES,
@@ -122,14 +146,15 @@ export function SelectField({
   className,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & FieldProps) {
+  const ids = useFieldIds(name);
   return (
-    <FieldWrapper label={label} name={name} error={error} hint={hint}>
+    <FieldWrapper label={label} ids={ids} error={error} hint={hint}>
       <select
         {...props}
-        id={name}
+        id={ids.id}
         name={name}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${name}-error` : undefined}
+        aria-describedby={error ? ids.errorId : undefined}
         className={cn(FIELD_CLASSES, error ? "border-critical" : "border-line-strong", className)}
       >
         {children}
@@ -147,8 +172,9 @@ export function MoneyField({
   currency = "USD",
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & FieldProps & { currency?: string }) {
+  const ids = useFieldIds(name);
   return (
-    <FieldWrapper label={label} name={name} error={error} hint={hint}>
+    <FieldWrapper label={label} ids={ids} error={error} hint={hint}>
       <div className="relative">
         <span
           aria-hidden="true"
@@ -158,14 +184,14 @@ export function MoneyField({
         </span>
         <input
           {...props}
-          id={name}
+          id={ids.id}
           name={name}
           type="text"
           inputMode="decimal"
           autoComplete="off"
           placeholder="0.00"
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${name}-error` : undefined}
+          aria-describedby={error ? ids.errorId : undefined}
           className={cn(
             FIELD_CLASSES,
             "tabular pl-7 pr-14",
