@@ -3,6 +3,8 @@ package com.bankingplatform.statistics.controller;
 import com.bankingplatform.statistics.dto.DailySnapshotResponse;
 import com.bankingplatform.statistics.dto.PlatformStatsResponse;
 import com.bankingplatform.statistics.dto.UserStatsResponse;
+import com.bankingplatform.common.security.AccessGuard;
+import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.statistics.service.StatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,6 +16,14 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Read models over platform activity.
+ *
+ * <p>Split by audience. Platform-wide and daily aggregates describe every
+ * customer's activity and are staff-only; previously any authenticated customer
+ * could read total balances and transaction volumes across the whole platform.
+ * Per-user figures follow the ordinary ownership rule.
+ */
 @RestController
 @RequestMapping("/api/statistics")
 @RequiredArgsConstructor
@@ -24,20 +34,24 @@ public class StatisticsController {
 
     @GetMapping("/platform")
     @Operation(summary = "Platform-wide aggregate stats")
-    public ResponseEntity<PlatformStatsResponse> getPlatformStats() {
+    public ResponseEntity<PlatformStatsResponse> getPlatformStats(CallerIdentity caller) {
+        AccessGuard.requireStaff(caller);
         return ResponseEntity.ok(statisticsService.getPlatformStats());
     }
 
     @GetMapping("/users/{userId}")
     @Operation(summary = "Per-user stats")
-    public ResponseEntity<UserStatsResponse> getUserStats(@PathVariable Long userId) {
+    public ResponseEntity<UserStatsResponse> getUserStats(@PathVariable Long userId, CallerIdentity caller) {
+        AccessGuard.requireOwnerOrStaff(caller, userId);
         return ResponseEntity.ok(statisticsService.getUserStats(userId));
     }
 
     @GetMapping("/daily")
     @Operation(summary = "Daily snapshot for a specific date (defaults to today)")
     public ResponseEntity<DailySnapshotResponse> getDailySnapshot(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            CallerIdentity caller) {
+        AccessGuard.requireStaff(caller);
         return ResponseEntity.ok(statisticsService.getDailySnapshot(date != null ? date : LocalDate.now()));
     }
 
@@ -45,7 +59,9 @@ public class StatisticsController {
     @Operation(summary = "Daily snapshots for a date range")
     public ResponseEntity<List<DailySnapshotResponse>> getDailyRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            CallerIdentity caller) {
+        AccessGuard.requireStaff(caller);
         return ResponseEntity.ok(statisticsService.getDailySnapshots(from, to));
     }
 }
