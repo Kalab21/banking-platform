@@ -21,6 +21,6 @@ public interface AccountClient {
     @GetMapping("/api/accounts/{id}")
     AccountResponse getAccountById(@PathVariable Long id);
 
-    @PutMapping("/api/accounts/{id}/balance")
+    @PutMapping("/internal/accounts/{id}/balance")
     AccountResponse updateBalance(@PathVariable Long id, @RequestBody BalanceUpdateRequest request);
 }

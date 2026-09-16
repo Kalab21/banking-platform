@@ -12,7 +12,7 @@ import java.util.Map;
 @FeignClient(name = "account-service", configuration = FeignConfig.class)
 public interface AccountClient {
 
-    @PutMapping("/api/accounts/{id}/balance")
+    @PutMapping("/internal/accounts/{id}/balance")
     void updateBalance(@PathVariable Long id, @RequestBody Map<String, Object> request);
 
     default void credit(Long accountId, BigDecimal amount, String description) {
