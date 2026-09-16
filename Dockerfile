@@ -3,7 +3,7 @@
 # Each service builds with its own module as the context and its jar copied in,
 # so one file keeps the runtime identical across the platform.
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 # Run as an unprivileged user. A container process that starts as root keeps
 # root's capabilities inside the container, so a remote-code-execution bug in
