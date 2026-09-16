@@ -27,29 +27,54 @@ public class CallerIdentityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CallerIdentityExceptionHandler.class);
 
+    /** Long enough to identify a route, short enough not to flood a log line. */
+    private static final int MAX_LOGGED_PATH = 200;
+
     @ExceptionHandler(MissingCallerIdentityException.class)
     public ResponseEntity<Map<String, Object>> handleMissingIdentity(MissingCallerIdentityException ex,
                                                                      HttpServletRequest request) {
         // Logged at warn: on a correctly deployed stack this means someone
         // reached a service without passing through the gateway.
-        log.warn("Rejected request to {} with no usable caller identity", request.getRequestURI());
+        log.warn("Rejected request to {}: {}", safePath(request), ex.getMessage());
         return body(HttpStatus.UNAUTHORIZED, "Authentication required", request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex,
                                                                    HttpServletRequest request) {
-        log.warn("Denied request to {}: {}", request.getRequestURI(), ex.getMessage());
+        log.warn("Denied request to {}: {}", safePath(request), ex.getMessage());
         return body(HttpStatus.FORBIDDEN, ex.getMessage(), request);
     }
 
+    /**
+     * The request path is attacker-controlled, so it is neutralised before it
+     * reaches a log line.
+     *
+     * <p>A path containing CR or LF would otherwise let a caller append
+     * fabricated entries to the log — the same forgery this platform already
+     * guards against on the correlation-id header. Other control characters go
+     * too, and the result is bounded so a very long URL cannot swamp the log.
+     */
+    private static String safePath(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (path == null) {
+            return "(unknown)";
+        }
+        String sanitised = path.replaceAll("[\\p{Cntrl}]", "_");
+        return sanitised.length() <= MAX_LOGGED_PATH
+                ? sanitised
+                : sanitised.substring(0, MAX_LOGGED_PATH) + "...";
+    }
+
     private ResponseEntity<Map<String, Object>> body(HttpStatus status, String message, HttpServletRequest request) {
+        // The response echoes the container-decoded path, which the servlet
+        // container has already validated; only the log needed neutralising.
         return ResponseEntity.status(status).body(Map.of(
                 "timestamp", LocalDateTime.now().toString(),
                 "status", status.value(),
                 "error", status.getReasonPhrase(),
                 "message", message,
-                "path", request.getRequestURI()
+                "path", safePath(request)
         ));
     }
 }
