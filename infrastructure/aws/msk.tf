@@ -1,3 +1,18 @@
+# Encryption key for Kafka data at rest. Rotation is enabled: an unrotated
+# long-lived key is the kind of thing that only ever gets noticed in an audit.
+resource "aws_kms_key" "msk" {
+  description             = "Banking Platform MSK encryption at rest (${var.environment})"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  tags = { Name = "banking-msk-kms-${var.environment}" }
+}
+
+resource "aws_kms_alias" "msk" {
+  name          = "alias/banking-msk-${var.environment}"
+  target_key_id = aws_kms_key.msk.key_id
+}
+
 resource "aws_msk_configuration" "main" {
   name              = "banking-kafka-config-${var.environment}"
   kafka_versions    = [var.msk_kafka_version]
@@ -40,8 +55,21 @@ resource "aws_msk_cluster" "main" {
   }
 
   encryption_info {
+    # Customer-managed key rather than the AWS-managed default, so the key
+    # policy, rotation and revocation are all visible in this repository
+    # instead of being implicit.
+    encryption_at_rest_kms_key_arn = aws_kms_key.msk.arn
+
     encryption_in_transit {
-      client_broker = "PLAINTEXT"
+      # Was PLAINTEXT, which put every transaction, payment and KYC event on
+      # the wire in the clear between the services and the brokers. TLS is the
+      # only defensible setting for a system carrying this data, even inside a
+      # private subnet: "the network is trusted" is exactly the assumption that
+      # keeps failing.
+      #
+      # Clients must connect to the TLS bootstrap endpoint accordingly; see
+      # the msk_bootstrap_brokers_tls output.
+      client_broker = "TLS"
       in_cluster    = true
     }
   }

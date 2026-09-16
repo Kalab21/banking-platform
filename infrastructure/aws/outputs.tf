@@ -28,9 +28,9 @@ output "redis_endpoint" {
   value       = aws_elasticache_cluster.main.cache_nodes[0].address
 }
 
-output "msk_bootstrap_brokers" {
-  description = "MSK Kafka bootstrap broker string (PLAINTEXT)"
-  value       = aws_msk_cluster.main.bootstrap_brokers
+output "msk_bootstrap_brokers_tls" {
+  description = "MSK Kafka bootstrap broker string (TLS). This is the endpoint clients use; the cluster no longer serves PLAINTEXT."
+  value       = aws_msk_cluster.main.bootstrap_brokers_tls
   sensitive   = true
 }
 
