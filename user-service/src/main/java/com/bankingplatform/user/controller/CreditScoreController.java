@@ -3,6 +3,8 @@ package com.bankingplatform.user.controller;
 import com.bankingplatform.user.dto.CreditScoreHistoryResponse;
 import com.bankingplatform.user.dto.CreditScoreResponse;
 import com.bankingplatform.user.dto.UpdateCreditScoreRequest;
+import com.bankingplatform.common.security.AccessGuard;
+import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.user.service.CreditScoreService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,12 +21,15 @@ public class CreditScoreController {
     private final CreditScoreService creditScoreService;
 
     @GetMapping("/api/users/{userId}/credit-score")
-    public ResponseEntity<CreditScoreResponse> getScore(@PathVariable Long userId) {
+    public ResponseEntity<CreditScoreResponse> getScore(@PathVariable Long userId, CallerIdentity caller) {
+        AccessGuard.requireOwnerOrStaff(caller, userId);
         return ResponseEntity.ok(creditScoreService.getScore(userId));
     }
 
     @GetMapping("/api/users/{userId}/credit-score/history")
-    public ResponseEntity<List<CreditScoreHistoryResponse>> getHistory(@PathVariable Long userId) {
+    public ResponseEntity<List<CreditScoreHistoryResponse>> getHistory(@PathVariable Long userId,
+                                                                       CallerIdentity caller) {
+        AccessGuard.requireOwnerOrStaff(caller, userId);
         return ResponseEntity.ok(creditScoreService.getHistory(userId));
     }
 
