@@ -20,6 +20,7 @@
 
     <modules>
         <module>common-observability</module>
+        <module>common-security</module>
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>user-service</module>
