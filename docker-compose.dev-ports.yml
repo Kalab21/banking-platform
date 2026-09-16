@@ -1,0 +1,61 @@
+# Development override: publishes each business service on its own host port.
+#
+# The default stack deliberately does not. Application traffic enters through
+# the gateway, which authenticates it, and the /internal endpoints are internal
+# precisely because nothing outside the Compose network can reach them. Opening
+# these ports removes both properties: a request to localhost:8083 never passes
+# the gateway, so it carries no verified identity and is not subject to the
+# authorization the services apply to gateway traffic.
+#
+# Use it when you genuinely need to attach a debugger, hit one service's Swagger
+# UI, or read an actuator endpoint directly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
+#
+# Do not use it as the normal way to run the stack, and do not use it on a host
+# other people can reach.
+
+services:
+  user-service:
+    ports:
+      - "8081:8081"
+
+  application-service:
+    ports:
+      - "8082:8082"
+
+  account-service:
+    ports:
+      - "8083:8083"
+
+  transaction-service:
+    ports:
+      - "8084:8084"
+
+  payment-service:
+    ports:
+      - "8085:8085"
+
+  statistics-service:
+    ports:
+      - "8086:8086"
+
+  notification-service:
+    ports:
+      - "8087:8087"
+
+  fraud-detection-service:
+    ports:
+      - "8088:8088"
+
+  credit-card-service:
+    ports:
+      - "8089:8089"
+
+  loan-service:
+    ports:
+      - "8090:8090"
+
+  integration-service:
+    ports:
+      - "8091:8091"

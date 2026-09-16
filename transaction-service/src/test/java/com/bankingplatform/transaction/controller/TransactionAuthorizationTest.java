@@ -8,6 +8,9 @@ import com.bankingplatform.transaction.dto.AccountResponse;
 import com.bankingplatform.transaction.dto.TransactionResponse;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
+import feign.FeignException;
+import feign.Request;
+import feign.RequestTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -22,6 +25,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -208,6 +213,50 @@ class TransactionAuthorizationTest {
 
             mvc.perform(as(get("/api/transactions/{ref}", "TXN-A"), CUSTOMER_A, "CUSTOMER"))
                     .andExpect(status().isOk());
+        }
+    }
+
+    @Nested
+    @DisplayName("a downstream refusal is reported as a refusal")
+    class DownstreamRefusal {
+
+        /** MockMvc including the service's own advice, which maps Feign errors. */
+        private MockMvc withServiceAdvice() {
+            return MockMvcBuilders
+                    .standaloneSetup(new TransactionController(
+                            transactionService, new AccountOwnershipVerifier(accountClient)))
+                    .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
+                    .setControllerAdvice(new CallerIdentityExceptionHandler(),
+                            new com.bankingplatform.transaction.exception.GlobalExceptionHandler())
+                    .build();
+        }
+
+        private FeignException forbidden() {
+            Request request = Request.create(Request.HttpMethod.GET, "/api/accounts/2",
+                    Map.of(), new byte[0], StandardCharsets.UTF_8, new RequestTemplate());
+            return FeignException.errorStatus("AccountClient#getAccountById",
+                    feign.Response.builder()
+                            .status(403)
+                            .reason("Forbidden")
+                            .request(request)
+                            .headers(Map.of())
+                            .build());
+        }
+
+        @Test
+        @DisplayName("account-service refusing the lookup surfaces as 403, not 500")
+        void downstreamForbiddenBecomes403() throws Exception {
+            // account-service enforces ownership on the lookup itself. Without
+            // an explicit mapping that refusal fell through to the catch-all
+            // and was reported as a server error, making an enforced control
+            // look like a bug.
+            when(accountClient.getAccountById(ACCOUNT_OF_B)).thenThrow(forbidden());
+
+            withServiceAdvice().perform(as(get("/api/transactions/account/{id}", ACCOUNT_OF_B),
+                            CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(transactionService);
         }
     }
 

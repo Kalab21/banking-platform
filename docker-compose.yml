@@ -3,6 +3,21 @@ name: banking-platform
 # Full stack — all services + infra
 # Prerequisites: mvn package -DskipTests (from root)
 # Usage: docker compose up -d
+#
+# Application traffic enters through the gateway. The business services
+# deliberately publish no host ports: they are reachable only on the Compose
+# network, which is what makes the /internal endpoints internal and stops the
+# gateway's authentication being bypassable by calling a service directly.
+#
+# Ports that are published, and why:
+#   frontend      3000  the console
+#   api-gateway   8080  the only public API entry point
+#   eureka-server 8761  service-registry dashboard (operator view)
+#   kafka-ui      8095  topic browser (development tool)
+#   postgres/kafka/redis  infrastructure, for IDE-based development
+#
+# To reach a single service directly while developing, use the override:
+#   docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
 
 services:
 
@@ -137,8 +152,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-user-service
     restart: unless-stopped
-    ports:
-      - "8081:8081"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
@@ -169,8 +182,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-account-service
     restart: unless-stopped
-    ports:
-      - "8083:8083"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/account_db
@@ -201,8 +212,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-application-service
     restart: unless-stopped
-    ports:
-      - "8082:8082"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/application_db
@@ -233,8 +242,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-transaction-service
     restart: unless-stopped
-    ports:
-      - "8084:8084"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transaction_db
@@ -265,8 +272,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-payment-service
     restart: unless-stopped
-    ports:
-      - "8085:8085"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
@@ -297,8 +302,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-statistics-service
     restart: unless-stopped
-    ports:
-      - "8086:8086"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/statistics_db
@@ -333,8 +336,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-notification-service
     restart: unless-stopped
-    ports:
-      - "8087:8087"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
@@ -365,8 +366,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-fraud-service
     restart: unless-stopped
-    ports:
-      - "8088:8088"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fraud_db
@@ -401,8 +400,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-credit-card-service
     restart: unless-stopped
-    ports:
-      - "8089:8089"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/credit_card_db
@@ -433,8 +430,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-loan-service
     restart: unless-stopped
-    ports:
-      - "8090:8090"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loan_db
@@ -465,8 +460,6 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-integration-service
     restart: unless-stopped
-    ports:
-      - "8091:8091"
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/integration_db
