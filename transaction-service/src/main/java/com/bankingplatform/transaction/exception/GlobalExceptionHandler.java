@@ -104,12 +104,12 @@ public class GlobalExceptionHandler {
      * hides an enforced security control behind what looks like a bug.
      */
     @ExceptionHandler(FeignException.Forbidden.class)
-    public ResponseEntity<ErrorResponse> handleFeignForbidden(FeignException ex, HttpServletRequest req) {
+    public ResponseEntity<ErrorResponse> handleFeignForbidden(HttpServletRequest req) {
         return build(HttpStatus.FORBIDDEN, "Not permitted to access this resource", req.getRequestURI());
     }
 
     @ExceptionHandler(FeignException.Unauthorized.class)
-    public ResponseEntity<ErrorResponse> handleFeignUnauthorized(FeignException ex, HttpServletRequest req) {
+    public ResponseEntity<ErrorResponse> handleFeignUnauthorized(HttpServletRequest req) {
         return build(HttpStatus.UNAUTHORIZED, "Authentication required", req.getRequestURI());
     }
 

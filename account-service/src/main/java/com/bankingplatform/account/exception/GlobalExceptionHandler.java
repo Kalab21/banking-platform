@@ -68,7 +68,7 @@ public class GlobalExceptionHandler {
      * second look.
      */
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException ex, HttpServletRequest req) {
+    public ResponseEntity<ErrorResponse> handleNoResource(HttpServletRequest req) {
         return build(HttpStatus.NOT_FOUND, "No such endpoint", req.getRequestURI());
     }
 
