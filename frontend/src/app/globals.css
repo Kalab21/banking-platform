@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/*
+ * Enterprise banking palette.
+ *
+ * Slate-blue ink on a cool off-white ground, with a single deep teal accent for
+ * interactive elements. Semantic colours (positive / caution / critical) are
+ * deliberately separate from the accent so that "this is a link" never reads as
+ * "this is good news". Neutrals carry a slight blue bias so they sit with the
+ * accent rather than against it.
+ */
+@theme {
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-sunken: #f0f2f5;
+
+  --color-ink: #10192b;
+  --color-ink-muted: #4d5a70;
+  --color-ink-subtle: #7b8798;
+
+  --color-line: #dfe3ea;
+  --color-line-strong: #c6ccd7;
+
+  --color-accent: #0f5f63;
+  --color-accent-hover: #0c4c50;
+  --color-accent-soft: #e2efef;
+
+  --color-positive: #1a6d46;
+  --color-positive-soft: #e3f1e9;
+  --color-caution: #8a5a12;
+  --color-caution-soft: #fbf0dd;
+  --color-critical: #a52c2c;
+  --color-critical-soft: #fbe6e6;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A single, consistently visible focus ring across every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Numeric columns line up. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

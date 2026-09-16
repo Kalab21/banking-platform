@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml)
 
-A distributed, event-driven **retail banking back end** built as 13 Spring Boot microservices — covering accounts, transactions, payments, credit cards, loans, fraud detection, KYC and notifications, fronted by an API gateway and deployable to AWS via Terraform.
+A full-stack, distributed **retail banking platform**: 13 Spring Boot microservices covering accounts, transactions, payments, credit cards, loans, fraud detection, KYC and notifications, behind an API gateway, with a Next.js/TypeScript banking console on the front and Terraform-defined AWS infrastructure underneath.
 
 > **Portfolio / learning project.** This is a self-built demonstration system, **not** a real bank and not production-certified financial software. It handles no real money, holds no real customer data, and has not undergone regulatory, audit or penetration review. It exists to demonstrate backend architecture, distributed-systems design and Spring Boot engineering practice.
 
@@ -19,7 +19,7 @@ This project models that problem end to end:
 - **A single authenticated entry point** — an API gateway that validates JWTs once and forwards trusted identity headers downstream.
 - **An auditable trail** — every state-changing operation writes an `audit_log` row alongside its domain write, inside the same transaction.
 
-**By the numbers:** 13 services, 290 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 12 Flyway migrations, 54 automated tests.
+**By the numbers:** 13 backend services plus a Next.js console, 290 Java source files, 16 REST controllers, ~99 endpoints, 8 Kafka topics, 12 Flyway migrations, 18 frontend routes, 123 automated tests.
 
 ---
 
@@ -69,6 +69,17 @@ Only features actually implemented in this repository are listed.
 - **Wire / ACH / SWIFT** external-transfer endpoints and **FX rate / currency conversion**.
 - These are deliberately **simulated stubs** — no real banking network is contacted. They model the request/response and persistence shape, not a certified integration.
 
+### Console — `frontend` (Next.js)
+
+- Customer views: dashboard, accounts and account detail, transaction history with deposit /
+  withdraw / transfer, payments and beneficiaries, loans with amortization schedule and payoff
+  quote, credit cards with statements, notifications, profile and security.
+- Staff views, shown only to `EMPLOYEE` and `ADMIN`: KYC document review, the application
+  queue by status, and open fraud alerts.
+- **Server-side only API access.** Pages fetch through React Server Components and mutate
+  through Server Actions, so the browser never holds a bearer token and the gateway needed no
+  CORS configuration.
+
 ### Edge — `api-gateway`
 
 - Spring Cloud Gateway with Eureka-backed load-balanced routing (`lb://`) to all 12 downstream services.
@@ -80,8 +91,17 @@ Only features actually implemented in this repository are listed.
 ## Architecture
 
 ```
+   browser
+      |  httpOnly session cookie (no token in JS)
+      v
+  +-------------------+
+  | Next.js frontend  |  :3000   React Server Components + Server Actions
+  | server-side only  |          the only caller of the gateway
+  +---------+---------+
+            |  Bearer JWT, server to server
+            v
                          +--------------+
-      client ----------->| api-gateway  |  :8080
+                         | api-gateway  |  :8080
                          | JWT filter   |
                          | rate limiter |
                          +------+-------+
@@ -144,7 +164,8 @@ Only features actually implemented in this repository are listed.
 | Mapping / boilerplate | MapStruct 1.5.5, Lombok |
 | API docs | springdoc-openapi 2.6.0 (12 services) |
 | Observability | Spring Boot Actuator (all 13 services) |
-| Testing | JUnit 5, Mockito, AssertJ, Testcontainers (PostgreSQL) |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, Recharts 3, Zod |
+| Testing | JUnit 5, Mockito, AssertJ, Testcontainers (PostgreSQL); Vitest, React Testing Library |
 | Build | Maven multi-module |
 | CI | GitHub Actions — `mvn verify` on JDK 17 plus Docker Compose validation |
 | Containers | Docker, Docker Compose |
@@ -166,7 +187,27 @@ Only features actually implemented in this repository are listed.
 | Error hygiene | `@RestControllerAdvice` maps domain exceptions to typed responses; the catch-all returns a generic message rather than leaking stack traces |
 | Rate limiting | Redis token bucket at the gateway, keyed per IP |
 | Abuse detection | Fraud velocity rules with automatic account freeze |
+| Browser session | JWT held in an httpOnly, SameSite=Lax cookie; never readable by page JavaScript |
 | Secret handling | `JWT_SECRET` injected from the environment — see below |
+
+### How the frontend holds the session
+
+The console never puts a bearer token in browser-accessible storage. On sign-in a server
+action receives the token from the gateway and writes it straight into an **httpOnly,
+SameSite=Lax cookie**, with `Secure` set in production and a lifetime taken from the token's
+own `expiresIn`. Every subsequent API call is made by the Next.js server, reading that cookie
+and attaching the `Authorization` header server-side.
+
+Two things follow. The page's JavaScript cannot read the token, which closes the XSS
+token-theft path that `localStorage` would leave open — verified by asserting the token string
+does not appear anywhere in the served HTML. And because the browser never calls the gateway
+directly, **no CORS configuration was added to the backend**; the backend was not modified for
+the frontend at all.
+
+Role-based navigation hides staff tools from customers, and `requireStaffSession` redirects a
+customer away from `/admin/*`. Neither is treated as authorization: the gateway re-verifies the
+JWT signature on every request and the services enforce `@PreAuthorize`. If the UI and backend
+ever disagree, the backend wins and the user sees a 403.
 
 ### Secret handling
 
@@ -215,7 +256,17 @@ These are the honest gaps between this project and a production ledger, and they
 - **Balance updates have no optimistic or pessimistic locking.** `updateBalance` is a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so concurrent debits on the same account can interleave and lose an update.
 - **No idempotency keys.** A retried transfer will apply twice.
 - **No circuit breakers or retries** on Feign calls (Resilience4j is not on the classpath), so a slow downstream service propagates latency upstream.
-- **Test coverage is deliberately narrow.** Balances and loan arithmetic are covered by 54 automated tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
+- **The console is read-mostly for staff.** Employees can review KYC documents, but the backend has
+  no endpoint listing all pending documents, so review is per customer rather than a queue. Application
+  and fraud views are read-only because no review endpoint is wired into the console yet.
+- **2FA is enrolment only.** The backend registers and verifies a TOTP secret, but `POST /api/auth/login`
+  does not challenge for a code, so enabling it does not add a second step at sign-in. The UI states this
+  rather than implying otherwise.
+- **Card numbers are returned unmasked by the backend.** `CreditCardResponse.cardNumber` carries the full
+  value; the console masks it everywhere, but the correct fix is to mask it server-side.
+- **No frontend end-to-end tests.** Playwright is not set up; the console was verified by hand against a
+  live stack. See Testing.
+- **Test coverage is deliberately narrow.** Balances and loan arithmetic are covered by 54 backend tests and the console by 69 frontend tests; the other 11 services have none, and there are no controller or security slice tests. See [Testing](#testing).
 
 ---
 
@@ -229,12 +280,14 @@ These are the honest gaps between this project and a production ledger, and they
 | Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | **27 passing** |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | Manual, needs the stack up |
-| CI | GitHub Actions | `mvn -B clean verify` on JDK 17 plus Compose validation | Every push and pull request |
+| Unit | Vitest, React Testing Library | Frontend formatting, masking, JWT decode, validation, role nav, API errors, UI components | **69 passing** |
+| CI | GitHub Actions | Backend `mvn clean verify`; frontend lint, typecheck, tests, production build | Every push and pull request |
 
-**54 automated tests, all passing** under a single command:
+**123 automated tests, all passing** — 54 backend, 69 frontend:
 
 ```bash
-mvn -B --no-transfer-progress clean verify
+mvn -B --no-transfer-progress clean verify   # backend: 47 unit + 6 integration
+cd frontend && npm run test                  # frontend: 69 unit/component
 ```
 
 Unit tests run in the `test` phase; integration tests are named `*IT` and bound to Failsafe in the `verify` phase. There is no separate test command to forget — CI runs exactly the line above.
@@ -245,6 +298,16 @@ Unit tests run in the `test` phase; integration tests are named `*IT` and bound 
 - *Loans* — the amortised monthly payment for $10,000 at 6.00% APR over 12 months, checked against the external reference value of **$860.66** rather than against the implementation's own formula; a 12-row schedule whose principal portions sum exactly to the amount borrowed and whose final balance is zero; zero-interest loans splitting evenly; interest-before-principal allocation; `PAID` versus `PARTIAL` instalment marking; overpayment capped at the payoff figure; loan closure on the final instalment; and early payoff settling balance plus accrued interest, with the payoff record asserted to reconcile (principal + interest equals the amount debited).
 
 **What the integration test proves that a mock cannot.** It runs `@DataJpaTest` against a real PostgreSQL 16 container: the Flyway migrations apply to an empty database, the JPA mappings agree with the migrated schema (the service runs `ddl-auto: validate`, so entity/migration drift fails the test at startup), `DECIMAL(19,2)` survives a round trip without losing scale, a negative balance and overdraft position persist correctly, and the unique constraint on `account_number` is enforced by the database itself.
+
+**What the frontend tests cover.** Money formatting and the card/account masking that keeps a
+full PAN off the screen; JWT decoding, including rejecting a token with no `userId` rather than
+proceeding blindly; every form schema, including the backend's own "not the same account" rule
+for transfers; role-based navigation for all three roles; the HTTP-status-to-user-message
+mapping; and the accessibility contract of the form primitives — label binding, `aria-invalid`,
+`aria-describedby`, and a submit button that disables itself while pending.
+
+They deliberately do not assert on markup structure or class names, so a restyle does not break
+them.
 
 Running it needs a working Docker daemon. `mvn test` skips it, so the fast inner loop stays Docker-free.
 
@@ -282,9 +345,12 @@ docker compose ps           # wait until healthy
 
 | Endpoint | URL |
 |---|---|
+| **Banking console** | **<http://localhost:3000>** |
 | API gateway | <http://localhost:8080> |
 | Eureka dashboard | <http://localhost:8761> |
 | Kafka UI | <http://localhost:8095> |
+
+Register a customer at <http://localhost:3000/register> to get started.
 
 ### Option B — infrastructure in Docker, services in your IDE
 
@@ -293,6 +359,17 @@ docker compose -f docker-compose.infra.yml up -d   # Postgres, Kafka, Redis only
 ```
 
 Then start `eureka-server` first, then `api-gateway`, then whichever services you are working on. Each service defaults to `localhost` for Postgres, Kafka and Redis, so no extra configuration is needed.
+
+### Option C — frontend against a running backend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local        # API_GATEWAY_URL=http://localhost:8080
+npm run dev                       # http://localhost:3000
+```
+
+Useful while working on the console: the backend runs in Docker, the frontend reloads locally.
 
 ### Smoke test
 
@@ -345,6 +422,13 @@ banking-platform/
 ├── e2e-tests.ps1                # End-to-end suite against the running stack
 ├── .env.example                 # Environment template - no real credentials
 │
+├── frontend/                    # Next.js banking console (App Router, TypeScript)
+│   ├── src/app/(auth)/          #   login, register
+│   ├── src/app/(app)/           #   authenticated shell incl. /admin
+│   ├── src/features/            #   server actions + client components per domain
+│   ├── src/lib/api/             #   the only outbound HTTP layer (gateway only)
+│   └── Dockerfile               #   standalone production image, non-root
+│
 ├── eureka-server/               # Service discovery
 ├── api-gateway/                 # Edge: routing, JWT filter, rate limiting
 ├── user-service/                # Auth, JWT, 2FA, KYC, credit score
@@ -385,6 +469,12 @@ com.bankingplatform.<service>/
 
 **Database per service, never a shared schema.** Each service owns its PostgreSQL database and reaches others only through REST or events. This costs cross-service joins and gives up distributed ACID — a real trade-off, made deliberately to keep services independently deployable and independently migratable.
 
+**The frontend is a backend-for-frontend, not a browser client.** Every call to the banking API
+is made by the Next.js server, never by page JavaScript. That buys two things at once: the JWT
+can live in an httpOnly cookie the browser cannot read, and the gateway needs no CORS policy
+because no cross-origin request is ever made. The cost is that the console cannot be served as
+a static bundle — it needs a Node process — which is the right trade for a banking UI.
+
 **Flyway with `ddl-auto: validate`.** Schema changes are explicit, reviewed, versioned SQL. Hibernate is allowed to verify the schema at boot but never to change it; the failure mode of `ddl-auto: update` in a financial system is unacceptable.
 
 **Events for derived state, synchronous calls for authoritative state.** A transfer must know immediately whether the debit succeeded, so that is a Feign call. Statistics, notifications and fraud scoring are derived and tolerate lag, so they consume Kafka. This keeps the critical path short and stops a notification outage from blocking money movement.
@@ -406,9 +496,10 @@ Ordered by what would most improve the system, not by what is easiest:
 1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts and loans to the remaining services, and add MockMvc controller and Spring Security slice tests.
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
-4. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
-5. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
-6. **Extend CI** — run the end-to-end suite against a Compose stack and publish images to a registry.
+4. **Mask `cardNumber` server-side** and add a pending-KYC-documents endpoint so staff review is a real queue.
+5. **Resilience4j** circuit breakers, retries and bulkheads on all Feign clients.
+6. **Observability** — Micrometer metrics, distributed tracing and structured JSON logs.
+7. **Extend CI** — add Playwright end-to-end coverage and run the PowerShell suite against a Compose stack and publish images to a registry.
 
 ---
 

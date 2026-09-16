@@ -405,6 +405,24 @@ services:
       eureka-server:
         condition: service_healthy
 
+  # Next.js banking console. Talks to the API Gateway server-side only, so the
+  # browser never holds a bearer token and no CORS configuration is required.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: banking-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8080
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      NODE_ENV: production
+    depends_on:
+      api-gateway:
+        condition: service_started
+
 volumes:
   postgres_data:
   kafka_data:
