@@ -1,0 +1,21 @@
+# Datasources are provisioned rather than clicked in, so a fresh
+# `docker compose up` gives a working Grafana with no manual setup.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # Fixed uid: the provisioned dashboard references the datasource by uid, and
+    # an auto-generated one would leave every panel showing "No data".
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://banking-prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Zipkin
+    uid: zipkin
+    type: zipkin
+    access: proxy
+    url: http://banking-zipkin:9411
+    editable: false

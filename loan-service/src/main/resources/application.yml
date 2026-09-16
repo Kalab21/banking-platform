@@ -52,10 +52,67 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # Only these three. Metrics and tracing add no new public surface:
+        # everything else (env, beans, heapdump, loggers...) stays closed.
+        include: health,info,prometheus
+  endpoint:
+    health:
+      # Liveness/readiness are derived from Spring's own application state and
+      # the registered health indicators, so Compose and any orchestrator can
+      # tell "process is up" from "ready for traffic".
+      probes:
+        enabled: true
+      # Dependency detail is internal; callers get UP/DOWN only.
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      # Every series is labelled with its service, so one Prometheus scrape
+      # config and one Grafana dashboard can break down by service.
+      application: ${spring.application.name}
+    distribution:
+      # Without histogram buckets Prometheus cannot compute a latency
+      # quantile at all, so the p95/p99 panels would be permanently empty.
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+  observations:
+    key-values:
+      application: ${spring.application.name}
+  tracing:
+    baggage:
+      # The correlation id rides with the trace context rather than the MDC.
+      # Spring Cloud CircuitBreaker can run a Feign call on a different thread,
+      # where a thread-local MDC lookup silently finds nothing; baggage crosses
+      # that hop and the service boundary with the trace itself.
+      remote-fields:
+        - X-Request-Id
+      correlation:
+        enabled: true
+        fields:
+          - X-Request-Id
+    sampling:
+      # Full sampling: this is a demo stack, and a trace you cannot find is
+      # worse than no tracing. A real deployment would sample well below 1.0.
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
 springdoc:
   api-docs:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+logging:
+  pattern:
+    # Every line carries who logged it and which request it belongs to.
+    # requestId is the id a caller can quote; traceId/spanId are Micrometer's
+    # and are what Zipkin indexes. Boot splices this into its console pattern.
+    correlation: "[${spring.application.name:-},%X{X-Request-Id:-},%X{traceId:-},%X{spanId:-}] "

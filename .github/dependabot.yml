@@ -1,0 +1,63 @@
+version: 2
+
+# Weekly rather than daily, and grouped rather than one PR per bump.
+# An unattended portfolio repository that opens fifteen separate dependency PRs
+# a week reads as abandoned, not maintained.
+
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies, backend]
+    groups:
+      # Routine version drift arrives as one reviewable PR.
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+    # Majors still come through individually, because those are the ones that
+    # need reading rather than merging.
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+    open-pull-requests-limit: 3
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps)"
+
+  - package-ecosystem: docker
+    # The one Dockerfile all thirteen services share.
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+    open-pull-requests-limit: 2
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "build(deps)"

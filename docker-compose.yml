@@ -89,6 +89,8 @@ services:
       context: ./eureka-server
       dockerfile: ../Dockerfile
     container_name: banking-eureka
+    environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
     restart: unless-stopped
     ports:
       - "8761:8761"
@@ -110,6 +112,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
@@ -119,6 +122,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   # ── MICROSERVICES ─────────────────────────────────────────────────────────
 
@@ -131,6 +140,7 @@ services:
     ports:
       - "8081:8081"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -146,6 +156,12 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8081/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   account-service:
     build:
@@ -156,6 +172,7 @@ services:
     ports:
       - "8083:8083"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/account_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -171,6 +188,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8083/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   application-service:
     build:
@@ -181,6 +204,7 @@ services:
     ports:
       - "8082:8082"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/application_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -196,6 +220,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8082/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   transaction-service:
     build:
@@ -206,6 +236,7 @@ services:
     ports:
       - "8084:8084"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transaction_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -221,6 +252,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8084/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   payment-service:
     build:
@@ -231,6 +268,7 @@ services:
     ports:
       - "8085:8085"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -246,6 +284,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8085/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   statistics-service:
     build:
@@ -256,6 +300,7 @@ services:
     ports:
       - "8086:8086"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/statistics_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -275,6 +320,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8086/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   notification-service:
     build:
@@ -285,6 +336,7 @@ services:
     ports:
       - "8087:8087"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -300,6 +352,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8087/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   fraud-detection-service:
     build:
@@ -310,6 +368,7 @@ services:
     ports:
       - "8088:8088"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fraud_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -329,6 +388,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8088/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   credit-card-service:
     build:
@@ -339,6 +404,7 @@ services:
     ports:
       - "8089:8089"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/credit_card_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -354,6 +420,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8089/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   loan-service:
     build:
@@ -364,6 +436,7 @@ services:
     ports:
       - "8090:8090"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loan_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -379,6 +452,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8090/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   integration-service:
     build:
@@ -389,6 +468,7 @@ services:
     ports:
       - "8091:8091"
     environment:
+      ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/integration_db
       SPRING_DATASOURCE_USERNAME: bankingadmin
       SPRING_DATASOURCE_PASSWORD: bankingpass
@@ -407,6 +487,13 @@ services:
 
   # Next.js banking console. Talks to the API Gateway server-side only, so the
   # browser never holds a bearer token and no CORS configuration is required.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8091/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
   frontend:
     build:
       context: ./frontend

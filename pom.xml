@@ -19,6 +19,7 @@
     <description>Modern microservices banking platform</description>
 
     <modules>
+        <module>common-observability</module>
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>user-service</module>
@@ -84,6 +85,35 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <!-- Inherited by every module: each service exposes the same metrics and
+         emits the same trace format, so Prometheus needs one scrape config and
+         a trace crosses service boundaries without per-service wiring.
+
+         Versions come from the Spring Boot parent, so they stay aligned with
+         the Boot release rather than drifting independently. Brave is the
+         bridge rather than the OpenTelemetry one because Spring Cloud Gateway,
+         RestTemplate, Feign and Spring Kafka are already instrumented for it
+         out of the box on Boot 3.3 — one tracing system, no competing
+         exporters. -->
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+    </dependencies>
 
     <build>
         <plugins>

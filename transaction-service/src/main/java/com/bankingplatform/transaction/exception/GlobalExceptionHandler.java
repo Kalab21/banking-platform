@@ -1,8 +1,10 @@
 package com.bankingplatform.transaction.exception;
 
 import feign.FeignException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -28,6 +30,65 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TransactionException.class)
     public ResponseEntity<ErrorResponse> handleTransaction(TransactionException ex, HttpServletRequest req) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), req.getRequestURI());
+    }
+
+    /**
+     * 504 rather than 503. The distinction is deliberate: this response must
+     * not promise that nothing happened, because a timed-out debit may well
+     * have been applied and only the response lost.
+     */
+    @ExceptionHandler(AccountCallTimeoutException.class)
+    public ResponseEntity<ErrorResponse> handleAccountTimeout(AccountCallTimeoutException ex,
+                                                              HttpServletRequest req) {
+        log.error("Account service timed out on {}", req.getRequestURI());
+        return build(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage(), req.getRequestURI());
+    }
+
+    /**
+     * The circuit breaker on the account-service hop rejected the call, or the
+     * call failed in a way the wrapper obscured.
+     *
+     * <p>When the circuit is open, 503 with {@code Retry-After}: nothing is
+     * wrong with the request, the dependency is unavailable, and the money
+     * movement definitively did <em>not</em> happen, because the call never
+     * left this service.
+     */
+    @ExceptionHandler({CallNotPermittedException.class, NoFallbackAvailableException.class})
+    public ResponseEntity<ErrorResponse> handleCircuitOpen(Exception ex, HttpServletRequest req) {
+        Throwable cause = (ex instanceof NoFallbackAvailableException) ? ex.getCause() : ex;
+
+        // Enabling the circuit breaker made Spring Cloud wrap *every* Feign
+        // failure in NoFallbackAvailableException, including the business
+        // rejections below. Unwrapping keeps "insufficient funds" a 422 rather
+        // than turning a correct refusal into a 502.
+        if (cause instanceof FeignException feign) {
+            HttpStatus status = HttpStatus.resolve(feign.status());
+            if (status != null && status.is4xxClientError()) {
+                return build(status, extractFeignMessage(feign), req.getRequestURI());
+            }
+            log.error("Account service returned {} on {}", feign.status(), req.getRequestURI(), feign);
+            return build(HttpStatus.BAD_GATEWAY,
+                    "The account service did not respond successfully", req.getRequestURI());
+        }
+
+        // Anything other than a rejected call is a genuine downstream failure
+        // surfacing through the wrapper, so it must not be reported as
+        // "temporarily unavailable".
+        if (!(cause instanceof CallNotPermittedException)) {
+            log.error("Account service call failed on {}: {}", req.getRequestURI(), ex.getMessage(), ex);
+            return build(HttpStatus.BAD_GATEWAY,
+                    "The account service did not respond successfully", req.getRequestURI());
+        }
+        log.warn("Circuit open for account-service on {}", req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", "20")
+                .body(ErrorResponse.builder()
+                        .timestamp(LocalDateTime.now())
+                        .status(HttpStatus.SERVICE_UNAVAILABLE.value())
+                        .error(HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase())
+                        .message("The account service is temporarily unavailable. No money was moved.")
+                        .path(req.getRequestURI())
+                        .build());
     }
 
     @ExceptionHandler(FeignException.UnprocessableEntity.class)
