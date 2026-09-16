@@ -24,11 +24,9 @@ import java.util.List;
  * id in the path or a {@code userId} in the body is caller input and is never
  * treated as proof of ownership.
  *
- * <p>Balance mutation is the exception: it takes no caller because it is invoked
- * service-to-service by transaction, loan and credit-card workflows, which do
- * not pass through the gateway and so carry no identity. It is relocated behind
- * an internal-only path in a follow-up change; until then it remains reachable
- * through the gateway and is the known gap tracked separately.
+ * <p>Balance mutation is deliberately absent. It is a service-to-service
+ * operation and lives on {@link InternalAccountController}, which the gateway
+ * does not route, so it cannot be invoked by a customer.
  */
 @RestController
 @RequestMapping("/api/accounts")
@@ -76,13 +74,6 @@ public class AccountController {
     public ResponseEntity<List<AccountResponse>> getActiveByUser(@PathVariable Long userId, CallerIdentity caller) {
         AccessGuard.requireOwnerOrStaff(caller, userId);
         return ResponseEntity.ok(accountService.getActiveAccountsByUserId(userId));
-    }
-
-    @PutMapping("/{id}/balance")
-    @Operation(summary = "Credit or debit account balance (service-to-service)")
-    public ResponseEntity<AccountResponse> updateBalance(@PathVariable Long id,
-                                                          @Valid @RequestBody BalanceUpdateRequest request) {
-        return ResponseEntity.ok(accountService.updateBalance(id, request));
     }
 
     @PutMapping("/{id}/status")

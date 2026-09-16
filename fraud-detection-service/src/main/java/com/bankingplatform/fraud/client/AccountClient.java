@@ -9,6 +9,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 @FeignClient(name = "account-service", configuration = FeignConfig.class)
 public interface AccountClient {
 
-    @PutMapping("/api/accounts/{id}/status")
+    @PutMapping("/internal/accounts/{id}/status")
     void updateStatus(@PathVariable Long id, @RequestParam String status);
 }

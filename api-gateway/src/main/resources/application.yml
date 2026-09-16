@@ -19,7 +19,13 @@ spring:
             key-resolver: "#{@ipKeyResolver}"
       discovery:
         locator:
-          enabled: true
+          # Off deliberately. When enabled the gateway auto-creates a
+          # /{service-id}/** route for every registered service, which would
+          # expose paths the explicit routes below do not — including
+          # /account-service/internal/accounts/{id}/balance, defeating the
+          # internal-only boundary. Routes are declared explicitly instead, so
+          # the public surface is exactly what is listed here.
+          enabled: false
           lower-case-service-id: true
       routes:
         - id: user-service-auth
