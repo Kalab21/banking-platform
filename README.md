@@ -559,6 +559,21 @@ CRITICAL in a transitive test-scoped dependency should be triaged on its merits,
 not used to block an unrelated documentation change — and a scan configured to
 fail loudly tends to get switched off.
 
+**What the first scan actually found, and what was done about it.** Trivy's IaC
+rules caught an MSK cluster configured with `client_broker = "PLAINTEXT"` and no
+customer-managed key — every transaction and KYC event would have crossed the
+wire in the clear — and public subnets auto-assigning public IPs. Both are
+fixed. It also flagged `CVE-2025-49146` in the PostgreSQL driver, where the
+driver silently fell back to plaintext authentication when channel binding was
+requested but unsupported; the driver is pinned ahead of the version Boot 3.3.6
+manages.
+
+Two classes of finding are deliberately left open rather than suppressed: OS
+package CVEs in `eclipse-temurin` (the tag already tracks the latest build, and
+the affected QUIC and XML paths are not reachable from these services), and a
+Spring Boot advisory that applies only to the CloudFoundry actuator integration,
+which this project does not use. They are visible in the Security tab.
+
 Dependabot opens grouped weekly PRs for Maven, npm, GitHub Actions and Docker.
 Framework majors are ignored deliberately: this project targets Spring Boot 3.3
 on Java 17, so a Boot 4 or TypeScript 7 PR is a migration with its own design
