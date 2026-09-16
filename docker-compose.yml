@@ -411,6 +411,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Empty unless you are behind a TLS-inspecting proxy or antivirus. See
+        # the note in frontend/Dockerfile and "Building behind a TLS-inspecting
+        # proxy" in the README.
+        EXTRA_CA_CERT_PEM: "${EXTRA_CA_CERT_PEM:-}"
     container_name: banking-frontend
     restart: unless-stopped
     ports:

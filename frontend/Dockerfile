@@ -10,10 +10,34 @@
 
 FROM node:22-alpine AS deps
 WORKDIR /app
+
+# Optional extra trust anchor, for machines behind a TLS-inspecting proxy or
+# antivirus (Zscaler, Netskope, Norton Web Shield and friends). Such a product
+# re-signs registry.npmjs.org with its own root; the host trusts that root but
+# this container does not, so `npm ci` fails every fetch with
+# UNABLE_TO_VERIFY_LEAF_SIGNATURE and then dies with npm's unhelpful
+# "Exit handler never called!".
+#
+# Pass the interceptor's root CA (PEM text) to build behind one:
+#   docker build --build-arg EXTRA_CA_CERT_PEM="$(cat extra-ca.crt)" ...
+# The CA is a local machine detail, so it is passed in rather than committed.
+#
+# Certificate verification is never disabled; this only ADDS a trust anchor.
+# With no build arg the image builds exactly as before.
+ARG EXTRA_CA_CERT_PEM=""
+RUN mkdir -p /usr/local/share/ca-certificates \
+ && printf '%s' "$EXTRA_CA_CERT_PEM" > /usr/local/share/ca-certificates/extra-ca.crt
+
 COPY package.json package-lock.json ./
 # --no-audit/--no-fund cut work the image does not need; the lockfile is the
 # source of truth so the install stays reproducible.
-RUN npm ci --no-audit --no-fund
+#
+# NODE_EXTRA_CA_CERTS *adds* to Node's bundled roots rather than replacing them
+# (unlike npm's `cafile`), and it expands to empty when no CA was supplied, so
+# the default build is untouched. It is set per-command rather than via ENV so
+# nothing points at the file once this stage is done.
+RUN NODE_EXTRA_CA_CERTS=${EXTRA_CA_CERT_PEM:+/usr/local/share/ca-certificates/extra-ca.crt} \
+    npm ci --no-audit --no-fund
 
 FROM node:22-alpine AS builder
 WORKDIR /app

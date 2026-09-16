@@ -11,6 +11,13 @@
 #
 # Names and numbers are obviously synthetic. Re-running creates a fresh customer
 # with a new suffix, so the script is safe to run repeatedly.
+#
+# SEED_BACKDATE=1 additionally spreads the seeded transaction timestamps over
+# the preceding weeks. That is the one step that touches the database directly,
+# because `created_at` is a @CreationTimestamp and is deliberately not settable
+# through the API — a banking API should not let a caller choose when a
+# transaction happened. It exists so the dashboard balance chart has a real date
+# range in screenshots, it is off by default, and it needs the Compose stack.
 
 set -euo pipefail
 
@@ -99,6 +106,17 @@ seed_tx withdraw  240.00 "Transit season ticket"
 seed_tx deposit   310.00 "Consulting invoice"
 seed_tx withdraw  132.20 "Mobile and broadband"
 
+# A couple on savings too, so the account detail page shows a real history
+# rather than the single incoming transfer below.
+seed_tx_on() {
+  api POST "/api/transactions/$1" \
+    "{\"accountId\":${SAVINGS},\"amount\":$2,\"description\":\"$3\"}" "$TOKEN" > /dev/null
+  ok "$3 (savings)"
+}
+seed_tx_on deposit  1200.00 "Quarterly bonus"
+seed_tx_on deposit    64.18 "Interest payment"
+seed_tx_on withdraw  300.00 "Transfer to brokerage"
+
 say "Transferring between own accounts"
 api POST /api/transactions/transfer \
   "{\"fromAccountId\":${CHECKING},\"toAccountId\":${SAVINGS},\"amount\":750.00,\"description\":\"Monthly saving\"}" \
@@ -140,6 +158,35 @@ api POST "/api/users/${USER_ID}/kyc/documents" \
   '{"documentType":"PROOF_OF_ADDRESS","documentRef":"DEMO-ADDRESS-0001"}' "$TOKEN" > /dev/null
 ok "proof of address"
 
+# ------------------------------------------------------------------ backdating
+
+if [[ "${SEED_BACKDATE:-0}" == "1" ]]; then
+  say "Spreading transaction dates (demo presentation only)"
+  # Oldest transaction ~8 weeks back, newest ~2 days back, evenly spaced.
+  # Credentials match docker-compose.yml; they are throwaway local values.
+  if docker compose exec -T postgres \
+       psql -U "${POSTGRES_USER:-bankingadmin}" -d transaction_db \
+            -v ON_ERROR_STOP=1 -q \
+            -v checking="${CHECKING}" -v savings="${SAVINGS}" <<'SQL'
+WITH ordered AS (
+  SELECT id, row_number() OVER (ORDER BY id) AS rn, count(*) OVER () AS total
+  FROM transactions
+  WHERE account_id IN (:checking, :savings)
+)
+UPDATE transactions t
+SET created_at = NOW()
+    - INTERVAL '2 days'
+    - (INTERVAL '1 day' * ((o.total - o.rn) * (54.0 / GREATEST(o.total - 1, 1))))
+FROM ordered o
+WHERE t.id = o.id;
+SQL
+  then
+    ok "transaction dates spread over the last 8 weeks"
+  else
+    printf '  [!!] backdating failed (is the Compose stack up?) — dates left as-is\n'
+  fi
+fi
+
 # ---------------------------------------------------------------------- done
 
 cat <<SUMMARY
@@ -151,7 +198,7 @@ Demo customer ready.
   Username   ${USERNAME}
   Password   ${PASSWORD}
 
-Seeded: 2 accounts, 9 transactions, 1 beneficiary, 1 loan with
+Seeded: 2 accounts, 12 transactions, 1 beneficiary, 1 loan with
 schedule and one repayment, 2 KYC documents pending review.
 
 Credit cards and notifications populate from Kafka events, so they

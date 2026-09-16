@@ -22,7 +22,7 @@ the platform only through the gateway — the browser never holds a bearer token
 | **Data** | PostgreSQL, database-per-service, 24 Flyway migrations, `ddl-auto: validate` |
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, role-based access |
-| **Testing** | 155 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 160 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose for the full stack, GitHub Actions CI, Terraform for AWS |
 
 ---
@@ -59,7 +59,7 @@ This project models that problem end to end:
 - **A single authenticated entry point** — an API gateway that validates JWTs once and forwards trusted identity headers downstream.
 - **An auditable trail** — every state-changing operation writes an `audit_log` row alongside its domain write, inside the same transaction.
 
-**By the numbers:** 13 backend services plus a Next.js console, 291 Java source files, 25 REST controllers, 93 endpoints, 8 Kafka topics, 24 Flyway migrations, 18 frontend routes, 155 automated tests in CI.
+**By the numbers:** 13 backend services plus a Next.js console, 291 Java source files, 25 REST controllers, 93 endpoints, 8 Kafka topics, 24 Flyway migrations, 18 frontend routes, 160 automated tests in CI.
 
 ---
 
@@ -284,7 +284,7 @@ flowchart LR
 | Authorization | Spring Security `@EnableMethodSecurity` with role checks (`CUSTOMER` / `EMPLOYEE` / `ADMIN`) — for example, KYC document review is employee/admin only |
 | Session model | Fully stateless (`SessionCreationPolicy.STATELESS`); CSRF disabled, as is appropriate for a token-authenticated API |
 | Input validation | Jakarta Bean Validation (`@Valid`) on request DTOs across 12 services |
-| Error hygiene | `@RestControllerAdvice` maps domain exceptions to typed responses; the catch-all returns a generic message rather than leaking stack traces |
+| Error hygiene | `@RestControllerAdvice` maps domain exceptions to typed responses, malformed bodies and bad parameter types to `400`, and unsupported methods to `405`; the catch-all logs the detail server-side and returns a generic message, so no internal exception type or message reaches the caller |
 | Card data | The full card number never crosses the API boundary — responses carry only `•••• •••• •••• 1234` and `last4` |
 | Rate limiting | Redis token bucket at the gateway, keyed per IP |
 | Abuse detection | Fraud velocity rules with automatic account freeze |
@@ -343,7 +343,7 @@ The PostgreSQL credentials in `application.yml` and `docker-compose.yml` are **t
 **What is implemented**
 
 - `@Transactional` boundaries on state-changing service operations (14 classes), so the domain write and its `audit_log` row commit or roll back together.
-- Centralised `@RestControllerAdvice` exception handling in every service, returning structured `ErrorResponse` payloads with timestamp, status, message and path.
+- Centralised `@RestControllerAdvice` exception handling in all 11 services that expose controllers, returning structured error payloads with timestamp, status, message and path.
 - Flyway versioned migrations with `ddl-auto: validate` — the schema is reviewed SQL, never auto-generated at runtime.
 - SLF4J structured logging (`@Slf4j`) on business-significant events such as overdraft triggers and fraud alerts.
 - Actuator health/info endpoints on all services, with Docker Compose `healthcheck` gating and `depends_on: service_healthy` ordering.
@@ -363,7 +363,7 @@ These are the honest gaps between this project and a production ledger, and they
 - **Playwright's live suite does not run on every CI push.** Starting 13 services on every push is
   not a sensible trade, so only the offline suite is wired into CI. The 9 live scenarios are just as
   automated, but are triggered on demand against a running stack. See [Testing](#testing).
-- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking and the 2FA gate are covered by 72 backend tests, and the console by 83 frontend tests (70 unit/component plus 13 offline end-to-end); the other 9 services have none, and there are no controller or security slice tests. See [Testing](#testing).
+- **Test coverage is deliberately narrow.** Balances, loan arithmetic, card masking, the 2FA gate and the shared API error contract are covered by 77 backend tests, and the console by 83 frontend tests (70 unit/component plus 13 offline end-to-end); the other 9 services have none, and there are no security slice tests. See [Testing](#testing).
 
 ---
 
@@ -377,6 +377,7 @@ These are the honest gaps between this project and a production ledger, and they
 | Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | **27 passing** |
 | Unit | JUnit 5, Mockito, AssertJ | `CreditCardMasking` PAN masking and `last4` derivation | **12 passing** |
 | Unit | JUnit 5, Mockito, AssertJ | `LoginTwoFactor` TOTP gate at sign-in | **6 passing** |
+| Web slice | JUnit 5, MockMvc | `ApiErrorContract` — bad input is 4xx, and errors leak no internals | **5 passing** |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | **6 passing** |
 | Unit | Vitest, React Testing Library | Frontend formatting, masking, JWT decode, validation, role nav, API errors, UI components | **70 passing** |
 | End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout, token never in HTML | **13 passing, in CI** |
@@ -384,12 +385,12 @@ These are the honest gaps between this project and a production ledger, and they
 | End-to-end | PowerShell (`e2e-tests.ps1`) | 8 banking flows against the running stack | On demand, needs the stack up |
 | CI | GitHub Actions | Backend `mvn clean verify`; frontend lint, typecheck, tests, production build | Every push and pull request |
 
-**155 automated tests run in CI, all passing** — 72 backend, 70 frontend unit/component,
+**160 automated tests run in CI, all passing** — 77 backend, 70 frontend unit/component,
 13 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**, because
 they need all 13 services up; they are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 66 unit + 6 integration = 72
+mvn -B --no-transfer-progress clean verify   # backend: 71 unit + 6 integration = 77
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -427,7 +428,7 @@ Running it needs a working Docker daemon. `mvn test` skips it, so the fast inner
   dashboard showing real balances, account and transaction history, the transfer review and
   confirmation step, loan amortization, card masking, staff-route denial for a customer,
   sign-out, and a phone viewport. Starting 13 services on every push is not a sensible trade,
-  so these are **not** in CI and are not counted in the 155.
+  so these are **not** in CI and are not counted in the 160.
 
 ```bash
 # offline — no backend required
@@ -449,7 +450,7 @@ docker compose up -d      # wait for all services to report healthy
 
 ### Where coverage stops
 
-This is a deliberate foundation, not a finished pyramid. Coverage is deep on the services holding the most consequential arithmetic — balances and amortization — plus card masking and the 2FA gate, and absent elsewhere. The remaining 9 services have no unit tests, there are no controller or security slice tests, and only `account-service` has an integration test. Extending the same pattern outward is roadmap item 1.
+This is a deliberate foundation, not a finished pyramid. Coverage is deep on the services holding the most consequential arithmetic — balances and amortization — plus card masking, the 2FA gate and the shared API error contract, and absent elsewhere. The remaining 9 services have no unit tests, there is one MockMvc slice and no Spring Security slice tests, and only `account-service` has an integration test. Extending the same pattern outward is roadmap item 1.
 
 ---
 
@@ -469,6 +470,27 @@ mvn clean package           # build all 13 service jars
 docker compose up -d        # Postgres, Kafka, Redis, Eureka and 13 services
 docker compose ps           # wait until healthy
 ```
+
+<details>
+<summary>Building behind a TLS-inspecting proxy or antivirus</summary>
+
+Products that scan HTTPS (Zscaler, Netskope, Norton Web Shield and similar)
+re-sign `registry.npmjs.org` with their own root. Your host trusts that root;
+the build container does not, so the frontend image fails every fetch with
+`UNABLE_TO_VERIFY_LEAF_SIGNATURE` and npm then dies with the unhelpful
+`Exit handler never called!`.
+
+Export the interceptor's root certificate and pass it in — this *adds* a trust
+anchor and never disables verification:
+
+```bash
+EXTRA_CA_CERT_PEM="$(cat your-proxy-root.crt)" docker compose build frontend
+```
+
+The certificate is a detail of your machine, so it is passed as a build
+argument rather than committed. Everywhere else, the default build is unchanged.
+
+</details>
 
 | Endpoint | URL |
 |---|---|
@@ -634,7 +656,7 @@ a static bundle — it needs a Node process — which is the right trade for a b
 
 Ordered by what would most improve the system, not by what is easiest:
 
-1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts, loans, cards and 2FA to the remaining 9 services, and add MockMvc controller and Spring Security slice tests.
+1. **Widen the test pyramid** — extend the existing JUnit 5 / Mockito and Testcontainers pattern from accounts, loans, cards and 2FA to the remaining 9 services, and extend the MockMvc slice beyond error handling into Spring Security slice tests.
 2. **Transactional outbox and saga** for cross-service transfers, closing the atomicity gap.
 3. **Optimistic locking** (`@Version`) on `Account`, plus **idempotency keys** on money-movement endpoints.
 4. **Add a pending-KYC-documents endpoint** so staff review is a real queue rather than a per-customer lookup.
