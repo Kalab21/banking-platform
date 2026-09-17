@@ -1,5 +1,6 @@
 package com.bankingplatform.payment.exception;
 
+import com.bankingplatform.common.observability.LogSafe;
 import feign.FeignException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -65,7 +66,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
-        log.error("Unhandled exception on {}: {}", req.getRequestURI(), ex.getMessage(), ex);
+        log.error("Unhandled exception on {}: {}", LogSafe.value(req.getRequestURI()),
+                LogSafe.value(ex.getMessage()), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", req.getRequestURI());
     }
 

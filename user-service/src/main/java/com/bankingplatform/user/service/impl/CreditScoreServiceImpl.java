@@ -1,5 +1,6 @@
 package com.bankingplatform.user.service.impl;
 
+import com.bankingplatform.common.observability.LogSafe;
 import com.bankingplatform.user.dto.CreditScoreHistoryResponse;
 import com.bankingplatform.user.dto.CreditScoreResponse;
 import com.bankingplatform.user.exception.ResourceNotFoundException;
@@ -60,7 +61,11 @@ public class CreditScoreServiceImpl implements CreditScoreService {
         history.setChangeReason(reason);
         creditScoreHistoryRepository.save(history);
 
-        log.info("Credit score updated: userId={}, {} → {} ({})", userId, oldScore, newScore, reason);
+        // The reason is caller-supplied free text. It is stored verbatim —
+        // that is the audit record — and neutralised only here, where it would
+        // otherwise be able to end this line and start a fabricated one.
+        log.info("Credit score updated: userId={}, {} → {} ({})", userId, oldScore, newScore,
+                LogSafe.value(reason));
         return new CreditScoreResponse(
                 userId,
                 newScore,

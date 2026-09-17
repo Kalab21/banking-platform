@@ -1,5 +1,6 @@
 package com.bankingplatform.common.security;
 
+import com.bankingplatform.common.observability.LogSafe;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

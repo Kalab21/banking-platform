@@ -1,5 +1,6 @@
 package com.bankingplatform.notification.exception;
 
+import com.bankingplatform.common.observability.LogSafe;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -65,7 +66,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex, HttpServletRequest req) {
         // Detail stays in the log; the caller gets a generic message.
-        log.error("Unhandled exception on {}: {}", req.getRequestURI(), ex.getMessage(), ex);
+        log.error("Unhandled exception on {}: {}", LogSafe.value(req.getRequestURI()),
+                LogSafe.value(ex.getMessage()), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", req);
     }
 

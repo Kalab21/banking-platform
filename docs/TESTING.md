@@ -1,6 +1,6 @@
 # Testing
 
-359 automated tests run in CI: 276 backend, 70 frontend unit/component and 13
+361 automated tests run in CI: 278 backend, 70 frontend unit/component and 13
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -37,7 +37,7 @@ are not counted in the CI total.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 18 integration = 276
+mvn -B --no-transfer-progress clean verify   # backend: 260 unit + 18 integration = 278
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```

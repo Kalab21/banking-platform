@@ -1,4 +1,4 @@
-package com.bankingplatform.common.security;
+package com.bankingplatform.common.observability;
 
 /**
  * Neutralises an untrusted value before it reaches a log line.

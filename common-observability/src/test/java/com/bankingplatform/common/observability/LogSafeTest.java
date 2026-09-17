@@ -1,4 +1,4 @@
-package com.bankingplatform.common.security;
+package com.bankingplatform.common.observability;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

@@ -19,6 +19,14 @@
     </description>
 
     <dependencies>
+        <!-- For LogSafe. Untrusted values reach a log line from the
+             authorization advice as well, and the rule for neutralising them
+             belongs in one place rather than two. -->
+        <dependency>
+            <groupId>com.bankingplatform</groupId>
+            <artifactId>common-observability</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

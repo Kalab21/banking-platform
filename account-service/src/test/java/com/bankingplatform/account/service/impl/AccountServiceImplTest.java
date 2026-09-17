@@ -2,6 +2,7 @@ package com.bankingplatform.account.service.impl;
 
 import com.bankingplatform.account.client.UserClient;
 import com.bankingplatform.account.dto.BalanceUpdateRequest;
+import com.bankingplatform.account.dto.CreateAccountRequest;
 import com.bankingplatform.account.exception.AccountStatusException;
 import com.bankingplatform.account.exception.InsufficientFundsException;
 import com.bankingplatform.account.exception.ResourceNotFoundException;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -101,6 +103,55 @@ class AccountServiceImplTest {
 
         verify(accountRepository).save(savedAccount.capture());
         return savedAccount.getValue();
+    }
+
+    // ------------------------------------------------- account number issuing
+
+    @Nested
+    @DisplayName("account number")
+    class AccountNumberIssuing {
+
+        private CreateAccountRequest openRequest() {
+            CreateAccountRequest request = new CreateAccountRequest();
+            request.setUserId(USER_ID);
+            request.setAccountType(AccountType.CHECKING);
+            request.setInitialDeposit(new BigDecimal("100.00"));
+            request.setOverdraftLimit(BigDecimal.ZERO);
+            return request;
+        }
+
+        @Test
+        @DisplayName("keeps its shape: BA, a six-digit date and six digits")
+        void formatUnchanged() {
+            // Switching to SecureRandom must not change what a customer sees.
+            // Asserted as a pattern rather than a value, because the digits are
+            // supposed to be unpredictable.
+            when(accountRepository.existsByAccountNumber(any())).thenReturn(false);
+            when(accountRepository.save(any(Account.class))).thenAnswer(i -> i.getArgument(0));
+
+            accountService.createAccount(openRequest());
+
+            verify(accountRepository).save(savedAccount.capture());
+            assertThat(savedAccount.getValue().getAccountNumber()).matches("BA\\d{12}");
+        }
+
+        @Test
+        @DisplayName("draws again when the number it produced is already taken")
+        void collisionDrawsAgain() {
+            // Deterministic: the repository, not the random source, decides how
+            // many draws happen. No statistical assertion, so nothing here can
+            // fail on an unlucky day.
+            when(accountRepository.existsByAccountNumber(any()))
+                    .thenReturn(true)
+                    .thenReturn(false);
+            when(accountRepository.save(any(Account.class))).thenAnswer(i -> i.getArgument(0));
+
+            accountService.createAccount(openRequest());
+
+            verify(accountRepository, times(2)).existsByAccountNumber(any());
+            verify(accountRepository).save(savedAccount.capture());
+            assertThat(savedAccount.getValue().getAccountNumber()).matches("BA\\d{12}");
+        }
     }
 
     // ------------------------------------------------------------------ credit
