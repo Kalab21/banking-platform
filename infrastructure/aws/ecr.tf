@@ -19,7 +19,20 @@ locals {
 resource "aws_ecr_repository" "services" {
   for_each = toset(local.service_names)
 
-  name                 = "banking-platform/${each.key}"
+  name = "banking-platform/${each.key}"
+
+  # Trivy reports this as AVD-AWS-0031 and it is a fair finding: an immutable
+  # tag is what stops a deployed digest changing under a tag that has already
+  # been reviewed. It stays MUTABLE because the deployment path in this
+  # repository re-pushes one tag rather than issuing a new one per build:
+  # var.image_tag defaults to "latest" (variables.tf), scripts/push-images.sh
+  # defaults its TAG argument to the same, and the lifecycle rule below keeps
+  # the last ten images matching the "v" and "latest" prefixes.
+  #
+  # Flipping this without first moving those to a per-build tag would make the
+  # second push of an image fail. That is a change to how images are built and
+  # released, not to this resource, so the finding is left open and recorded
+  # rather than cleared by breaking the deploy.
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {

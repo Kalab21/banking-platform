@@ -1,6 +1,6 @@
 package com.bankingplatform.transaction.exception;
 
-import com.bankingplatform.common.security.LogSafe;
+import com.bankingplatform.common.observability.LogSafe;
 import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountCallTimeoutException.class)
     public ResponseEntity<ErrorResponse> handleAccountTimeout(AccountCallTimeoutException ex,
                                                               HttpServletRequest req) {
-        log.error("Account service timed out on {}", req.getRequestURI());
+        log.error("Account service timed out on {}", LogSafe.value(req.getRequestURI()));
         return build(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage(), req.getRequestURI());
     }
 
@@ -67,7 +67,8 @@ public class GlobalExceptionHandler {
             if (status != null && status.is4xxClientError()) {
                 return build(status, extractFeignMessage(feign), req.getRequestURI());
             }
-            log.error("Account service returned {} on {}", feign.status(), req.getRequestURI(), feign);
+            log.error("Account service returned {} on {}", feign.status(),
+                    LogSafe.value(req.getRequestURI()), feign);
             return build(HttpStatus.BAD_GATEWAY,
                     "The account service did not respond successfully", req.getRequestURI());
         }
@@ -76,11 +77,12 @@ public class GlobalExceptionHandler {
         // surfacing through the wrapper, so it must not be reported as
         // "temporarily unavailable".
         if (!(cause instanceof CallNotPermittedException)) {
-            log.error("Account service call failed on {}: {}", req.getRequestURI(), ex.getMessage(), ex);
+            log.error("Account service call failed on {}: {}", LogSafe.value(req.getRequestURI()),
+                    LogSafe.value(ex.getMessage()), ex);
             return build(HttpStatus.BAD_GATEWAY,
                     "The account service did not respond successfully", req.getRequestURI());
         }
-        log.warn("Circuit open for account-service on {}", req.getRequestURI());
+        log.warn("Circuit open for account-service on {}", LogSafe.value(req.getRequestURI()));
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header("Retry-After", "20")
                 .body(ErrorResponse.builder()
@@ -192,7 +194,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
-        log.error("Unhandled exception on {}: {}", req.getRequestURI(), ex.getMessage(), ex);
+        log.error("Unhandled exception on {}: {}", LogSafe.value(req.getRequestURI()),
+                LogSafe.value(ex.getMessage()), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", req.getRequestURI());
     }
 

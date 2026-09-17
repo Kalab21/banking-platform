@@ -1,6 +1,6 @@
 package com.bankingplatform.transaction.idempotency;
 
-import com.bankingplatform.common.security.LogSafe;
+import com.bankingplatform.common.observability.LogSafe;
 import com.bankingplatform.transaction.model.IdempotencyRecord;
 import com.bankingplatform.transaction.model.IdempotencyStatus;
 import com.bankingplatform.transaction.repository.IdempotencyRecordRepository;

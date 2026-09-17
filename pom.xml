@@ -43,12 +43,14 @@
         <springdoc.version>2.6.0</springdoc.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <maven-failsafe.version>3.5.4</maven-failsafe.version>
-        <!-- Ahead of the version Boot 3.3.6 manages (42.7.4), to pick up the
-             fix for CVE-2025-49146: the driver silently fell back to plaintext
-             authentication when channel binding was requested but unsupported.
-             A JDBC driver that quietly downgrades its own authentication is
-             worth a one-line override rather than waiting for a Boot bump. -->
-        <postgresql.version>42.7.7</postgresql.version>
+        <!-- Ahead of the version Boot 3.3.6 manages (42.7.4). Originally for
+             CVE-2025-49146, where the driver silently fell back to plaintext
+             authentication when channel binding was requested but unsupported;
+             now also for CVE-2026-42198 and CVE-2026-54291. A JDBC driver that
+             quietly downgrades its own authentication is worth a one-line
+             override rather than waiting for a Boot bump, and 42.7.x is a
+             patch line, so this changes no API. -->
+        <postgresql.version>42.7.12</postgresql.version>
     </properties>
 
     <dependencyManagement>

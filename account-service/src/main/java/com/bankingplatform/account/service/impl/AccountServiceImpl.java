@@ -19,10 +19,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +30,23 @@ import java.util.Random;
 public class AccountServiceImpl implements AccountService {
 
     private static final BigDecimal OVERDRAFT_FEE = new BigDecimal("35.00");
+
+    /**
+     * Source of the random part of an account number.
+     *
+     * <p>{@code java.util.Random} was seeded from the clock and its sequence is
+     * recoverable from a couple of outputs, so numbers issued near each other
+     * were guessable from one another.
+     *
+     * <p>Guessing one grants nothing by itself: every lookup by account number
+     * is authorised against the caller, and the boundary tests cover that. But
+     * an identifier a customer hands to a third party should not be derivable
+     * from the one issued just before it.
+     *
+     * <p>Static and final. {@link SecureRandom} is thread-safe, and building one
+     * per call would re-seed from the entropy pool on every account opening.
+     */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final AccountRepository accountRepository;
     private final AuditLogRepository auditLogRepository;
@@ -205,12 +222,16 @@ public class AccountServiceImpl implements AccountService {
     private String generateAccountNumber() {
         String prefix = "BA";
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMdd"));
-        String random = String.format("%06d", new Random().nextInt(999999));
-        String candidate = prefix + timestamp + random;
+        String candidate = prefix + timestamp + randomSuffix();
         while (accountRepository.existsByAccountNumber(candidate)) {
-            candidate = prefix + timestamp + String.format("%06d", new Random().nextInt(999999));
+            candidate = prefix + timestamp + randomSuffix();
         }
         return candidate;
+    }
+
+    /** Six digits, zero padded — the shape the account number has always had. */
+    private String randomSuffix() {
+        return String.format("%06d", SECURE_RANDOM.nextInt(999999));
     }
 
     private void audit(String entityType, Long entityId, String action, Long performedBy, String details) {
