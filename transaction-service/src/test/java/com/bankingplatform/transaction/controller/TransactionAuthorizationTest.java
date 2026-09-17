@@ -6,8 +6,13 @@ import com.bankingplatform.common.security.CallerIdentityHeaders;
 import com.bankingplatform.transaction.client.AccountClient;
 import com.bankingplatform.transaction.dto.AccountResponse;
 import com.bankingplatform.transaction.dto.TransactionResponse;
+import com.bankingplatform.transaction.dto.TransferResponse;
+import com.bankingplatform.transaction.idempotency.IdempotencyGuard;
+import com.bankingplatform.transaction.idempotency.IdempotencyStore;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import feign.FeignException;
 import feign.Request;
 import feign.RequestTemplate;
@@ -28,6 +33,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -71,7 +77,8 @@ class TransactionAuthorizationTest {
 
         mvc = MockMvcBuilders
                 .standaloneSetup(new TransactionController(
-                        transactionService, new AccountOwnershipVerifier(accountClient)))
+                        transactionService, new AccountOwnershipVerifier(accountClient),
+                        passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler())
                 .build();
@@ -80,11 +87,30 @@ class TransactionAuthorizationTest {
         when(accountClient.getAccountById(ACCOUNT_OF_B)).thenReturn(account(ACCOUNT_OF_B, CUSTOMER_B));
         when(transactionService.deposit(any())).thenReturn(new TransactionResponse());
         when(transactionService.withdraw(any())).thenReturn(new TransactionResponse());
-        when(transactionService.transfer(any())).thenReturn(null);
+        when(transactionService.transfer(any())).thenReturn(transferResponse());
         // A concrete page rather than Page.empty(): the latter carries an
         // unpaged Pageable, which throws when Jackson serialises it.
         when(transactionService.getByAccountId(anyLong(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+    }
+
+    /**
+     * An idempotency guard whose store always hands out the key, so these tests
+     * exercise authorization rather than replay. The idempotency rules
+     * themselves are covered by {@code TransactionIdempotencyTest}.
+     */
+    private static IdempotencyGuard passThroughIdempotency() {
+        IdempotencyStore store = Mockito.mock(IdempotencyStore.class);
+        when(store.claim(any(), any(), any())).thenReturn(Optional.empty());
+        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()));
+    }
+
+    private static TransferResponse transferResponse() {
+        TransactionResponse debit = new TransactionResponse();
+        debit.setTransactionRef("debit-ref");
+        TransactionResponse credit = new TransactionResponse();
+        credit.setTransactionRef("credit-ref");
+        return TransferResponse.builder().debit(debit).credit(credit).build();
     }
 
     private static AccountResponse account(long accountId, long ownerId) {
@@ -99,7 +125,10 @@ class TransactionAuthorizationTest {
         return builder
                 .header(CallerIdentityHeaders.USER_ID, String.valueOf(userId))
                 .header(CallerIdentityHeaders.USERNAME, "user" + userId)
-                .header(CallerIdentityHeaders.USER_ROLE, role);
+                .header(CallerIdentityHeaders.USER_ROLE, role)
+                // Harmless on the reads; money movement requires one, and
+                // sending it everywhere keeps these cases about ownership.
+                .header(IdempotencyGuard.HEADER, "auth-test-" + userId + "-" + System.nanoTime());
     }
 
     private static String transferBody(long from, long to) {
@@ -224,7 +253,8 @@ class TransactionAuthorizationTest {
         private MockMvc withServiceAdvice() {
             return MockMvcBuilders
                     .standaloneSetup(new TransactionController(
-                            transactionService, new AccountOwnershipVerifier(accountClient)))
+                            transactionService, new AccountOwnershipVerifier(accountClient),
+                            passThroughIdempotency()))
                     .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                     .setControllerAdvice(new CallerIdentityExceptionHandler(),
                             new com.bankingplatform.transaction.exception.GlobalExceptionHandler())

@@ -87,7 +87,7 @@ Selected routes, all reached through the gateway on `:8080`:
 | `POST` | `/api/auth/register`, `/api/auth/login` | Obtain a JWT |
 | `POST` | `/api/auth/2fa/setup`, `/api/auth/2fa/verify` | TOTP enrolment and verification |
 | `GET` `POST` | `/api/accounts` | Open and list accounts |
-| `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement |
+| `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement — requires `Idempotency-Key` |
 | `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments and beneficiaries |
 | `POST` | `/api/loans`, `/api/credit-cards` | Lending and cards |
 | `GET` | `/api/statistics` | Aggregated read models |
@@ -146,6 +146,51 @@ a static bundle.
 **Flyway with `ddl-auto: validate`.** Schema changes are explicit, versioned SQL.
 Hibernate verifies the schema at boot but never changes it.
 
+**An idempotency key on every money-movement request.** `POST /api/transactions/deposit`,
+`/withdraw` and `/transfer` require an `Idempotency-Key` header: an opaque,
+client-generated value naming one logical operation. It is deliberately not
+derived from the amount, the accounts or the time, because two genuinely
+identical transfers a minute apart must both be able to succeed.
+
+`transaction-service` records each key in `idempotency_record` under a unique
+constraint, alongside a SHA-256 fingerprint of the caller and the normalised
+request. The constraint is the mechanism: two concurrent duplicates both attempt
+the insert, the database admits one, and the loser resolves against the winner's
+row instead of calling `account-service` a second time.
+
+| Situation | Response |
+|---|---|
+| Missing or malformed key | `400`, nothing executed |
+| Same key, same request, first attempt succeeded | the stored response, with `Idempotent-Replay: true` |
+| Same key, different request | `409`, nothing executed |
+| Same key, first attempt still running | waits briefly for the result, then `409` with `Retry-After` |
+| Same key, first attempt refused with nothing applied | executed again — see below |
+| Same key, first attempt's outcome unknown | `504`, and never re-executed |
+
+The last two rows are the interesting ones. A refusal that provably moved no
+money — a validation error, insufficient funds, a frozen account, an open
+circuit that stopped the call leaving this service — releases the key, because
+caching a rejection would lock the client out of an operation it is entitled to
+retry. A failure that reached `account-service` and then lost the thread — a
+timeout, a 5xx, a transfer whose debit landed and whose credit did not — spends
+the key permanently. Whether the balance changed is not knowable from
+`transaction-service`, and a retry would be a coin-flip between a no-op and a
+second debit. Those records are logged for reconciliation rather than resolved
+automatically.
+
+This is also why the circuit breaker still has no retry. Idempotency makes a
+*client's* repeat safe; it does not make an automatic in-process retry of a
+half-completed downstream mutation safe, and nothing here changed that.
+
+**A transfer is still not atomic across services.** The debit and the credit are
+two calls to `account-service`, which owns its own database. `@Transactional` on
+the transfer method covers this service's rows and nothing else. If the credit
+fails after the debit has been applied, the transfer is reported as
+`500 — needs reconciliation` rather than as the credit leg's own error, and the
+idempotency record settles as unknown so no retry can debit the source twice.
+There is no compensating transaction: a saga or a transactional outbox would be
+the fix, and neither is implemented.
+
 **Events for derived state, synchronous calls for authoritative state.** A transfer
 must know immediately whether the debit succeeded, so that is a Feign call.
 Statistics, notifications and fraud scoring tolerate lag, so they consume Kafka.
@@ -173,8 +218,8 @@ appears hung.
    `notification`, `integration` and `application`, which have no service-layer
    tests.
 2. Transactional outbox and saga for cross-service transfers.
-3. Optimistic locking (`@Version`) on `Account` and idempotency keys on
-   money-movement endpoints.
+3. Optimistic or pessimistic locking on `Account`, so two concurrent debits
+   cannot lose an update.
 4. A pending-KYC-documents endpoint so staff review is a queue rather than a
    per-customer lookup.
 5. Extend Resilience4j beyond the `transaction-service` → `account-service` hop,

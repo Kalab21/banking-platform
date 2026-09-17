@@ -102,6 +102,21 @@
             <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- The idempotency guarantees are database guarantees: a unique
+             constraint and a conditional UPDATE decide which of two concurrent
+             duplicates executes. Mocks cannot demonstrate that, so the
+             concurrency tests run against a real PostgreSQL container. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

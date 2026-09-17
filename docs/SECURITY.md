@@ -136,14 +136,16 @@ account has it on by default, so the protection is advisory.
 **Smallest safe fix.** Require 2FA for `EMPLOYEE` and `ADMIN` roles, where the
 blast radius of a compromised account is largest.
 
-### 4. No idempotency or concurrency control on money movement — high, documented
+### 4. No concurrency control on the balance itself — high
 
-**Evidence.** `updateBalance` is a read-modify-write with no `@Version` or
-`SELECT ... FOR UPDATE`; no endpoint accepts an idempotency key.
+**Evidence.** `AccountServiceImpl.updateBalance` is a read-modify-write with no
+`@Version` and no `SELECT ... FOR UPDATE`.
 
-**Impact.** Concurrent debits on one account can interleave and lose an update, and
-a retried transfer applies twice. This is why the circuit breaker on
-`transaction-service` deliberately has no retry.
+**Impact.** Two debits on one account can interleave: both read the same starting
+balance, both check their own sufficiency against it, and the second write
+overwrites the first. The money-movement endpoints are now idempotent, so a
+*repeat* of one request no longer applies twice — but two genuinely distinct
+concurrent debits can still lose an update.
 
-**Smallest safe fix.** `@Version` on `Account`, and an idempotency key persisted
-with a unique constraint on the transfer endpoint.
+**Smallest safe fix.** Serialise the read-modify-write, either with a pessimistic
+row lock on the account being debited or with `@Version` and an explicit retry.

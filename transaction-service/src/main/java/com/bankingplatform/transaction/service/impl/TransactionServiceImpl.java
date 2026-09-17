@@ -4,6 +4,7 @@ import com.bankingplatform.transaction.client.AccountClient;
 import com.bankingplatform.transaction.dto.*;
 import com.bankingplatform.transaction.exception.ResourceNotFoundException;
 import com.bankingplatform.transaction.exception.TransactionException;
+import com.bankingplatform.transaction.exception.TransferPartiallyAppliedException;
 import com.bankingplatform.transaction.kafka.producer.TransactionEventProducer;
 import com.bankingplatform.transaction.mapper.TransactionMapper;
 import com.bankingplatform.transaction.model.AuditLog;
@@ -110,14 +111,32 @@ public class TransactionServiceImpl implements TransactionService {
                         .build()
         );
 
-        // Credit destination
-        AccountResponse toAccount = accountClient.updateBalance(
-                request.getToAccountId(),
-                BalanceUpdateRequest.builder()
-                        .amount(request.getAmount())
-                        .operation("CREDIT")
-                        .build()
-        );
+        // Credit destination.
+        //
+        // The debit above has already been applied by another service, in
+        // another database. @Transactional on this method covers the rows
+        // written below and nothing else: rolling back here removes the local
+        // transaction records and leaves the source account short. Rather than
+        // report the credit's error as though the transfer had not started,
+        // say plainly that the two legs disagree — and let the idempotency
+        // record settle as UNKNOWN, so a retry cannot debit the source twice.
+        AccountResponse toAccount;
+        try {
+            toAccount = accountClient.updateBalance(
+                    request.getToAccountId(),
+                    BalanceUpdateRequest.builder()
+                            .amount(request.getAmount())
+                            .operation("CREDIT")
+                            .build()
+            );
+        } catch (RuntimeException creditFailure) {
+            log.error("Transfer from account {} to account {} debited the source but the credit failed",
+                    request.getFromAccountId(), request.getToAccountId(), creditFailure);
+            throw new TransferPartiallyAppliedException(
+                    "The debit was applied but the credit did not complete, and it has not been "
+                            + "reversed. This transfer needs reconciliation before it is reissued.",
+                    creditFailure);
+        }
 
         String debitRef = generateRef();
         String creditRef = generateRef();

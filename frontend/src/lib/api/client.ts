@@ -32,6 +32,12 @@ interface RequestOptions {
   /** Seconds to cache. Omit for no caching, which is the right default for account data. */
   revalidate?: number;
   query?: Record<string, string | number | boolean | undefined>;
+  /**
+   * Names this logical operation, so that the same request arriving twice is
+   * executed once. Required by the money-movement endpoints and ignored by the
+   * rest.
+   */
+  idempotencyKey?: string;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -52,10 +58,11 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
  * did not answer".
  */
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, anonymous = false, revalidate, query } = options;
+  const { method = "GET", body, anonymous = false, revalidate, query, idempotencyKey } = options;
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   if (!anonymous) {
     const token = await getToken();

@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 309 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 341 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -245,12 +245,24 @@ producers pinned to `max.block.ms: 1000` so a broker outage fails fast.
 a transfer. That path also uses a shorter timeout than the platform default (2s
 connect, 5s read). No other Feign path is protected.
 
-There is deliberately no retry. `updateBalance` is not idempotent and carries no
-idempotency key, so retrying after a timeout could apply a debit twice. Business
-rejections are excluded from the failure rate, so repeated insufficient-funds
-responses do not open the breaker. When the breaker is open the caller receives
-`503` with `Retry-After`; a timeout returns `504` and reports the outcome as
-unknown, since the debit may have been applied.
+There is deliberately no retry, and the idempotency keys described below did not
+change that. `updateBalance` is not itself idempotent, so an automatic in-process
+retry after a timeout could still apply a debit twice; what a key makes safe is a
+*client* repeating a request, not this service silently repeating a half-finished
+downstream mutation. Business rejections are excluded from the failure rate, so
+repeated insufficient-funds responses do not open the breaker. When the breaker is
+open the caller receives `503` with `Retry-After`; a timeout returns `504` and
+reports the outcome as unknown, since the debit may have been applied.
+
+**Idempotent money movement.** `POST /api/transactions/deposit`, `/withdraw` and
+`/transfer` require an `Idempotency-Key`. `transaction-service` records it under a
+unique constraint with a fingerprint of the caller and the request, so a repeat of
+the same request returns the original result instead of moving money again, the
+same key with a different request is a `409`, and of two concurrent duplicates
+exactly one executes. A failure that provably applied nothing releases the key for
+a retry; a failure whose effect on the balance is unknown spends it, because
+retrying would be a guess. The rules and the reasoning are in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 The full model — how identity is derived, the rule table, the internal boundary
 and the remaining hardening candidates — is in [docs/SECURITY.md](docs/SECURITY.md).
@@ -295,12 +307,12 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**309 automated tests run in CI** — 226 backend, 70 frontend unit/component and 13
+**341 automated tests run in CI** — 258 backend, 70 frontend unit/component and 13
 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
 they need all 13 services up and are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 220 unit + 6 integration
+mvn -B --no-transfer-progress clean verify   # backend: 245 unit + 13 integration
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -308,9 +320,10 @@ cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 Coverage is deep on balances and loan arithmetic, plus card masking, the 2FA gate,
 the API error contract, request correlation, the circuit-breaker policy and
 resource-ownership authorization across accounts, money movement, profiles, KYC
-and statistics. The
-integration test runs `@DataJpaTest` against a real PostgreSQL 16 container, so
-entity/migration drift fails the build.
+and statistics. The integration tests run `@DataJpaTest` against a real
+PostgreSQL 16 container, so entity/migration drift fails the build and the
+idempotency guarantees are proved against the database that enforces them rather
+than against a mock.
 
 Suite-by-suite detail is in [docs/TESTING.md](docs/TESTING.md).
 
@@ -365,9 +378,14 @@ These are the gaps between this project and a production ledger.
   separate Feign calls with no saga, compensating transaction or outbox. A failure
   after a successful debit leaves funds withdrawn but not credited.
 - **Balance updates have no optimistic or pessimistic locking.** `updateBalance` is
-  a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so concurrent
-  debits on the same account can interleave and lose an update.
-- **No idempotency keys.** A retried transfer will apply twice.
+  a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so two
+  genuinely distinct concurrent debits on the same account can interleave and lose
+  an update. Idempotency stops a *repeat* of one request applying twice; it does
+  not serialise two different ones.
+- **An unknown outcome is not reconciled automatically.** When a money-movement
+  attempt reaches `account-service` and the answer is lost, the idempotency record
+  settles as `UNKNOWN` and is logged. Nothing sweeps those rows or reverses a
+  half-applied transfer; that needs the saga or outbox above.
 - **Only one Feign path is protected.** `transaction-service` to `account-service`
   has a circuit breaker and timeout; the other Feign callers have neither, so a
   slow downstream service still propagates latency upstream.

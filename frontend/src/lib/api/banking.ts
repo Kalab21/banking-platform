@@ -131,17 +131,29 @@ export function getTransactions(
   );
 }
 
-export function deposit(accountId: number, amount: number, description?: string): Promise<Transaction> {
+export function deposit(
+  accountId: number,
+  amount: number,
+  idempotencyKey: string,
+  description?: string,
+): Promise<Transaction> {
   return apiFetch<Transaction>("/api/transactions/deposit", {
     method: "POST",
     body: { accountId, amount, description },
+    idempotencyKey,
   });
 }
 
-export function withdraw(accountId: number, amount: number, description?: string): Promise<Transaction> {
+export function withdraw(
+  accountId: number,
+  amount: number,
+  idempotencyKey: string,
+  description?: string,
+): Promise<Transaction> {
   return apiFetch<Transaction>("/api/transactions/withdraw", {
     method: "POST",
     body: { accountId, amount, description },
+    idempotencyKey,
   });
 }
 
@@ -149,11 +161,13 @@ export function transfer(
   fromAccountId: number,
   toAccountId: number,
   amount: number,
+  idempotencyKey: string,
   description?: string,
 ): Promise<TransferResult> {
   return apiFetch<TransferResult>("/api/transactions/transfer", {
     method: "POST",
     body: { fromAccountId, toAccountId, amount, description },
+    idempotencyKey,
   });
 }
 

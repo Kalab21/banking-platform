@@ -141,7 +141,12 @@ public class PaymentServiceImpl implements PaymentService {
     private Payment executePayment(Payment payment) {
         if (payment.getPaymentType() == PaymentType.INTERNAL
                 && payment.getPayeeAccountId() != null) {
-            transactionClient.transfer(TransferRequest.builder()
+            // The payment reference is the natural key: it is generated once
+            // when the payment is created and does not change when the
+            // scheduler retries a PROCESSING row after a restart. Deriving a
+            // key from the amount and accounts instead would collapse two
+            // genuine identical payments into one.
+            transactionClient.transfer("payment-" + payment.getPaymentRef(), TransferRequest.builder()
                     .fromAccountId(payment.getPayerAccountId())
                     .toAccountId(payment.getPayeeAccountId())
                     .amount(payment.getAmount())

@@ -91,6 +91,46 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    /**
+     * The idempotency rules refused the request. Each case carries its own
+     * status because the client has to be able to tell them apart: 400 means
+     * "you sent this wrong", 409 means "that key is spoken for", 504 means "we
+     * do not know what the earlier attempt did".
+     *
+     * <p>In every case this request executed nothing.
+     */
+    @ExceptionHandler(IdempotencyException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotency(IdempotencyException ex, HttpServletRequest req) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        if (ex.getRetryAfterSeconds() != null) {
+            response = response.header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return response.body(ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(ex.getStatus().value())
+                .error(ex.getStatus().getReasonPhrase())
+                .message(ex.getMessage())
+                .path(req.getRequestURI())
+                .build());
+    }
+
+    /**
+     * A transfer left half-applied: the source was debited and the destination
+     * was not credited.
+     *
+     * <p>500 rather than the credit leg's own status. A 422 here would tell the
+     * caller their request was rejected, which would be false — money left the
+     * source account. The two legs are separate services with separate
+     * databases and there is no compensating transaction, so the only accurate
+     * answer is that the server is in an inconsistent state.
+     */
+    @ExceptionHandler(TransferPartiallyAppliedException.class)
+    public ResponseEntity<ErrorResponse> handlePartialTransfer(TransferPartiallyAppliedException ex,
+                                                               HttpServletRequest req) {
+        log.error("Partially applied transfer on {}", req.getRequestURI(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), req.getRequestURI());
+    }
+
     @ExceptionHandler(FeignException.UnprocessableEntity.class)
     public ResponseEntity<ErrorResponse> handleFeignUnprocessable(FeignException ex, HttpServletRequest req) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, extractFeignMessage(ex), req.getRequestURI());
