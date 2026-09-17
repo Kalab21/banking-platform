@@ -10,7 +10,6 @@ import com.bankingplatform.transaction.dto.TransactionResponse;
 import com.bankingplatform.transaction.exception.AccountCallTimeoutException;
 import com.bankingplatform.transaction.exception.GlobalExceptionHandler;
 import com.bankingplatform.transaction.exception.TransferPartiallyAppliedException;
-import com.bankingplatform.transaction.model.IdempotencyRecord;
 import com.bankingplatform.transaction.model.IdempotencyStatus;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
@@ -148,16 +147,9 @@ class TransactionIdempotencyTest {
         });
     }
 
-    private IdempotencyRecord record(String fingerprint, IdempotencyStatus status, String body) {
-        return IdempotencyRecord.builder()
-                .id(1L)
-                .idempotencyKey(KEY)
-                .operation("WITHDRAWAL")
-                .requestHash(fingerprint)
-                .status(status)
-                .responseStatus(body == null ? null : 201)
-                .responseBody(body)
-                .build();
+    private IdempotencyOutcome record(String fingerprint, IdempotencyStatus status, String body) {
+        return new IdempotencyOutcome(1L, KEY, "WITHDRAWAL", fingerprint, status,
+                body == null ? null : 201, body, null);
     }
 
     private static FeignException feign(int status, String reason) {
