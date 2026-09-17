@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import {
   completeWizardToReview,
   fillAccountStep,
@@ -26,7 +27,10 @@ const GATEWAY = process.env.E2E_GATEWAY_URL ?? "http://localhost:8080";
 
 /** A complete registration body, which individual tests spoil one field of. */
 function registrationBody(overrides: Record<string, unknown> = {}) {
-  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  // randomUUID rather than Math.random: this ends up in a username on a real
+  // account, and a predictable generator feeding a credential-shaped value is
+  // the kind of thing that is worth never writing, even in a test.
+  const suffix = `${Date.now().toString(36)}${randomUUID().slice(0, 8)}`;
   return {
     username: `api.${suffix}`,
     email: `api.${suffix}@example.com`,
