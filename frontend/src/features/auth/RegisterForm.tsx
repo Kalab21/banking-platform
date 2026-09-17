@@ -1,10 +1,9 @@
 "use client";
 
-import { AtSign, ArrowLeft, Phone, ShieldCheck, User } from "lucide-react";
+import { AtSign, ArrowLeft, Phone, User } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { registerAction, type AuthFormState } from "@/features/auth/actions";
-import { OnboardingComplete } from "@/features/auth/onboarding/OnboardingComplete";
 import { ReviewStep } from "@/features/auth/onboarding/ReviewStep";
 import { Stepper } from "@/features/auth/onboarding/Stepper";
 import {
@@ -26,7 +25,7 @@ import {
 import { PasswordRequirements } from "@/components/ui/PasswordRequirements";
 import { fieldErrors } from "@/lib/validation";
 import { formatPhone, normalizePhone } from "@/lib/phone";
-import { formatSsn, lastFourOfSsn, normalizeSsn } from "@/lib/ssn";
+import { formatSsn, normalizeSsn } from "@/lib/ssn";
 import { US_STATES } from "@/lib/us-states";
 
 const INITIAL: AuthFormState = {};
@@ -114,10 +113,6 @@ export function RegisterForm() {
     headingRef.current?.focus();
   }, [step]);
 
-  if (state.completed) {
-    return <OnboardingComplete name={data.firstName} ssnLast4={lastFourOfSsn(data.ssn)} />;
-  }
-
   const validateStep = (): boolean => {
     if (!currentStep.schema) return true;
 
@@ -180,6 +175,15 @@ export function RegisterForm() {
       action={action}
       className="space-y-6"
       noValidate
+      onSubmit={(event) => {
+        /*
+         * The form may only be submitted from the review step. This is a guard
+         * rather than a formality: the step buttons occupy the same position,
+         * and a submit triggered from anywhere else would post a registration
+         * the customer has not been shown yet.
+         */
+        if (step !== "review") event.preventDefault();
+      }}
       onKeyDown={(event) => {
         // Enter in a text field submits a form. On any step but the last that
         // would post a half-filled registration, so it advances instead.
@@ -420,14 +424,19 @@ export function RegisterForm() {
 
       {step === "identity" ? (
         <div className="space-y-5">
-          <TextField
+          {/*
+           * Masked while it is typed, with a reveal control, for the same
+           * reason a password is: this gets entered on laptops in cafes and on
+           * phones on trains, and the number is worth more than most passwords.
+           */}
+          <PasswordField
             label="Social Security number"
             name="ssn"
+            secret="Social Security number"
             inputMode="numeric"
             autoComplete="off"
             required
             requiredMark
-            icon={<ShieldCheck aria-hidden="true" className="h-4 w-4" />}
             hint="We keep only the last four digits. The rest is not stored."
             placeholder="123-45-6789"
             maxLength={11}
@@ -494,12 +503,28 @@ export function RegisterForm() {
           </Button>
         ) : null}
 
+        {/*
+         * Distinct keys, so React replaces this button rather than re-typing
+         * the one already there. Without them the two render into the same DOM
+         * node, and advancing to review from the identity step flips that node
+         * from type="button" to type="submit" while the click that caused the
+         * step change is still being dispatched — the browser then performs the
+         * default action for what the node has become and posts the form. The
+         * customer never sees the review screen they were on their way to.
+         */}
         {onReview ? (
-          <Button type="submit" size="lg" pending={pending} className="flex-1">
+          <Button key="submit" type="submit" size="lg" pending={pending} className="flex-1">
             {pending ? "Opening your account…" : "Open my account"}
           </Button>
         ) : (
-          <Button type="button" size="lg" onClick={goNext} disabled={pending} className="flex-1">
+          <Button
+            key="advance"
+            type="button"
+            size="lg"
+            onClick={goNext}
+            disabled={pending}
+            className="flex-1"
+          >
             {returningToReview ? "Back to review" : "Continue"}
           </Button>
         )}

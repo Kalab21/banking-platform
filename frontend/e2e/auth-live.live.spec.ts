@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { completeWizardToReview, syntheticApplicant } from "./onboarding";
 
 /**
  * The signed-out journey against a running stack.
@@ -16,45 +17,32 @@ import { expect, test } from "@playwright/test";
  *     npx playwright test --project=live auth-live
  */
 
-// Synthetic, and unique per run so repeated runs do not collide.
-function demoIdentity() {
-  const suffix = Date.now().toString(36);
-  return {
-    firstName: "Avery",
-    lastName: "Sinclair",
-    email: `avery.sinclair.${suffix}@example.com`,
-    username: `avery.${suffix}`,
-    password: "Northbank2026",
-  };
-}
-
 test.describe("signed-out journey", () => {
-  test("an account can be created, signed out of, and signed back into", async ({ page }) => {
-    const demo = demoIdentity();
+  test("an account can be opened, signed out of, and signed back into", async ({ page }) => {
+    const who = syntheticApplicant();
 
     await page.goto("/register");
-    await page.getByLabel("First name").fill(demo.firstName);
-    await page.getByLabel("Last name").fill(demo.lastName);
-    await page.getByLabel("Email address").fill(demo.email);
-    await page.getByLabel("Username").fill(demo.username);
-    await page.getByLabel("Password", { exact: true }).fill(demo.password);
-    await page.getByLabel("Confirm password").fill(demo.password);
+    await completeWizardToReview(page, who);
+    await page.getByRole("button", { name: "Open my account" }).click();
 
-    await page.getByRole("button", { name: "Create account" }).click();
-
-    // Registration issues a session, so the console opens on the dashboard.
-    await page.waitForURL(/\/dashboard$/, { timeout: 60_000 });
+    // Registration issues a session, and onboarding ends on its own screen
+    // rather than dropping the customer onto a dashboard they did not ask for.
+    await page.waitForURL(/\/welcome$/, { timeout: 60_000 });
+    await expect(page.getByRole("heading", { name: "Your account is open" })).toBeVisible();
 
     // The session cookie is the only place the token lives.
     const cookie = (await page.context().cookies()).find((c) => c.name === "bp_session");
     expect(cookie?.httpOnly).toBe(true);
     expect(await page.evaluate(() => document.cookie)).not.toContain("bp_session");
 
+    await page.getByRole("link", { name: /go to your dashboard/i }).click();
+    await page.waitForURL(/\/dashboard$/, { timeout: 60_000 });
+
     await page.getByRole("button", { name: /sign out/i }).click();
     await page.waitForURL(/\/login$/, { timeout: 60_000 });
 
-    await page.getByLabel("Username").fill(demo.username);
-    await page.getByLabel("Password", { exact: true }).fill(demo.password);
+    await page.getByLabel("Username").fill(who.username);
+    await page.getByLabel("Password", { exact: true }).fill(who.password);
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await page.waitForURL(/\/dashboard$/, { timeout: 60_000 });
@@ -86,6 +74,14 @@ test.describe("signed-out journey", () => {
         password: "abc123",
         firstName: "Avery",
         lastName: "Sinclair",
+        // Complete otherwise, so the password is the only thing wrong with it.
+        dateOfBirth: "1990-01-15",
+        phone: "2405550148",
+        streetAddress: "123 Example Street",
+        city: "Silver Spring",
+        state: "MD",
+        postalCode: "20910",
+        ssn: "123-45-6789",
       },
       failOnStatusCode: false,
     });

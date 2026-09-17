@@ -24,8 +24,6 @@ export interface AuthFormState {
   twoFactorRequired?: boolean;
   /** Carried across the challenge step so the user does not retype it. */
   username?: string;
-  /** The account was created and a session issued; the wizard shows its last step. */
-  completed?: boolean;
   /**
    * What the customer already typed, echoed back so a rejected submission does
    * not empty the wizard.
@@ -183,13 +181,6 @@ export async function registerAction(
       return { error: "Account created, but no session was issued. Please sign in." };
     }
     await setSessionCookie(auth.token, auth.expiresIn);
-
-    /*
-     * No redirect. The wizard has one more step to show — what was submitted,
-     * what happens next, and where to go from here — and a redirect would
-     * replace that with a dashboard the customer did not ask for yet.
-     */
-    return { completed: true, username: registration.username };
   } catch (error) {
     if (error instanceof ApiError) {
       if (error.status === 409) {
@@ -203,6 +194,14 @@ export async function registerAction(
     if (error instanceof NetworkError) return { error: error.userMessage, values };
     return { error: "Could not create your account. Please try again.", values };
   }
+
+  /*
+   * Onboarding ends on its own screen rather than on the dashboard: there is a
+   * last thing to say about what was submitted and what happens next. It is a
+   * separate route because a session now exists, and the signed-out pages send
+   * anyone holding one somewhere else.
+   */
+  redirect("/welcome");
 }
 
 export async function logoutAction(): Promise<void> {

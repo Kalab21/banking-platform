@@ -43,7 +43,7 @@ export default defineConfig({
       // Portfolio captures. Reviewed by eye, so kept out of the CI projects and
       // run deliberately: `npx playwright test --project=screenshots`.
       name: "screenshots",
-      testMatch: /auth-screenshots\.spec\.ts/,
+      testMatch: /-screenshots\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
     {

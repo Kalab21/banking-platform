@@ -11,6 +11,12 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { cn } from "@/lib/cn";
+import {
+  BUTTON_SIZES,
+  BUTTON_VARIANTS,
+  type ButtonSize,
+  type ButtonVariant,
+} from "@/components/ui/button-styles";
 
 /**
  * Interactive form primitives.
@@ -22,45 +28,6 @@ import { cn } from "@/lib/cn";
  */
 
 // -------------------------------------------------------------------- buttons
-
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-type ButtonSize = "md" | "lg";
-
-const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white hover:bg-primary-hover disabled:bg-primary/45",
-  secondary:
-    "border border-line-strong bg-surface text-ink hover:bg-surface-hover disabled:text-ink-subtle",
-  ghost: "text-primary hover:bg-primary-soft disabled:text-ink-subtle",
-  danger: "bg-critical text-white hover:bg-critical/90 disabled:bg-critical/45",
-};
-
-const SIZES: Record<ButtonSize, string> = {
-  // 44px and 48px: comfortably above the minimum touch target on a phone.
-  md: "min-h-11 px-4 text-sm",
-  lg: "min-h-12 px-5 text-[0.9375rem]",
-};
-
-/**
- * The button's own classes, for the cases where the control has to be a link.
- *
- * "Go to your dashboard" navigates, so it is an anchor — rendering it as a
- * button would take away middle-click, open-in-new-tab and the status bar. It
- * should still look like the primary action, so the styling is shared rather
- * than copied.
- */
-export function buttonStyles(
-  variant: ButtonVariant = "primary",
-  size: ButtonSize = "md",
-  className?: string,
-) {
-  return cn(
-    "relative inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)]",
-    "font-medium transition-colors duration-150 disabled:cursor-not-allowed",
-    VARIANTS[variant],
-    SIZES[size],
-    className,
-  );
-}
 
 export function Button({
   children,
@@ -83,8 +50,8 @@ export function Button({
       className={cn(
         "relative inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)]",
         "font-medium transition-colors duration-150 disabled:cursor-not-allowed",
-        VARIANTS[variant],
-        SIZES[size],
+        BUTTON_VARIANTS[variant],
+        BUTTON_SIZES[size],
         className,
       )}
     >
@@ -251,15 +218,25 @@ export const TextField = forwardRef<
  * reader user is told which state they are switching to. Toggling does not move
  * focus, and the field keeps `autoComplete` intact in both states.
  */
+/**
+ * A field whose value should not sit on screen while it is typed.
+ *
+ * Passwords, and also a Social Security number: both are read over a shoulder
+ * as easily as any other text, and both are typed on screens that are not
+ * always private. `secret` names what is being hidden so the toggle announces
+ * "Show Social Security number" rather than "Show password" — the accessible
+ * name has to describe the control that is actually there.
+ */
 export function PasswordField({
   label,
   name,
   error,
   hint,
   requiredMark,
+  secret = "password",
   className,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & FieldProps) {
+}: InputHTMLAttributes<HTMLInputElement> & FieldProps & { secret?: string }) {
   const ids = useFieldIds(name);
   const [visible, setVisible] = useState(false);
 
@@ -278,7 +255,7 @@ export function PasswordField({
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? "Hide password" : "Show password"}
+          aria-label={visible ? `Hide ${secret}` : `Show ${secret}`}
           aria-pressed={visible}
           disabled={props.disabled}
           className={cn(

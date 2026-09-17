@@ -15,12 +15,13 @@ const MOBILE = { width: 390, height: 844 };
 
 const OUT = "../docs/screenshots";
 
-// Deliberately fictional, and not a real address or number.
+// Deliberately fictional. The phone is in the 555-01xx range reserved for
+// fiction, so no capture points at anyone's number.
 const DEMO = {
   firstName: "Avery",
   lastName: "Sinclair",
   email: "avery.sinclair@example.com",
-  phone: "2402881031",
+  phone: "2405550148",
   username: "avery.sinclair",
   password: "Northbank2026",
 };
@@ -42,20 +43,19 @@ test.describe("auth screenshots", () => {
     await page.screenshot({ path: `${OUT}/02-login-mobile.png` });
   });
 
-  test("create account — desktop", async ({ page }) => {
+  test("create account — first step", async ({ page }) => {
+    // Registration is a wizard now; its remaining steps are captured in
+    // onboarding-screenshots.spec.ts.
     await page.setViewportSize(DESKTOP);
     await page.goto("/register");
 
-    await page.getByLabel("First name").fill(DEMO.firstName);
-    await page.getByLabel("Last name").fill(DEMO.lastName);
-    await page.getByLabel("Email address").fill(DEMO.email);
-    await page.getByLabel("Phone number").fill(DEMO.phone);
     await page.getByLabel("Username").fill(DEMO.username);
+    await page.getByLabel("Email address").fill(DEMO.email);
     await page.getByLabel("Password", { exact: true }).fill(DEMO.password);
     await page.getByLabel("Confirm password").fill(DEMO.password);
 
     // Blur the last field so no caret sits in the capture.
-    await page.getByRole("heading", { name: /create your northbank account/i }).click();
+    await page.getByRole("heading", { name: /open your northbank account/i }).click();
 
     await page.screenshot({ path: `${OUT}/03-register-desktop.png` });
   });
@@ -64,18 +64,14 @@ test.describe("auth screenshots", () => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/register");
 
-    await page.getByLabel("First name").fill(DEMO.firstName);
-    await page.getByLabel("Last name").fill(DEMO.lastName);
-    await page.getByLabel("Email address").fill("avery.sinclair.example.com");
     await page.getByLabel("Username").fill("av");
+    await page.getByLabel("Email address").fill("avery.sinclair.example.com");
     await page.getByLabel("Password", { exact: true }).fill("northbank");
     await page.getByLabel("Confirm password").fill("northbank2");
 
-    await page.getByRole("button", { name: "Create account" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByText("Enter a valid email address")).toBeVisible();
 
-    // Submitting leaves the page scrolled to the button; the capture should
-    // start at the heading.
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `${OUT}/04-register-validation.png`, fullPage: true });
   });
@@ -84,8 +80,7 @@ test.describe("auth screenshots", () => {
     await page.setViewportSize(MOBILE);
     await page.goto("/register");
 
-    await page.getByLabel("First name").fill(DEMO.firstName);
-    await page.getByLabel("Last name").fill(DEMO.lastName);
+    await page.getByLabel("Username").fill(DEMO.username);
     await page.getByLabel("Email address").fill(DEMO.email);
     await page.getByLabel("Password", { exact: true }).fill(DEMO.password);
 

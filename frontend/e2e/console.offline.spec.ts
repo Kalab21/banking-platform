@@ -30,6 +30,13 @@ test.describe("route protection", () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test("the onboarding completion screen is not reachable without an account", async ({ page }) => {
+    // It ends a flow that issues a session, so it is behind one like every
+    // other signed-in page.
+    await page.goto("/welcome");
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
   test("an expired session is rejected and returns the user to sign in", async ({ page }) => {
     await page.goto("/login");
     await setSessionCookie(page, buildToken({ exp: 1_600_000_000 }));
@@ -154,7 +161,7 @@ async function completeAddressStep(page: Page, overrides: Partial<Record<string,
 }
 
 async function completeIdentityStep(page: Page, ssn = "123456789") {
-  await page.getByLabel("Social Security number").fill(ssn);
+  await page.getByLabel("Social Security number", { exact: true }).fill(ssn);
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
 }
@@ -277,7 +284,7 @@ test.describe("onboarding wizard", () => {
     await completePersonalStep(page);
     await completeAddressStep(page);
 
-    const ssn = page.getByLabel("Social Security number");
+    const ssn = page.getByLabel("Social Security number", { exact: true });
     await ssn.fill("123456789");
 
     await expect(ssn).toHaveValue("123-45-6789");
@@ -287,7 +294,7 @@ test.describe("onboarding wizard", () => {
     await completeAccountStep(page);
     await completePersonalStep(page);
     await completeAddressStep(page);
-    await page.getByLabel("Social Security number").fill("123456789");
+    await page.getByLabel("Social Security number", { exact: true }).fill("123456789");
     await page.getByRole("button", { name: "Continue" }).click();
 
     await expect(page.getByText("Accept the terms to continue")).toBeVisible();
@@ -310,6 +317,26 @@ test.describe("onboarding wizard", () => {
     await expect(review).not.toContainText("123-45-6789");
     await expect(review).not.toContainText("123456789");
     await expect(review).not.toContainText("Northbank2026");
+  });
+
+  test("reaching the review screen does not submit the registration", async ({ page }) => {
+    /*
+     * A regression guard with a specific cause. The step button and the submit
+     * button occupy the same place in the layout; rendered without distinct
+     * keys they become the same DOM node, and the click that advances from the
+     * identity step to review flips that node to type="submit" mid-dispatch.
+     * The browser then posts the form, and the customer is registered without
+     * ever seeing what they were about to submit.
+     */
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST") posts.push(request.url());
+    });
+
+    await fillWizardToReview(page);
+
+    expect(posts, "the wizard posted before the customer submitted it").toEqual([]);
+    await expect(page.getByRole("button", { name: "Open my account" })).toBeEnabled();
   });
 
   test("an edit from the review screen returns straight to the review screen", async ({ page }) => {

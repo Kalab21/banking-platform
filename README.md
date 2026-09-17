@@ -48,6 +48,10 @@ Captured automatically from the running seeded demo stack using Playwright.
 |---|---|
 | ![Loan detail with amortization schedule](docs/screenshots/05-loan-details.png) | <img src="docs/screenshots/06-mobile.png" alt="Dashboard on a phone viewport" width="260"> |
 
+| Onboarding — personal details | Onboarding — review |
+|---|---|
+| ![Second step of the onboarding wizard, collecting name, date of birth and phone](docs/screenshots/08-onboarding-personal.png) | ![Review step showing every entered detail with the Social Security number masked to its last four digits](docs/screenshots/11-onboarding-review.png) |
+
 ---
 
 ## Architecture
@@ -148,11 +152,21 @@ Service ports, databases and Kafka topics are listed in
 
 Only features implemented in this repository are listed.
 
-**Identity and onboarding** (`user-service`) — registration and login issuing JWTs
-with BCrypt-hashed passwords; TOTP two-factor authentication (RFC 6238) with QR
-provisioning URI; KYC document submission, employee/admin review and automatic
-status transitions; credit score tracking updated from loan and credit-card events;
-`CUSTOMER` / `EMPLOYEE` / `ADMIN` roles.
+**Identity and onboarding** (`user-service`) — a five-step onboarding wizard
+collecting sign-in details, legal name and date of birth, a US residential
+address and identity details, all persisted and readable afterwards on the
+profile; registration and login issuing JWTs with BCrypt-hashed passwords; TOTP
+two-factor authentication (RFC 6238) with QR provisioning URI; KYC document
+submission, employee/admin review and automatic status transitions; credit score
+tracking updated from loan and credit-card events; `CUSTOMER` / `EMPLOYEE` /
+`ADMIN` roles.
+
+Of the Social Security number given at onboarding, only the last four digits are
+kept: the server checks the format, derives those four digits and discards the
+rest. No column holds the whole number and no endpoint returns one. The identity
+status reads `SUBMITTED` and nothing here ever reports an identity as verified —
+there is no verification provider behind this system, and passing a format check
+is not verification.
 
 **Accounts** (`account-service`) — `CHECKING` / `SAVINGS` / `BUSINESS` types;
 balance debit/credit with overdraft protection (limit, overdraft balance, fee, and
@@ -368,7 +382,9 @@ directly while developing:
 docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
 ```
 
-Register at <http://localhost:3000/register>, or seed a populated demo customer:
+Open an account at <http://localhost:3000/register> — onboarding asks for a name,
+a date of birth, a US address and an identity number, so use synthetic values —
+or seed a populated demo customer:
 
 ```bash
 ./scripts/seed-demo.sh
