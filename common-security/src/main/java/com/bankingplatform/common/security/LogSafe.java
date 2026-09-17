@@ -1,7 +1,5 @@
 package com.bankingplatform.common.security;
 
-import java.util.regex.Pattern;
-
 /**
  * Neutralises an untrusted value before it reaches a log line.
  *
@@ -41,15 +39,25 @@ public final class LogSafe {
 
     private static final String TRUNCATED = "...";
 
+    private static final String REPLACEMENT = "_";
+
+    /**
+     * The characters that actually break a line, named rather than implied.
+     *
+     * <p>CR and LF are the obvious pair. Vertical tab, form feed and NEL end a
+     * line for some readers; U+2028 and U+2029 are not control characters at
+     * all, and a {@code \p{Cntrl}} filter would hand them straight through
+     * although several log viewers render them as breaks.
+     */
+    private static final String LINE_BREAKS = "[\\r\\n\\u000B\\f\\u0085\\u2028\\u2029]";
+
     /**
      * Everything outside the RFC 3986 unreserved and path alphabet. Written as
      * a negated class so that a character is permitted only by being named
      * here, and a character nobody thought about is replaced rather than
      * printed.
      */
-    private static final Pattern UNSAFE = Pattern.compile("[^A-Za-z0-9/._~:@!$&'()*+,;=%-]");
-
-    private static final String REPLACEMENT = "_";
+    private static final String OUTSIDE_ALPHABET = "[^A-Za-z0-9/._~:@!$&'()*+,;=%-]";
 
     private LogSafe() {
     }
@@ -72,7 +80,15 @@ public final class LogSafe {
         }
         boolean overLength = raw.length() > maxLength;
         String bounded = overLength ? raw.substring(0, maxLength) : raw;
-        String neutralised = UNSAFE.matcher(bounded).replaceAll(REPLACEMENT);
+
+        // Two passes, in this order and on purpose. The first removes the
+        // characters that forge a log entry, named one by one so the threat
+        // being addressed is legible in the code and to anything reading it.
+        // The second is the allowlist that actually carries the guarantee: it
+        // subsumes the first, and covers everything nobody enumerated.
+        String withoutBreaks = bounded.replaceAll(LINE_BREAKS, REPLACEMENT);
+        String neutralised = withoutBreaks.replaceAll(OUTSIDE_ALPHABET, REPLACEMENT);
+
         return overLength ? neutralised + TRUNCATED : neutralised;
     }
 }
