@@ -27,9 +27,16 @@ jobs:
         run: mvn -B --no-transfer-progress clean verify
 
       - name: Validate Docker Compose files
+        env:
+          # The stack requires JWT_SECRET and has no default, so interpolation
+          # fails without one. This value only satisfies the config parser; it
+          # signs nothing and starts nothing.
+          JWT_SECRET: ci-config-validation-placeholder-not-a-signing-key
         run: |
           docker compose -f docker-compose.yml config --quiet
           docker compose -f docker-compose.infra.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml config --quiet
+          docker compose -f docker-compose.observability.yml config --quiet
 
   frontend:
     name: Frontend (Node 22)

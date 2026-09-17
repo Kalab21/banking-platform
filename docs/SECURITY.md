@@ -94,6 +94,7 @@ developing rather than by default.
 | Error hygiene | Denials expose no resource detail; the catch-all logs server-side and returns a generic message |
 | Log injection | The request path is reduced to the RFC 3986 path alphabet before being logged |
 | Static analysis | CodeQL on Java and TypeScript; Trivy over dependencies, Dockerfiles and the base image |
+| Signing key | `JWT_SECRET` is required from the environment at runtime. No signing key is committed or used as a fallback: both services refuse to start without it, and reject a key shorter than 256 bits |
 
 ## Next hardening candidates
 
@@ -124,21 +125,7 @@ attempt throttling on `/api/auth/login` beyond the gateway's per-IP rate limit.
 **Smallest safe fix.** Raise the minimum to 12, and add per-account attempt
 throttling on login.
 
-### 3. Development JWT secret is public — medium
-
-**Evidence.** `jwt.secret: ${JWT_SECRET:banking-platform-secret-key-change-in-production}`
-in `api-gateway` and `user-service`.
-
-**Impact.** The fallback is committed and therefore public. Anyone running the
-default configuration has a known signing key, so tokens can be forged for any
-user and role — which would defeat the entire authorization model above. It is
-clearly labelled and environment-overridable, and AWS deployments use Secrets
-Manager, but the default remains usable.
-
-**Smallest safe fix.** Remove the fallback so the services refuse to start without
-`JWT_SECRET`, and generate one in the local `.env`.
-
-### 4. Two-factor is opt-in — low
+### 3. Two-factor is opt-in — low
 
 **Evidence.** `User.twoFactorEnabled` defaults to false; the gate at
 `UserServiceImpl` applies only when the flag is set.
@@ -149,7 +136,7 @@ account has it on by default, so the protection is advisory.
 **Smallest safe fix.** Require 2FA for `EMPLOYEE` and `ADMIN` roles, where the
 blast radius of a compromised account is largest.
 
-### 5. No idempotency or concurrency control on money movement — high, documented
+### 4. No idempotency or concurrency control on money movement — high, documented
 
 **Evidence.** `updateBalance` is a read-modify-write with no `@Version` or
 `SELECT ... FOR UPDATE`; no endpoint accepts an idempotency key.

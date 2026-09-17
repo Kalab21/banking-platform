@@ -18,6 +18,10 @@ name: banking-platform
 #
 # To reach a single service directly while developing, use the override:
 #   docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
+#
+# JWT_SECRET must be set before starting the stack. There is no default signing
+# key: copy .env.example to .env and generate one, for example
+#   openssl rand -base64 48
 
 services:
 
@@ -127,6 +131,9 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Required. Compose fails with this message rather than starting a
+      # service that cannot verify a token. Both services must share it.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — copy .env.example and generate a value}
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
@@ -153,6 +160,9 @@ services:
     container_name: banking-user-service
     restart: unless-stopped
     environment:
+      # Required. Compose fails with this message rather than starting a
+      # service that cannot verify a token. Both services must share it.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — copy .env.example and generate a value}
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
       SPRING_DATASOURCE_USERNAME: bankingadmin

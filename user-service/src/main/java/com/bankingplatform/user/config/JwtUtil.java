@@ -1,6 +1,7 @@
 package com.bankingplatform.user.config;
 
 import io.jsonwebtoken.Claims;
+import jakarta.annotation.PostConstruct;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,30 @@ public class JwtUtil {
 
     @Value("${jwt.secret}")
     private String secret;
+
+    /**
+     * Minimum length for the signing key.
+     *
+     * <p>HMAC-SHA256 requires a 256-bit key and JJWT rejects anything shorter,
+     * but it does so on first use — which would be the first request rather
+     * than start-up. Checking here turns a misconfiguration into a failure to
+     * boot, where it is noticed.
+     */
+    private static final int MIN_SECRET_LENGTH = 32;
+
+    @PostConstruct
+    public void validateSecret() {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is not set. user-service and the gateway must be given the same "
+                            + "value; there is deliberately no default.");
+        }
+        if (secret.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_LENGTH) {
+            throw new IllegalStateException(
+                    "JWT_SECRET must be at least " + MIN_SECRET_LENGTH
+                            + " bytes; HMAC-SHA256 requires a 256-bit key.");
+        }
+    }
 
     @Value("${jwt.expiration}")
     private long expiration;
