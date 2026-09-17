@@ -107,7 +107,7 @@ public class IdempotencyGuard {
             return replay(existing.get(), key, fingerprint, responseType);
         }
 
-        return executeAndRecord(key, responseType, reference, action);
+        return executeAndRecord(key, reference, action);
     }
 
     private Optional<IdempotencyOutcome> claim(String key, String operation, String fingerprint) {
@@ -123,8 +123,15 @@ public class IdempotencyGuard {
         }
     }
 
+    /**
+     * Runs the operation once and records what it did.
+     *
+     * <p>Takes no response type: the result is the object the action returned,
+     * so there is nothing to read back. {@code responseType} is needed only on
+     * the replay path, where a stored body has to be deserialised into
+     * something.
+     */
     private <T> ResponseEntity<T> executeAndRecord(String key,
-                                                   Class<T> responseType,
                                                    Function<T, String> reference,
                                                    Supplier<T> action) {
         T result;

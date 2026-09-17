@@ -1,5 +1,6 @@
 package com.bankingplatform.transaction.idempotency;
 
+import com.bankingplatform.common.security.LogSafe;
 import com.bankingplatform.transaction.model.IdempotencyRecord;
 import com.bankingplatform.transaction.model.IdempotencyStatus;
 import com.bankingplatform.transaction.repository.IdempotencyRecordRepository;
@@ -93,8 +94,13 @@ public class IdempotencyStore {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markUnknown(String key) {
         resolve(key, IdempotencyStatus.UNKNOWN, null, null, null);
+        // The key is an opaque value the client chose. The guard restricts it
+        // to a narrow alphabet before this point, but the restriction lives in
+        // the caller and this is the line that would be forged, so the value is
+        // neutralised where it is used rather than where it happens to arrive.
         log.error("Idempotency key {} resolved UNKNOWN: the account service was reached and the "
-                + "outcome was never established. This record needs reconciliation.", key);
+                + "outcome was never established. This record needs reconciliation.",
+                LogSafe.value(key));
     }
 
     private void resolve(String key, IdempotencyStatus status,
@@ -106,7 +112,7 @@ public class IdempotencyStore {
             // it. Recording the second verdict over the first would be worse
             // than leaving it; log loudly instead.
             log.error("Idempotency key {} could not be resolved to {}: it is no longer IN_PROGRESS",
-                    key, status);
+                    LogSafe.value(key), status);
         }
     }
 }

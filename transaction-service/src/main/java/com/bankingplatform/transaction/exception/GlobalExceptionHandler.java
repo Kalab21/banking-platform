@@ -1,5 +1,6 @@
 package com.bankingplatform.transaction.exception;
 
+import com.bankingplatform.common.security.LogSafe;
 import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -127,7 +128,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TransferPartiallyAppliedException.class)
     public ResponseEntity<ErrorResponse> handlePartialTransfer(TransferPartiallyAppliedException ex,
                                                                HttpServletRequest req) {
-        log.error("Partially applied transfer on {}", req.getRequestURI(), ex);
+        // The path is caller input, so it is neutralised before it reaches
+        // the line. A request that could inject a newline here could forge an
+        // entry claiming a transfer settled cleanly.
+        log.error("Partially applied transfer on {}", LogSafe.value(req.getRequestURI()), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), req.getRequestURI());
     }
 

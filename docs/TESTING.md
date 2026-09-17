@@ -1,6 +1,6 @@
 # Testing
 
-342 automated tests run in CI: 259 backend, 70 frontend unit/component and 13
+355 automated tests run in CI: 272 backend, 70 frontend unit/component and 13
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -22,6 +22,7 @@ are not counted in the CI total.
 | Authorization | JUnit 5, MockMvc | `StatisticsAuthorization` — per-user ownership, platform figures staff-only | 10 passing |
 | Authorization | JUnit 5, AssertJ | `AccessGuard` and `OwnershipMatrix` — the rules themselves, all four principals | 45 passing |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 passing |
+| Log integrity | JUnit 5, AssertJ | `LogSafe` — an untrusted value cannot end a log line and start another | 13 passing |
 | Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 passing |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 passing |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 passing |
@@ -35,7 +36,7 @@ are not counted in the CI total.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 245 unit + 14 integration = 259
+mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 14 integration = 272
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -73,6 +74,14 @@ a full PAN cannot reach a response body.
 
 **Resilience** — the breaker opens on sustained downstream failure, stays closed
 for business 4xx, maps a wrapped 422 back to 422, and attempts a debit exactly once.
+
+**Log integrity** — a value a caller chose cannot end the line the service is
+writing and begin one of its own. CR, LF, vertical tab, form feed and NEL are
+replaced, and so are U+2028 and U+2029, which a `\p{Cntrl}` denylist would pass
+through although some log viewers render them as breaks. Whitespace goes too, so
+a value stays a single field. A legitimate idempotency key or request path
+survives unchanged, because an entry that no longer names what it is about is
+not worth writing.
 
 **Idempotency** — a missing, malformed or over-long `Idempotency-Key` is a 400
 that reaches neither the store nor the service; a replay of the same request
