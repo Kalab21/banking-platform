@@ -76,7 +76,25 @@ function Get-TOTP($secret) {
 Write-Host "`n=== SETUP ===" -ForegroundColor Cyan
 
 $ts = Get-Date -Format "yyyyMMddHHmmss"
-$regBody = @{ username="e2euser$ts"; email="e2e$ts@bank.com"; password="Test1234!"; firstName="E2E"; lastName="User"; phoneNumber="5550001111" }
+# Onboarding requires a full profile. Every value is synthetic: example.com,
+# the 555-01xx range reserved for fiction, and a Social Security number
+# reserved for demonstration use. The server keeps only its last four digits.
+# Note "phone", not "phoneNumber" — the latter was never a field on the
+# request and was being silently discarded.
+$regBody = @{
+    username      = "e2euser$ts"
+    email         = "e2e$ts@example.com"
+    password      = "Test1234!"
+    firstName     = "E2E"
+    lastName      = "User"
+    dateOfBirth   = "1990-01-15"
+    phone         = "2405550148"
+    streetAddress = "123 Example Street"
+    city          = "Silver Spring"
+    state         = "MD"
+    postalCode    = "20910"
+    ssn           = "123-45-6789"
+}
 $auth = Post "$GW/api/auth/register" $regBody
 Assert "Register user" ($auth -and $auth.token)
 $TOKEN = $auth.token

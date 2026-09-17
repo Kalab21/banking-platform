@@ -6,6 +6,7 @@ import com.bankingplatform.user.dto.LoginRequest;
 import com.bankingplatform.user.mapper.UserMapper;
 import com.bankingplatform.user.model.Role;
 import com.bankingplatform.user.model.User;
+import com.bankingplatform.user.repository.CustomerIdentityRepository;
 import com.bankingplatform.user.repository.UserRepository;
 import com.bankingplatform.user.service.TwoFactorService;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +50,7 @@ class LoginTwoFactorTest {
     private static final String TOKEN = "issued.jwt.token";
 
     @Mock private UserRepository userRepository;
+    @Mock private CustomerIdentityRepository customerIdentityRepository;
     @Mock private UserMapper userMapper;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtUtil jwtUtil;
