@@ -1,5 +1,6 @@
 package com.bankingplatform.transaction.repository;
 
+import com.bankingplatform.transaction.idempotency.IdempotencyOutcome;
 import com.bankingplatform.transaction.model.IdempotencyRecord;
 import com.bankingplatform.transaction.model.IdempotencyStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,24 @@ import java.util.Optional;
 public interface IdempotencyRecordRepository extends JpaRepository<IdempotencyRecord, Long> {
 
     Optional<IdempotencyRecord> findByIdempotencyKey(String idempotencyKey);
+
+    /**
+     * Reads a record's current state as a projection rather than an entity.
+     *
+     * <p>Querying for the entity would return whatever instance the persistence
+     * context already holds, which with {@code open-in-view} is the state read
+     * at the start of the request. A duplicate polling for the original's
+     * verdict would then never see it change. A constructor projection is built
+     * from the result set every time.
+     */
+    @Query("""
+            SELECT new com.bankingplatform.transaction.idempotency.IdempotencyOutcome(
+                       r.id, r.idempotencyKey, r.operation, r.requestHash, r.status,
+                       r.responseStatus, r.responseBody, r.resultRef)
+              FROM IdempotencyRecord r
+             WHERE r.idempotencyKey = :key
+            """)
+    Optional<IdempotencyOutcome> findOutcomeByIdempotencyKey(@Param("key") String key);
 
     /**
      * Take ownership of a key whose previous attempt is known to have moved no

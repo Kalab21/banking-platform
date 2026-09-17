@@ -6,7 +6,6 @@ import com.bankingplatform.transaction.exception.IdempotencyException;
 import com.bankingplatform.transaction.exception.ResourceNotFoundException;
 import com.bankingplatform.transaction.exception.TransactionException;
 import com.bankingplatform.transaction.exception.TransferPartiallyAppliedException;
-import com.bankingplatform.transaction.model.IdempotencyRecord;
 import com.bankingplatform.transaction.model.IdempotencyStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -103,7 +102,7 @@ public class IdempotencyGuard {
         String key = requireValidKey(rawKey);
         String fingerprint = RequestFingerprint.of(operation, caller, request);
 
-        Optional<IdempotencyRecord> existing = claim(key, operation, fingerprint);
+        Optional<IdempotencyOutcome> existing = claim(key, operation, fingerprint);
         if (existing.isPresent()) {
             return replay(existing.get(), key, fingerprint, responseType);
         }
@@ -111,7 +110,7 @@ public class IdempotencyGuard {
         return executeAndRecord(key, responseType, reference, action);
     }
 
-    private Optional<IdempotencyRecord> claim(String key, String operation, String fingerprint) {
+    private Optional<IdempotencyOutcome> claim(String key, String operation, String fingerprint) {
         try {
             return store.claim(key, operation, fingerprint);
         } catch (DataIntegrityViolationException raced) {
@@ -185,19 +184,19 @@ public class IdempotencyGuard {
         return false;
     }
 
-    private <T> ResponseEntity<T> replay(IdempotencyRecord record, String key,
+    private <T> ResponseEntity<T> replay(IdempotencyOutcome record, String key,
                                          String fingerprint, Class<T> responseType) {
-        if (!record.getRequestHash().equals(fingerprint)) {
+        if (!record.requestHash().equals(fingerprint)) {
             throw IdempotencyException.differentRequest(HEADER);
         }
 
-        IdempotencyRecord settled = awaitSettlement(record, key);
+        IdempotencyOutcome settled = awaitSettlement(record, key);
 
-        return switch (settled.getStatus()) {
+        return switch (settled.status()) {
             case COMPLETED -> ResponseEntity
-                    .status(HttpStatus.valueOf(settled.getResponseStatus()))
+                    .status(HttpStatus.valueOf(settled.responseStatus()))
                     .header(REPLAY_HEADER, "true")
-                    .body(deserialise(settled.getResponseBody(), responseType));
+                    .body(deserialise(settled.responseBody(), responseType));
             case UNKNOWN -> throw IdempotencyException.outcomeUnknown();
             // Released for retry between the claim and now, or still running
             // when the wait ran out. Either way this request executed nothing.
@@ -209,10 +208,10 @@ public class IdempotencyGuard {
      * Waits for an in-flight duplicate to settle so the caller can be given the
      * original result rather than a conflict.
      */
-    private IdempotencyRecord awaitSettlement(IdempotencyRecord record, String key) {
-        IdempotencyRecord current = record;
+    private IdempotencyOutcome awaitSettlement(IdempotencyOutcome record, String key) {
+        IdempotencyOutcome current = record;
         for (int attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-            if (current.getStatus() != IdempotencyStatus.IN_PROGRESS) {
+            if (current.status() != IdempotencyStatus.IN_PROGRESS) {
                 return current;
             }
             try {

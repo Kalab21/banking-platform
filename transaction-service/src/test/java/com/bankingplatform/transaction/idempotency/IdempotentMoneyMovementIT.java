@@ -13,6 +13,8 @@ import com.bankingplatform.transaction.model.IdempotencyStatus;
 import com.bankingplatform.transaction.repository.IdempotencyRecordRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,10 +26,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.jpa.EntityManagerHolder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -109,6 +113,8 @@ class IdempotentMoneyMovementIT {
 
     @Autowired private IdempotencyGuard guard;
     @Autowired private IdempotencyRecordRepository repository;
+    @Autowired private IdempotencyStore store;
+    @Autowired private EntityManagerFactory entityManagerFactory;
 
     // ------------------------------------------------------------- fixtures
 
@@ -323,6 +329,64 @@ class IdempotentMoneyMovementIT {
                 .idempotencyKey(key).operation("TRANSFER").requestHash("b".repeat(64))
                 .status(IdempotencyStatus.IN_PROGRESS).build()))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("a duplicate polling inside an open-in-view request sees the original settle")
+    void pollingSeesASettlementFromAnotherRequest() throws Exception {
+        String key = newKey();
+        assertThat(store.claim(key, "TRANSFER", "f".repeat(64))).isEmpty();
+
+        // open-in-view binds one EntityManager to the request thread for the
+        // whole request, and the guard's own REQUIRES_NEW transactions reuse it
+        // rather than opening their own. That is the condition under which the
+        // wait loop has to keep working.
+        EntityManager requestScoped = entityManagerFactory.createEntityManager();
+        TransactionSynchronizationManager.bindResource(
+                entityManagerFactory, new EntityManagerHolder(requestScoped));
+        try {
+            // Prime the context with the entity, which is what an entity-based
+            // read of the claim used to do and what made every later poll
+            // stale.
+            IdempotencyRecord managed = entityQuery(requestScoped, key);
+            assertThat(managed.getStatus()).isEqualTo(IdempotencyStatus.IN_PROGRESS);
+
+            assertThat(store.find(key)).get()
+                    .extracting(IdempotencyOutcome::status)
+                    .isEqualTo(IdempotencyStatus.IN_PROGRESS);
+
+            // The original settles on its own thread, as it does in a real
+            // duplicate: this request's persistence context is never told.
+            Thread original = new Thread(() -> store.complete(
+                    key, 201, "{\"debit\":{\"transactionRef\":\"settled\"}}", "settled"));
+            original.start();
+            original.join(30_000);
+
+            // Reading the entity here still answers from the persistence
+            // context, which is why the store reads a projection instead. This
+            // assertion is the trap, kept visible on purpose: it is what the
+            // wait loop used to be doing.
+            assertThat(entityQuery(requestScoped, key).getStatus())
+                    .isEqualTo(IdempotencyStatus.IN_PROGRESS);
+
+            // The store must see the settlement regardless, or a duplicate
+            // waits out its whole budget and is told to retry something that
+            // has already finished.
+            assertThat(store.find(key)).get()
+                    .extracting(IdempotencyOutcome::status, IdempotencyOutcome::resultRef)
+                    .containsExactly(IdempotencyStatus.COMPLETED, "settled");
+        } finally {
+            TransactionSynchronizationManager.unbindResource(entityManagerFactory);
+            requestScoped.close();
+        }
+    }
+
+    private static IdempotencyRecord entityQuery(EntityManager entityManager, String key) {
+        return entityManager.createQuery(
+                        "SELECT r FROM IdempotencyRecord r WHERE r.idempotencyKey = :key",
+                        IdempotencyRecord.class)
+                .setParameter("key", key)
+                .getSingleResult();
     }
 
     @Test

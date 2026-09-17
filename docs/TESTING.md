@@ -1,6 +1,6 @@
 # Testing
 
-341 automated tests run in CI: 258 backend, 70 frontend unit/component and 13
+342 automated tests run in CI: 259 backend, 70 frontend unit/component and 13
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -26,7 +26,7 @@ are not counted in the CI total.
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 passing |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | 6 passing |
-| Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovement` — concurrent duplicates, replay, key release | 7 passing |
+| Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovement` — concurrent duplicates, replay, key release | 8 passing |
 | Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components | 70 passing |
 | End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout | 13 passing, in CI |
 | End-to-end | Playwright (live) | Sign-in, accounts, transfer, loan schedule, card masking, staff access, sign-out | 9, on demand |
@@ -35,7 +35,7 @@ are not counted in the CI total.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 245 unit + 13 integration = 258
+mvn -B --no-transfer-progress clean verify   # backend: 245 unit + 14 integration = 259
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -105,6 +105,16 @@ refused and applies nothing; a refusal that moved no money leaves the key usable
 again; an attempt whose outcome was never established is never re-executed; and
 the unique constraint is asserted directly against the database rather than
 inferred from the application code.
+
+One case there is about a trap rather than a rule. `open-in-view` binds one
+persistence context to a request thread, and the guard's own transactions reuse
+it, so a query for an entity already in that context answers from the context
+rather than from the database. A duplicate polling for the original's verdict
+never saw it change, waited out its whole budget and was told to retry something
+that had already finished. The store reads a constructor projection instead, and
+the test binds an entity manager to the thread the way `open-in-view` does,
+settles the record from another thread, and asserts that the store sees it —
+alongside the stale entity read, kept visible so the reason is not lost.
 
 Both require a running Docker daemon. `mvn test` skips them.
 

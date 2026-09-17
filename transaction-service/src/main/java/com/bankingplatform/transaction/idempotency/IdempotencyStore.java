@@ -40,23 +40,23 @@ public class IdempotencyStore {
      *         optimisation; the unique constraint is the actual arbiter.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Optional<IdempotencyRecord> claim(String key, String operation, String fingerprint) {
-        Optional<IdempotencyRecord> existing = repository.findByIdempotencyKey(key);
+    public Optional<IdempotencyOutcome> claim(String key, String operation, String fingerprint) {
+        Optional<IdempotencyOutcome> existing = repository.findOutcomeByIdempotencyKey(key);
         if (existing.isPresent()) {
-            IdempotencyRecord record = existing.get();
+            IdempotencyOutcome record = existing.get();
 
-            boolean retryable = record.getStatus() == IdempotencyStatus.FAILED
-                    && record.getRequestHash().equals(fingerprint);
+            boolean retryable = record.status() == IdempotencyStatus.FAILED
+                    && record.requestHash().equals(fingerprint);
             if (!retryable) {
-                return Optional.of(record);
+                return existing;
             }
 
-            if (repository.reclaimFailed(record.getId(), LocalDateTime.now()) == 1) {
+            if (repository.reclaimFailed(record.id(), LocalDateTime.now()) == 1) {
                 return Optional.empty();
             }
             // Another retry of the same failed attempt won the UPDATE. Re-read
             // rather than returning the stale FAILED row we started from.
-            return repository.findByIdempotencyKey(key);
+            return repository.findOutcomeByIdempotencyKey(key);
         }
 
         repository.saveAndFlush(IdempotencyRecord.builder()
@@ -69,8 +69,8 @@ public class IdempotencyStore {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-    public Optional<IdempotencyRecord> find(String key) {
-        return repository.findByIdempotencyKey(key);
+    public Optional<IdempotencyOutcome> find(String key) {
+        return repository.findOutcomeByIdempotencyKey(key);
     }
 
     /** The money moved. Store the response so a replay can return it verbatim. */
