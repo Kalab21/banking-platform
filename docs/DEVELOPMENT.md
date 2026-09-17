@@ -95,6 +95,20 @@ Selected routes, all reached through the gateway on `:8080`:
 | `GET` | `/api/fraud` | Fraud alerts (employee/admin) |
 | `POST` | `/api/integrations/wire`, `/ach`, `/swift` | External rails (simulated) |
 
+## Direct service access
+
+The default stack publishes only the console, the gateway, Eureka, Kafka UI and
+the infrastructure containers. The business services listed below are reachable
+only on the Compose network, so application traffic has to pass the gateway.
+
+To reach one directly — a debugger, its Swagger UI, an actuator endpoint:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
+```
+
+That override bypasses gateway authentication, so use it only locally.
+
 ## Service inventory
 
 | Service | Port | Database | Responsibility |
@@ -138,9 +152,13 @@ Statistics, notifications and fraud scoring tolerate lag, so they consume Kafka.
 This keeps the critical path short and prevents a notification outage from blocking
 money movement.
 
-**JWT validated once, at the gateway.** Downstream services trust `X-User-Id` /
-`X-User-Role` rather than re-parsing the token. This requires the service network
-to be non-public. `user-service` runs its own filter because it issues the tokens.
+**JWT validated once, at the gateway.** Downstream services consume `X-User-Id` /
+`X-User-Role` rather than re-parsing the token. The gateway overwrites those
+headers on every routed request, and the services are not reachable from outside
+the Compose network, which is what makes consuming them safe. Services still apply
+their own ownership and role checks; the headers establish *who* is calling, not
+*what* they may do. `user-service` runs its own filter because it issues the
+tokens. See [SECURITY.md](SECURITY.md).
 
 **Fast-failing Kafka producers.** `max.block.ms` is pinned to 1000 ms. The
 60-second default blocks request threads during a broker outage until the service
@@ -151,8 +169,9 @@ appears hung.
 
 ## Roadmap
 
-1. Extend the JUnit 5 / Mockito and Testcontainers pattern to the remaining 9
-   services, and add Spring Security slice tests.
+1. Extend the JUnit 5 / Mockito and Testcontainers pattern to `payment`,
+   `notification`, `integration` and `application`, which have no service-layer
+   tests.
 2. Transactional outbox and saga for cross-service transfers.
 3. Optimistic locking (`@Version`) on `Account` and idempotency keys on
    money-movement endpoints.
