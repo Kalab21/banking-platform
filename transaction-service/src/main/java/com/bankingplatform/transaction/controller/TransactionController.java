@@ -1,18 +1,18 @@
 package com.bankingplatform.transaction.controller;
 
-import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.transaction.dto.*;
+import com.bankingplatform.transaction.idempotency.IdempotencyGuard;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,6 +24,11 @@ import org.springframework.web.bind.annotation.*;
  * owner and authorises the caller against it before the service layer is
  * reached. Authorising first is what keeps a refused request from leaving a
  * debit already applied.
+ *
+ * <p>Each operation also requires an {@code Idempotency-Key}. The ordering
+ * here is deliberate and is part of the security model: ownership is checked
+ * <em>before</em> the key is claimed, so a denied request stores nothing and a
+ * key can never carry a result across principals.
  */
 @RestController
 @RequestMapping("/api/transactions")
@@ -31,38 +36,62 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Transactions")
 public class TransactionController {
 
+    private static final String DEPOSIT = "DEPOSIT";
+    private static final String WITHDRAWAL = "WITHDRAWAL";
+    private static final String TRANSFER = "TRANSFER";
+
+    private static final String KEY_DESCRIPTION =
+            "Opaque client-generated value naming this logical operation. Reuse it to retry the "
+                    + "same operation safely; use a new one for a new operation.";
+
     private final TransactionService transactionService;
     private final AccountOwnershipVerifier ownership;
+    private final IdempotencyGuard idempotency;
 
     @PostMapping("/deposit")
     @Operation(summary = "Deposit money into an account")
-    public ResponseEntity<TransactionResponse> deposit(@Valid @RequestBody DepositRequest request,
-                                                        CallerIdentity caller) {
+    public ResponseEntity<TransactionResponse> deposit(
+            @Valid @RequestBody DepositRequest request,
+            @Parameter(description = KEY_DESCRIPTION)
+            @RequestHeader(name = IdempotencyGuard.HEADER, required = false) String idempotencyKey,
+            CallerIdentity caller) {
         // Restricted to the account holder rather than left open. A real bank
         // accepts third-party deposits, but nothing in this product needs one,
         // and an unrestricted credit endpoint is an obvious way to place funds
         // into an account the depositor does not control.
         ownership.requireCanAccess(caller, request.getAccountId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.deposit(request));
+        return idempotency.execute(idempotencyKey, DEPOSIT, caller, request,
+                TransactionResponse.class, TransactionResponse::getTransactionRef,
+                () -> transactionService.deposit(request));
     }
 
     @PostMapping("/withdraw")
     @Operation(summary = "Withdraw money from an account")
-    public ResponseEntity<TransactionResponse> withdraw(@Valid @RequestBody WithdrawRequest request,
-                                                         CallerIdentity caller) {
+    public ResponseEntity<TransactionResponse> withdraw(
+            @Valid @RequestBody WithdrawRequest request,
+            @Parameter(description = KEY_DESCRIPTION)
+            @RequestHeader(name = IdempotencyGuard.HEADER, required = false) String idempotencyKey,
+            CallerIdentity caller) {
         ownership.requireCanAccess(caller, request.getAccountId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.withdraw(request));
+        return idempotency.execute(idempotencyKey, WITHDRAWAL, caller, request,
+                TransactionResponse.class, TransactionResponse::getTransactionRef,
+                () -> transactionService.withdraw(request));
     }
 
     @PostMapping("/transfer")
     @Operation(summary = "Transfer money between two accounts")
-    public ResponseEntity<TransferResponse> transfer(@Valid @RequestBody TransferRequest request,
-                                                      CallerIdentity caller) {
+    public ResponseEntity<TransferResponse> transfer(
+            @Valid @RequestBody TransferRequest request,
+            @Parameter(description = KEY_DESCRIPTION)
+            @RequestHeader(name = IdempotencyGuard.HEADER, required = false) String idempotencyKey,
+            CallerIdentity caller) {
         // Only the source is owner-checked. Transferring *to* another
         // customer's account is ordinary banking; transferring *from* one is
         // theft, and was previously possible by supplying any fromAccountId.
         ownership.requireCanAccess(caller, request.getFromAccountId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.transfer(request));
+        return idempotency.execute(idempotencyKey, TRANSFER, caller, request,
+                TransferResponse.class, result -> result.getDebit().getTransactionRef(),
+                () -> transactionService.transfer(request));
     }
 
     @GetMapping("/{ref}")

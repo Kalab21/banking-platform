@@ -16,7 +16,9 @@ function Assert($label, $condition, $detail = "") {
 }
 
 function Post($url, $body, $token = $null) {
-    $headers = @{ "Content-Type" = "application/json" }
+    # Money movement requires an Idempotency-Key; the other endpoints ignore it.
+    # A new value per call, because each step here is a distinct operation.
+    $headers = @{ "Content-Type" = "application/json"; "Idempotency-Key" = "e2e-$([guid]::NewGuid())" }
     if ($token) { $headers["Authorization"] = "Bearer $token" }
     try { return Invoke-RestMethod $url -Method POST -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec 30 }
     catch { Write-Host "    POST $url => $($_.Exception.Message)" -ForegroundColor DarkYellow; return $null }

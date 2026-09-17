@@ -32,6 +32,10 @@ ok()  { printf '  [ok] %s\n' "$1"; }
 api() {
   local method="$1" path="$2" body="${3:-}" auth="${4:-}"
   local args=(-s -X "$method" "${GATEWAY}${path}" -H "Content-Type: application/json")
+  # Money movement requires an Idempotency-Key and the other endpoints ignore
+  # it. A fresh value per call is what this script wants: every seeded
+  # transaction is meant to be a distinct one, not a retry of the last.
+  args+=(-H "Idempotency-Key: seed-$(date +%s)-${RANDOM}-${RANDOM}")
   [[ -n "$auth" ]] && args+=(-H "Authorization: Bearer ${auth}")
   [[ -n "$body" ]] && args+=(-d "$body")
   curl "${args[@]}"
