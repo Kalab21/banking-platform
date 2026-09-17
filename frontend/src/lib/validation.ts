@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isUsStateCode } from "@/lib/us-states";
 
 /**
  * Form schemas.
@@ -64,6 +65,164 @@ const personName = (field: string) =>
     .min(1, `Enter your ${field}`)
     .max(50, `${field[0].toUpperCase()}${field.slice(1)} must be 50 characters or fewer`);
 
+/**
+ * Onboarding is a wizard, so its schema is assembled from one schema per step.
+ *
+ * Each step validates on its own when the customer moves forward, and the
+ * combined schema validates again at submit. Splitting them this way means a
+ * step cannot be advanced past with a field the final request would reject, and
+ * there is still only one definition of each rule.
+ */
+
+export const accountStepSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(3, "Username must be at least 3 characters")
+      .max(50, "Username must be 50 characters or fewer"),
+    email: z.string().trim().email("Enter a valid email address"),
+    password,
+    confirmPassword: z.string().min(1, "Re-enter your password"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+/**
+ * Old enough to hold an account, and plausibly alive.
+ *
+ * Both bounds are the ones the backend enforces on RegisterRequest, expressed
+ * against whole years rather than days so that a birthday today counts.
+ */
+const MINIMUM_AGE = 18;
+const MAXIMUM_AGE = 120;
+
+export function ageOn(dateOfBirth: string, today = new Date()): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth.trim());
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const born = new Date(Date.UTC(year, month - 1, day));
+  // Round-tripping catches 31 February and friends, which Date would otherwise
+  // roll forward into March.
+  if (
+    born.getUTCFullYear() !== year ||
+    born.getUTCMonth() !== month - 1 ||
+    born.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  let age = today.getUTCFullYear() - year;
+  const hadBirthday =
+    today.getUTCMonth() > month - 1 ||
+    (today.getUTCMonth() === month - 1 && today.getUTCDate() >= day);
+  if (!hadBirthday) age -= 1;
+  return age;
+}
+
+const dateOfBirth = z
+  .string()
+  .trim()
+  .min(1, "Enter your date of birth")
+  .superRefine((value, ctx) => {
+    const age = ageOn(value);
+    if (age === null) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid date of birth" });
+      return;
+    }
+    if (age < 0) {
+      ctx.addIssue({ code: "custom", message: "Date of birth cannot be in the future" });
+      return;
+    }
+    if (age < MINIMUM_AGE) {
+      ctx.addIssue({
+        code: "custom",
+        message: `You must be at least ${MINIMUM_AGE} to open an account`,
+      });
+      return;
+    }
+    if (age > MAXIMUM_AGE) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid date of birth" });
+    }
+  });
+
+/**
+ * Ten digits after formatting is stripped.
+ *
+ * The field shows `(240) 555-0148` while it is typed; this validates what will
+ * actually be sent, which is the digits.
+ */
+const phone = z
+  .string()
+  .trim()
+  .min(1, "Enter your phone number")
+  .refine((v) => v.replace(/\D/g, "").length === 10, "Enter a 10-digit US phone number");
+
+export const personalStepSchema = z.object({
+  firstName: personName("first name"),
+  middleName: z.string().trim().max(50, "Middle name must be 50 characters or fewer").optional(),
+  lastName: personName("last name"),
+  dateOfBirth,
+  phone,
+});
+
+export const addressStepSchema = z.object({
+  streetAddress: z
+    .string()
+    .trim()
+    .min(1, "Enter your street address")
+    .max(120, "Street address must be 120 characters or fewer"),
+  addressLine2: z
+    .string()
+    .trim()
+    .max(60, "Apartment or unit must be 60 characters or fewer")
+    .optional(),
+  city: z.string().trim().min(1, "Enter your city").max(60, "City must be 60 characters or fewer"),
+  state: z
+    .string()
+    .trim()
+    .min(1, "Select a state")
+    .refine((v) => isUsStateCode(v), "Select a state"),
+  postalCode: z
+    .string()
+    .trim()
+    .min(1, "Enter your ZIP code")
+    .regex(/^\d{5}(-\d{4})?$/, "Enter a valid 5-digit ZIP code"),
+});
+
+/**
+ * The identity step.
+ *
+ * Format only. Nothing here verifies that the number belongs to anyone — there
+ * is no verification provider behind this system — so the copy around this
+ * field says the details were submitted, never that an identity was verified.
+ */
+export const identityStepSchema = z.object({
+  ssn: z
+    .string()
+    .trim()
+    .min(1, "Enter your Social Security number")
+    .refine(
+      (v) => /^\d{9}$/.test(v.replace(/\D/g, "")),
+      "Enter a valid 9-digit Social Security number",
+    ),
+  /*
+   * The checkbox, as a form sends it: "on" when ticked and nothing at all when
+   * not. Declared as a required string with its own message rather than an
+   * optional one, so an absent value and an unticked box produce the same
+   * complaint instead of an absent value quietly passing.
+   */
+  acceptedTerms: z
+    .string({ error: "Accept the terms to continue" })
+    .refine((v) => v === "on", "Accept the terms to continue"),
+});
+
+/** What the registration request carries, which is every step combined. */
 export const registerSchema = z.object({
   username: z
     .string()
@@ -73,20 +232,31 @@ export const registerSchema = z.object({
   email: z.string().trim().email("Enter a valid email address"),
   password,
   firstName: personName("first name"),
+  middleName: z.string().trim().max(50, "Middle name must be 50 characters or fewer").optional(),
   lastName: personName("last name"),
-  phone: z.string().trim().max(20, "Phone number is too long").optional(),
+  dateOfBirth,
+  phone,
+  streetAddress: addressStepSchema.shape.streetAddress,
+  addressLine2: addressStepSchema.shape.addressLine2,
+  city: addressStepSchema.shape.city,
+  state: addressStepSchema.shape.state,
+  postalCode: addressStepSchema.shape.postalCode,
+  ssn: identityStepSchema.shape.ssn,
 });
 
 /**
- * What the browser form validates, which is the API contract plus the
- * confirmation field.
+ * What the browser form validates, which is the API contract plus the two
+ * fields that exist only in the browser.
  *
- * `confirmPassword` exists only to catch a typo before an account is created.
- * It is never sent to the gateway and never stored — `registerSchema` is what
- * the request is built from.
+ * `confirmPassword` catches a typo before an account is created and
+ * `acceptedTerms` is a consent checkbox. Neither is sent to the gateway and
+ * neither is stored — `registerSchema` is what the request is built from.
  */
 export const registerFormSchema = registerSchema
-  .extend({ confirmPassword: z.string().min(1, "Re-enter your password") })
+  .extend({
+    confirmPassword: z.string().min(1, "Re-enter your password"),
+    acceptedTerms: identityStepSchema.shape.acceptedTerms,
+  })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],

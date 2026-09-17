@@ -16,6 +16,9 @@ import {
   statusTone,
 } from "@/components/ui/primitives";
 import { formatDate, formatDateTime, humanise } from "@/lib/format";
+import { formatPhone } from "@/lib/phone";
+import { maskedSsn } from "@/lib/ssn";
+import { stateName } from "@/lib/us-states";
 import { TwoFactorPanel } from "@/features/profile/TwoFactorPanel";
 import { KycSubmitForm } from "@/features/kyc/KycSubmitForm";
 
@@ -60,7 +63,15 @@ export default async function ProfilePage() {
               <div>
                 <dt className="text-xs text-ink-subtle">Name</dt>
                 <dd className="text-ink">
-                  {profile.firstName} {profile.lastName}
+                  {[profile.firstName, profile.middleName, profile.lastName]
+                    .filter(Boolean)
+                    .join(" ")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-subtle">Date of birth</dt>
+                <dd className="text-ink">
+                  {profile.dateOfBirth ? formatDate(profile.dateOfBirth) : "—"}
                 </dd>
               </div>
               <div>
@@ -73,7 +84,31 @@ export default async function ProfilePage() {
               </div>
               <div>
                 <dt className="text-xs text-ink-subtle">Phone</dt>
-                <dd className="text-ink">{profile.phone || "—"}</dd>
+                <dd className="text-ink">
+                  {profile.phone ? formatPhone(profile.phone) : "—"}
+                </dd>
+              </div>
+              {/*
+               * The address the customer gave at onboarding, read back from the
+               * columns it was written to. This is the check on whether asking
+               * for it was honest: a field collected by a form and not shown
+               * again was decoration.
+               */}
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-ink-subtle">Home address</dt>
+                <dd className="text-ink">
+                  {profile.streetAddress ? (
+                    <>
+                      {profile.streetAddress}
+                      {profile.addressLine2 ? `, ${profile.addressLine2}` : ""}
+                      <br />
+                      {[profile.city, stateName(profile.state)].filter(Boolean).join(", ")}{" "}
+                      {profile.postalCode}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-ink-subtle">Role</dt>
@@ -93,6 +128,25 @@ export default async function ProfilePage() {
                 <dt className="text-xs text-ink-subtle">KYC</dt>
                 <dd>
                   <Badge tone={statusTone(profile.kycStatus)}>{humanise(profile.kycStatus)}</Badge>
+                </dd>
+              </div>
+              {/*
+               * Four digits, because four digits is all that was kept. The
+               * status says the details were submitted; it does not say they
+               * were verified, because nothing has verified them.
+               */}
+              <div>
+                <dt className="text-xs text-ink-subtle">Social Security number</dt>
+                <dd className="tabular text-ink">
+                  {profile.ssnLast4 ? maskedSsn(profile.ssnLast4) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-subtle">Identity</dt>
+                <dd className="text-ink">
+                  {profile.identityStatus === "SUBMITTED"
+                    ? "Submitted — verification pending"
+                    : "Not submitted"}
                 </dd>
               </div>
             </dl>

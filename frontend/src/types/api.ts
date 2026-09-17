@@ -44,8 +44,31 @@ export interface UserProfile {
   username: string;
   email: string;
   firstName: string;
+  middleName: string | null;
   lastName: string;
   phone: string | null;
+
+  /*
+   * Captured during onboarding. Null on accounts created before onboarding
+   * existed, which is why these are nullable rather than required.
+   */
+  dateOfBirth: string | null;
+  streetAddress: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+
+  /**
+   * The last four digits of the Social Security number on file. The full number
+   * is not stored by the backend, so there is no wider field to ask for.
+   */
+  ssnLast4: string | null;
+  /**
+   * `SUBMITTED` once identity details are given. There is no verification
+   * provider behind this system, so this never reads "verified".
+   */
+  identityStatus: string | null;
   role: Role;
   enabled: boolean;
   creditScore: number;

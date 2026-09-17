@@ -40,6 +40,28 @@ const SIZES: Record<ButtonSize, string> = {
   lg: "min-h-12 px-5 text-[0.9375rem]",
 };
 
+/**
+ * The button's own classes, for the cases where the control has to be a link.
+ *
+ * "Go to your dashboard" navigates, so it is an anchor — rendering it as a
+ * button would take away middle-click, open-in-new-tab and the status bar. It
+ * should still look like the primary action, so the styling is shared rather
+ * than copied.
+ */
+export function buttonStyles(
+  variant: ButtonVariant = "primary",
+  size: ButtonSize = "md",
+  className?: string,
+) {
+  return cn(
+    "relative inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)]",
+    "font-medium transition-colors duration-150 disabled:cursor-not-allowed",
+    VARIANTS[variant],
+    SIZES[size],
+    className,
+  );
+}
+
 export function Button({
   children,
   variant = "primary",

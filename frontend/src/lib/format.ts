@@ -42,6 +42,13 @@ export function formatDate(iso: string | null | undefined): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    /*
+     * A date with no time — a date of birth, say — is parsed as UTC midnight,
+     * and formatting that in a timezone behind UTC shows the day before. A
+     * birthday is a calendar date rather than an instant, so it is read back in
+     * the calendar it was written in.
+     */
+    timeZone: /^\d{4}-\d{2}-\d{2}$/.test(iso) ? "UTC" : undefined,
   }).format(d);
 }
 

@@ -24,17 +24,30 @@ export interface AuthFormState {
   twoFactorRequired?: boolean;
   /** Carried across the challenge step so the user does not retype it. */
   username?: string;
+  /** The account was created and a session issued; the wizard shows its last step. */
+  completed?: boolean;
   /**
    * What the customer already typed, echoed back so a rejected submission does
-   * not empty the form. Passwords are never included: re-rendering one would
-   * put it back into the HTML for no benefit.
+   * not empty the wizard.
+   *
+   * Passwords and the Social Security number are never included. Re-rendering a
+   * password puts it back into the HTML for no benefit, and the number is not
+   * ours to hand back — the server keeps four digits of it and discards the
+   * rest, so there is nothing to echo even if we wanted to.
    */
   values?: {
     firstName?: string;
+    middleName?: string;
     lastName?: string;
     email?: string;
     phone?: string;
     username?: string;
+    dateOfBirth?: string;
+    streetAddress?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
   };
 }
 
@@ -99,38 +112,84 @@ export async function registerAction(
   _prev: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
-  // Phone is formatted for reading as it is typed; what gets stored is digits.
-  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  const text = (name: string) => String(formData.get(name) ?? "").trim();
 
+  // Phone is formatted for reading as it is typed; what gets stored is digits.
+  const phone = normalizePhone(text("phone"));
+
+  /*
+   * Echoed back on a rejected submission so the customer does not refill five
+   * steps because a username was taken. The password and the Social Security
+   * number are deliberately absent from this object.
+   */
   const values = {
-    firstName: String(formData.get("firstName") ?? ""),
-    lastName: String(formData.get("lastName") ?? ""),
-    email: String(formData.get("email") ?? ""),
-    phone: String(formData.get("phone") ?? ""),
-    username: String(formData.get("username") ?? ""),
+    firstName: text("firstName"),
+    middleName: text("middleName"),
+    lastName: text("lastName"),
+    email: text("email"),
+    phone: text("phone"),
+    username: text("username"),
+    dateOfBirth: text("dateOfBirth"),
+    streetAddress: text("streetAddress"),
+    addressLine2: text("addressLine2"),
+    city: text("city"),
+    state: text("state"),
+    postalCode: text("postalCode"),
   };
 
   const parsed = registerFormSchema.safeParse({
-    username: formData.get("username"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-    confirmPassword: formData.get("confirmPassword"),
-    firstName: formData.get("firstName"),
-    lastName: formData.get("lastName"),
-    phone: phone || undefined,
+    username: text("username"),
+    email: text("email"),
+    password: String(formData.get("password") ?? ""),
+    confirmPassword: String(formData.get("confirmPassword") ?? ""),
+    firstName: text("firstName"),
+    middleName: text("middleName") || undefined,
+    lastName: text("lastName"),
+    dateOfBirth: text("dateOfBirth"),
+    phone,
+    streetAddress: text("streetAddress"),
+    addressLine2: text("addressLine2") || undefined,
+    city: text("city"),
+    state: text("state"),
+    postalCode: text("postalCode"),
+    ssn: text("ssn"),
+    acceptedTerms: formData.get("acceptedTerms") ? "on" : undefined,
   });
 
   if (!parsed.success) return { fields: fieldErrors(parsed.error), values };
 
   try {
-    // confirmPassword is a browser-side check only. It is dropped here so it
-    // never reaches the gateway and is never stored.
-    const { confirmPassword: _confirmPassword, ...registration } = parsed.data;
-    const auth = await apiRegister(registration);
+    /*
+     * confirmPassword and acceptedTerms are browser-side concerns and are
+     * dropped here so neither reaches the gateway. The Social Security number
+     * does go, once: the server checks its shape, keeps the last four digits
+     * and discards the rest. It is not written to this module's state, not
+     * logged, and not returned.
+     */
+    const {
+      confirmPassword: _confirmPassword,
+      acceptedTerms: _acceptedTerms,
+      ...registration
+    } = parsed.data;
+
+    const auth = await apiRegister({
+      ...registration,
+      phone,
+      state: registration.state.toUpperCase(),
+      ssn: registration.ssn.replace(/\D/g, ""),
+    });
+
     if (!auth.token) {
       return { error: "Account created, but no session was issued. Please sign in." };
     }
     await setSessionCookie(auth.token, auth.expiresIn);
+
+    /*
+     * No redirect. The wizard has one more step to show — what was submitted,
+     * what happens next, and where to go from here — and a redirect would
+     * replace that with a dashboard the customer did not ask for yet.
+     */
+    return { completed: true, username: registration.username };
   } catch (error) {
     if (error instanceof ApiError) {
       if (error.status === 409) {
@@ -144,8 +203,6 @@ export async function registerAction(
     if (error instanceof NetworkError) return { error: error.userMessage, values };
     return { error: "Could not create your account. Please try again.", values };
   }
-
-  redirect("/dashboard");
 }
 
 export async function logoutAction(): Promise<void> {
