@@ -22,13 +22,13 @@ bearer token.
 | **Messaging** | Apache Kafka — 8 topics driving statistics, notifications and fraud scoring |
 | **Data** | PostgreSQL, database-per-service, 24 Flyway migrations, `ddl-auto: validate` |
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
-| **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, role-based access |
+| **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 187 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 309 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
-**Scale:** 13 backend services plus a Next.js console, 300 Java source files,
-16 REST controllers, 93 endpoints, 8 Kafka topics, 24 Flyway migrations.
+**Scale:** 13 backend services plus a Next.js console, 312 Java source files,
+17 REST controllers, 94 endpoints, 8 Kafka topics, 24 Flyway migrations.
 
 ---
 
@@ -55,8 +55,8 @@ Captured automatically from the running seeded demo stack using Playwright.
 Independent services per business domain, each owning its own PostgreSQL database.
 Asynchronous propagation over Kafka, so a transaction can update statistics, fire
 notifications and trigger fraud scoring without the transaction path depending on
-any of them. A single authenticated entry point validates JWTs once and forwards
-trusted identity headers downstream. Every state-changing operation writes an
+any of them. A single authenticated entry point validates JWTs once and forwards the
+identity it derived downstream, replacing anything the client sent. Every state-changing operation writes an
 `audit_log` row alongside its domain write, inside the same transaction.
 
 ```mermaid
@@ -200,8 +200,11 @@ routing to 11 downstream services; JWT validation filter injecting `X-User-Id` /
 | Authentication | JWT bearer tokens issued by `user-service`, signed HS256 via JJWT |
 | Password storage | BCrypt (`BCryptPasswordEncoder`) |
 | Two-factor | TOTP (RFC 6238) enforced at sign-in: a correct password alone issues no token when 2FA is enabled |
-| Edge enforcement | Gateway `GlobalFilter` validates the JWT before any route is reached |
-| Authorization | `@EnableMethodSecurity` with role checks; KYC review is employee/admin only |
+| Edge enforcement | Gateway `GlobalFilter` validates the JWT before any route is reached, then **overwrites** any client-supplied `X-User-Id` / `X-Username` / `X-User-Role` with values derived from the token |
+| Authorization | Services authorise each user-facing request against the resource's owner, not just the presence of a token. Customers reach only their own accounts, transactions, profile, KYC and statistics; employees and admins may act across customers where a workflow needs it |
+| Privileged operations | Account freeze/unfreeze, overdraft limits and platform-wide statistics are staff-only. KYC review and credit-score updates keep their `@PreAuthorize` role checks |
+| Internal operations | Direct balance mutation is service-to-service only, on `/internal/**`, which the gateway does not route |
+| Network boundary | Only the console and the gateway are published; the business services are reachable only on the Compose network, so the gateway cannot be bypassed |
 | Session model | Stateless (`SessionCreationPolicy.STATELESS`); CSRF disabled, appropriate for a token-authenticated API |
 | Input validation | Jakarta Bean Validation on request DTOs |
 | Error hygiene | `@RestControllerAdvice` in all 11 services with controllers; malformed bodies and bad parameter types return 400, unsupported methods 405; the catch-all logs server-side and returns a generic message |
@@ -218,6 +221,18 @@ JavaScript cannot read the token, which closes the XSS token-theft path that
 `localStorage` leaves open, and because the browser never calls the gateway
 directly no CORS configuration was needed. Role-based navigation hides staff tools,
 but authorization is enforced by the gateway and services, not the UI.
+
+**Authorization.** The gateway authenticates the JWT and derives the caller's
+identity, overwriting any `X-User-*` headers the client supplied. Each service
+then authorises the request against the resource's owner: a valid token is not
+permission to read or change a particular account, profile or transaction. A
+`userId` in a path or request body is treated as caller input, never as proof of
+ownership. Staff roles may act across customers where a workflow requires it;
+account freeze, overdraft limits and platform-wide statistics are staff-only.
+
+Direct balance mutation is service-to-service only and lives on `/internal/**`,
+which the gateway does not route. The business services publish no host ports, so
+the gateway cannot be bypassed by calling a service directly.
 
 **Reliability controls.** `@Transactional` boundaries on state-changing operations
 so the domain write and its audit row commit together; Flyway migrations with
@@ -236,6 +251,9 @@ rejections are excluded from the failure rate, so repeated insufficient-funds
 responses do not open the breaker. When the breaker is open the caller receives
 `503` with `Retry-After`; a timeout returns `504` and reports the outcome as
 unknown, since the debit may have been applied.
+
+The full model — how identity is derived, the rule table, the internal boundary
+and the remaining hardening candidates — is in [docs/SECURITY.md](docs/SECURITY.md).
 
 **Security automation.** CodeQL analyses Java and TypeScript on every push, pull
 request and weekly. Trivy scans the dependency tree, Dockerfiles and Compose files,
@@ -277,18 +295,20 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**187 automated tests run in CI** — 104 backend, 70 frontend unit/component and 13
+**309 automated tests run in CI** — 226 backend, 70 frontend unit/component and 13
 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
 they need all 13 services up and are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 98 unit + 6 integration
+mvn -B --no-transfer-progress clean verify   # backend: 220 unit + 6 integration
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
 
 Coverage is deep on balances and loan arithmetic, plus card masking, the 2FA gate,
-the API error contract, request correlation and the circuit-breaker policy. The
+the API error contract, request correlation, the circuit-breaker policy and
+resource-ownership authorization across accounts, money movement, profiles, KYC
+and statistics. The
 integration test runs `@DataJpaTest` against a real PostgreSQL 16 container, so
 entity/migration drift fails the build.
 
@@ -317,6 +337,14 @@ docker compose ps           # wait until healthy
 | API gateway | <http://localhost:8080> |
 | Eureka dashboard | <http://localhost:8761> |
 | Kafka UI | <http://localhost:8095> |
+
+The business services publish no host ports: application traffic goes through the
+gateway, which is what makes its authentication unavoidable. To reach one service
+directly while developing:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
+```
 
 Register at <http://localhost:3000/register>, or seed a populated demo customer:
 
@@ -349,8 +377,17 @@ These are the gaps between this project and a production ledger.
 - **The live Playwright suite does not run on every CI push.** Starting 13 services
   per push is not a sensible trade, so only the offline suite is wired into CI. The
   9 live scenarios are automated but triggered on demand.
-- **Test coverage is deliberately narrow.** The 9 services without service-layer
-  tests have none, and there are no Spring Security slice tests.
+- **Test coverage is uneven.** Accounts, loans, cards, 2FA, transactions,
+  statistics and the authorization rules are covered; `payment`, `notification`,
+  `integration` and `application` services have no service-layer tests, and only
+  `account-service` has an integration test against a real database.
+- **Authorization is enforced per request, not per field.** A staff role grants
+  access to a customer's whole record rather than to specific fields, and there
+  is no audit of which staff member viewed which customer.
+- **Service-to-service calls are not authenticated.** The `/internal` endpoints
+  rely on network isolation — no host ports and no gateway route — rather than
+  mutual TLS or a service credential. That is sound for a single Compose network
+  and would not be sufficient across a shared cluster.
 - **External rails are simulated.** The wire / ACH / SWIFT and FX endpoints model
   request, response and persistence shape only. No banking network is contacted.
 

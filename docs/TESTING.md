@@ -1,6 +1,6 @@
 # Testing
 
-187 automated tests run in CI: 104 backend, 70 frontend unit/component and 13
+309 automated tests run in CI: 226 backend, 70 frontend unit/component and 13
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -15,6 +15,14 @@ are not counted in the CI total.
 | Unit | JUnit 5, AssertJ | `RequestIdPropagation` — id minted, preserved, sanitised, forwarded | 18 passing |
 | Unit | JUnit 5, Resilience4j | `AccountServiceCircuitBreaker` — breaker policy and status mapping | 9 passing |
 | Web slice | JUnit 5, MockMvc | `ApiErrorContract` — invalid input returns 4xx, errors expose no internals | 5 passing |
+| Authorization | JUnit 5, MockMvc | `AccountAuthorization` — account ownership, staff-only operations, fail-closed | 19 passing |
+| Authorization | JUnit 5, MockMvc | `BalanceMutationBoundary` — public path removed, internal path intact | 6 passing |
+| Authorization | JUnit 5, MockMvc | `TransactionAuthorization` — money movement and transaction visibility | 13 passing |
+| Authorization | JUnit 5, MockMvc | `UserKycAuthorization` — profile, KYC and username-lookup ownership | 12 passing |
+| Authorization | JUnit 5, MockMvc | `StatisticsAuthorization` — per-user ownership, platform figures staff-only | 10 passing |
+| Authorization | JUnit 5, AssertJ | `AccessGuard` and `OwnershipMatrix` — the rules themselves, all four principals | 45 passing |
+| Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 passing |
+| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | 6 passing |
 | Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components | 70 passing |
 | End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout | 13 passing, in CI |
@@ -24,7 +32,7 @@ are not counted in the CI total.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 98 unit + 6 integration = 104
+mvn -B --no-transfer-progress clean verify   # backend: 220 unit + 6 integration = 226
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -108,10 +116,26 @@ docker compose up -d && ./scripts/seed-demo.sh
 cd frontend && E2E_USERNAME=<printed> E2E_PASSWORD=<printed> npm run test:e2e:live
 ```
 
+## Authorization tests
+
+The authorization suites are written at the HTTP boundary rather than against the
+service layer, because the control being tested is the boundary: that a denial
+returns 403, and that the service is never reached. Each negative case asserts
+both.
+
+The ownership matrix covers customer A, customer B, an employee and an admin
+against resource access, staff-only, admin-only, acting-for-another-user and
+self-only rules. `GatewayIdentitySpoofing` covers the property the rest depends
+on: a client sending `X-User-Id` and `X-User-Role` alongside a valid token has
+those values replaced with the ones derived from the token.
+
 ## Coverage boundary
 
 Coverage is deep on the services holding the most consequential arithmetic —
 balances and amortization — plus card masking, the 2FA gate, the shared API error
-contract, request correlation and the circuit-breaker policy. The remaining 9
-services have no service-layer tests, there is one MockMvc slice and no Spring
-Security slice tests, and only `account-service` has an integration test.
+contract, request correlation, the circuit-breaker policy and resource-ownership
+authorization across accounts, money movement, profiles, KYC and statistics.
+
+`payment`, `notification`, `integration` and `application` services still have no
+service-layer tests, and only `account-service` has an integration test against a
+real database.
