@@ -139,7 +139,14 @@ management:
       endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
 jwt:
-  secret: ${JWT_SECRET:banking-platform-secret-key-change-in-production}
+  # No default. A committed fallback is a publicly known signing key, and any
+  # deployment that kept it would accept tokens forged by anyone who has read
+  # this repository. The service fails to start without JWT_SECRET, which is
+  # the intended behaviour: refusing to run is safer than running forgeable.
+  #
+  # The gateway and user-service must be given the *same* value — one issues
+  # tokens, the other verifies them.
+  secret: ${JWT_SECRET}
 
 logging:
   pattern:

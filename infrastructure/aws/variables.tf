@@ -146,8 +146,15 @@ variable "ecs_desired_count" {
 # ── Secrets (sensitive) ───────────────────────────────────────────────────────
 
 variable "jwt_secret" {
-  description = "JWT signing secret — override via TF_VAR_jwt_secret env var or tfvars"
+  description = "JWT signing secret. Required — supply via TF_VAR_jwt_secret or a tfvars file; never commit a value."
   type        = string
   sensitive   = true
-  default     = "banking-platform-secret-key-change-in-production"
+  # Deliberately no default. The value is written to Secrets Manager, so a
+  # default here would publish a known signing key to every environment that
+  # did not override it.
+
+  validation {
+    condition     = length(var.jwt_secret) >= 32
+    error_message = "jwt_secret must be at least 32 characters; HMAC-SHA256 requires a 256-bit key."
+  }
 }
