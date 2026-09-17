@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 346 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 359 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -315,12 +315,12 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**346 automated tests run in CI** — 263 backend, 70 frontend unit/component and 13
+**359 automated tests run in CI** — 276 backend, 70 frontend unit/component and 13
 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
 they need all 13 services up and are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 245 unit + 18 integration
+mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 18 integration
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```

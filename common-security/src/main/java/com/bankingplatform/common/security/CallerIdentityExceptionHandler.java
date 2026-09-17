@@ -52,38 +52,13 @@ public class CallerIdentityExceptionHandler {
      *
      * <p>A path containing CR or LF would otherwise let a caller append
      * fabricated entries to the log — the same forgery this platform already
-     * guards against on the correlation-id header.
-     *
-     * <p>Built as an allowlist of the characters RFC 3986 permits in a path
-     * rather than a denylist of control characters. A denylist of
-     * {@code \p{Cntrl}} would still pass through U+2028 and U+2029, which some
-     * log viewers and consoles render as line breaks. The result is also
-     * bounded, so a very long URL cannot swamp the line.
+     * guards against on the correlation-id header. {@link LogSafe} holds the
+     * rule, so the same alphabet and the same bound apply wherever an untrusted
+     * value is logged rather than being restated per call site.
      */
     private static String safePath(HttpServletRequest request) {
         String path = request.getRequestURI();
-        if (path == null) {
-            return "(unknown)";
-        }
-
-        int limit = Math.min(path.length(), MAX_LOGGED_PATH);
-        StringBuilder safe = new StringBuilder(limit);
-        for (int i = 0; i < limit; i++) {
-            char c = path.charAt(i);
-            safe.append(isPathSafe(c) ? c : '_');
-        }
-        if (path.length() > MAX_LOGGED_PATH) {
-            safe.append("...");
-        }
-        return safe.toString();
-    }
-
-    /** The unreserved and path characters of RFC 3986; everything else is replaced. */
-    private static boolean isPathSafe(char c) {
-        return (c >= 'a' && c <= 'z')
-                || (c >= 'A' && c <= 'Z')
-                || (c >= '0' && c <= '9')
-                || "/-._~:@!$&'()*+,;=%".indexOf(c) >= 0;
+        return path == null ? "(unknown)" : LogSafe.value(path, MAX_LOGGED_PATH);
     }
 
     private ResponseEntity<Map<String, Object>> body(HttpStatus status, String message, HttpServletRequest request) {
