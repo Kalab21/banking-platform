@@ -9,16 +9,7 @@ export default async function LoginPage() {
   // Already signed in — no reason to show the form again.
   if (await getSession()) redirect("/dashboard");
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Sign in</h1>
-        <p className="mt-1.5 text-sm text-ink-muted">
-          Access balances, payments, lending and statements.
-        </p>
-      </div>
-
-      <LoginForm />
-    </div>
-  );
+  // The heading lives in the form: it changes when the second factor is
+  // requested, and the page has no way to know that has happened.
+  return <LoginForm />;
 }
