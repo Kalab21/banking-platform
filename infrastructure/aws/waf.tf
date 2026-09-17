@@ -14,7 +14,9 @@ resource "aws_wafv2_web_acl" "banking" {
     name     = "AWSManagedRulesCommonRuleSet"
     priority = 1
 
-    override_action { none {} }
+    override_action {
+      none {}
+    }
 
     statement {
       managed_rule_group_statement {
@@ -35,7 +37,9 @@ resource "aws_wafv2_web_acl" "banking" {
     name     = "AWSManagedRulesSQLiRuleSet"
     priority = 2
 
-    override_action { none {} }
+    override_action {
+      none {}
+    }
 
     statement {
       managed_rule_group_statement {
@@ -56,7 +60,9 @@ resource "aws_wafv2_web_acl" "banking" {
     name     = "AWSManagedRulesKnownBadInputsRuleSet"
     priority = 3
 
-    override_action { none {} }
+    override_action {
+      none {}
+    }
 
     statement {
       managed_rule_group_statement {
@@ -78,7 +84,9 @@ resource "aws_wafv2_web_acl" "banking" {
     name     = "RateLimitAuthEndpoints"
     priority = 4
 
-    action { block {} }
+    action {
+      block {}
+    }
 
     statement {
       rate_based_statement {
@@ -113,7 +121,9 @@ resource "aws_wafv2_web_acl" "banking" {
     name     = "GeoBlockSanctionedCountries"
     priority = 5
 
-    action { block {} }
+    action {
+      block {}
+    }
 
     statement {
       geo_match_statement {

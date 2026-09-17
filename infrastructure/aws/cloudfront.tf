@@ -1,10 +1,10 @@
 resource "aws_cloudfront_distribution" "main" {
-  enabled             = true
-  is_ipv6_enabled     = true
-  comment             = "Banking Platform API CDN — ${var.environment}"
-  price_class         = "PriceClass_100"  # US, Canada, Europe edge locations
-  aliases             = ["${var.api_subdomain}.${var.domain_name}"]
-  web_acl_id          = aws_wafv2_web_acl.banking.arn
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "Banking Platform API CDN — ${var.environment}"
+  price_class     = "PriceClass_100" # US, Canada, Europe edge locations
+  aliases         = ["${var.api_subdomain}.${var.domain_name}"]
+  web_acl_id      = aws_wafv2_web_acl.banking.arn
 
   # ── Origin: ALB ────────────────────────────────────────────────────────────
 

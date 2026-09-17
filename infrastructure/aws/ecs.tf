@@ -59,159 +59,159 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 
 locals {
   # RDS endpoint without port suffix
-  rds_host = aws_db_instance.main.address
-  redis_host = aws_elasticache_cluster.main.cache_nodes[0].address
+  rds_host    = aws_db_instance.main.address
+  redis_host  = aws_elasticache_cluster.main.cache_nodes[0].address
   msk_brokers = aws_msk_cluster.main.bootstrap_brokers
-  eureka_url = "http://eureka.banking.local:8761/eureka/"
+  eureka_url  = "http://eureka.banking.local:8761/eureka/"
 
   # Common environment variables injected into every service
   common_env = [
     { name = "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE", value = local.eureka_url },
-    { name = "EUREKA_INSTANCE_PREFER_IP_ADDRESS",    value = "true" },
+    { name = "EUREKA_INSTANCE_PREFER_IP_ADDRESS", value = "true" },
   ]
 
   # Per-service configuration
   service_configs = {
     eureka-server = {
-      port        = 8761
-      db          = false
-      kafka       = false
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = true
-      extra_env   = []
+      port      = 8761
+      db        = false
+      kafka     = false
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = true
+      extra_env = []
     }
     api-gateway = {
-      port        = 8080
-      db          = false
-      kafka       = false
-      redis       = true
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8080
+      db        = false
+      kafka     = false
+      redis     = true
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     user-service = {
-      port        = 8081
-      db          = true
-      db_name     = "user_db"
-      kafka       = false
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8081
+      db        = true
+      db_name   = "user_db"
+      kafka     = false
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     application-service = {
-      port        = 8082
-      db          = true
-      db_name     = "application_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8082
+      db        = true
+      db_name   = "application_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     account-service = {
-      port        = 8083
-      db          = true
-      db_name     = "account_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8083
+      db        = true
+      db_name   = "account_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     transaction-service = {
-      port        = 8084
-      db          = true
-      db_name     = "transaction_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8084
+      db        = true
+      db_name   = "transaction_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     payment-service = {
-      port        = 8085
-      db          = true
-      db_name     = "payment_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8085
+      db        = true
+      db_name   = "payment_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     statistics-service = {
-      port        = 8086
-      db          = true
-      db_name     = "statistics_db"
-      kafka       = true
-      redis       = true
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8086
+      db        = true
+      db_name   = "statistics_db"
+      kafka     = true
+      redis     = true
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     notification-service = {
-      port        = 8087
-      db          = true
-      db_name     = "notification_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8087
+      db        = true
+      db_name   = "notification_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     fraud-detection-service = {
-      port        = 8088
-      db          = true
-      db_name     = "fraud_db"
-      kafka       = true
-      redis       = true
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8088
+      db        = true
+      db_name   = "fraud_db"
+      kafka     = true
+      redis     = true
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     credit-card-service = {
-      port        = 8089
-      db          = true
-      db_name     = "credit_card_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8089
+      db        = true
+      db_name   = "credit_card_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     loan-service = {
-      port        = 8090
-      db          = true
-      db_name     = "loan_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8090
+      db        = true
+      db_name   = "loan_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
     integration-service = {
-      port        = 8091
-      db          = true
-      db_name     = "integration_db"
-      kafka       = true
-      redis       = false
-      cpu         = 512
-      memory      = 1024
-      cloud_map   = false
-      extra_env   = []
+      port      = 8091
+      db        = true
+      db_name   = "integration_db"
+      kafka     = true
+      redis     = false
+      cpu       = 512
+      memory    = 1024
+      cloud_map = false
+      extra_env = []
     }
   }
 }
@@ -242,10 +242,10 @@ resource "aws_ecs_task_definition" "services" {
       environment = concat(
         local.common_env,
         each.value.db ? [
-          { name = "SPRING_DATASOURCE_URL",      value = "jdbc:postgresql://${local.rds_host}:5432/${each.value.db_name}" },
-          { name = "SPRING_DATASOURCE_USERNAME",  value = var.db_username },
+          { name = "SPRING_DATASOURCE_URL", value = "jdbc:postgresql://${local.rds_host}:5432/${each.value.db_name}" },
+          { name = "SPRING_DATASOURCE_USERNAME", value = var.db_username },
           { name = "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE", value = "5" },
-          { name = "SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE",      value = "2" },
+          { name = "SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE", value = "2" },
         ] : [],
         each.value.kafka ? [
           { name = "SPRING_KAFKA_BOOTSTRAP_SERVERS", value = local.msk_brokers },
@@ -275,7 +275,7 @@ resource "aws_ecs_task_definition" "services" {
         }
       }
 
-      essential   = true
+      essential = true
       healthCheck = {
         command     = ["CMD-SHELL", "wget -qO- http://localhost:${each.value.port}/actuator/health || exit 1"]
         interval    = 30

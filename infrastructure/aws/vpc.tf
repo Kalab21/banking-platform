@@ -18,10 +18,10 @@ resource "aws_internet_gateway" "main" {
 # ── Public Subnets (ALB) ──────────────────────────────────────────────────────
 
 resource "aws_subnet" "public" {
-  count                   = length(var.public_subnet_cidrs)
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
+  count             = length(var.public_subnet_cidrs)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.public_subnet_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
 
   # Only the ALB lives in these subnets, and an ALB gets its own public
   # addresses. Auto-assigning one to anything else launched here would put a
