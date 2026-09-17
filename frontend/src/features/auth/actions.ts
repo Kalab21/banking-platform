@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import { login as apiLogin, register as apiRegister } from "@/lib/api/banking";
 import { clearSessionCookie, setSessionCookie } from "@/lib/session";
-import { fieldErrors, loginSchema, registerSchema } from "@/lib/validation";
+import { normalizePhone } from "@/lib/phone";
+import { fieldErrors, loginSchema, registerFormSchema } from "@/lib/validation";
 
 /**
  * Server actions for authentication.
@@ -23,6 +24,18 @@ export interface AuthFormState {
   twoFactorRequired?: boolean;
   /** Carried across the challenge step so the user does not retype it. */
   username?: string;
+  /**
+   * What the customer already typed, echoed back so a rejected submission does
+   * not empty the form. Passwords are never included: re-rendering one would
+   * put it back into the HTML for no benefit.
+   */
+  values?: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    username?: string;
+  };
 }
 
 export async function loginAction(
@@ -64,12 +77,19 @@ export async function loginAction(
               username: parsed.data.username,
               error: "That authentication code was not accepted. Try the current code.",
             }
-          : { error: "Incorrect username or password." };
+          : {
+              // Deliberately the same message whether the username exists or
+              // not, and whichever of the two was wrong.
+              error: "Incorrect username or password.",
+              username: parsed.data.username,
+            };
       }
-      return { error: error.userMessage };
+      return { error: error.userMessage, username: parsed.data.username };
     }
-    if (error instanceof NetworkError) return { error: error.userMessage };
-    return { error: "Could not sign you in. Please try again." };
+    if (error instanceof NetworkError) {
+      return { error: error.userMessage, username: parsed.data.username };
+    }
+    return { error: "Could not sign you in. Please try again.", username: parsed.data.username };
   }
 
   redirect("/dashboard");
@@ -79,30 +99,50 @@ export async function registerAction(
   _prev: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
-  const parsed = registerSchema.safeParse({
+  // Phone is formatted for reading as it is typed; what gets stored is digits.
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+
+  const values = {
+    firstName: String(formData.get("firstName") ?? ""),
+    lastName: String(formData.get("lastName") ?? ""),
+    email: String(formData.get("email") ?? ""),
+    phone: String(formData.get("phone") ?? ""),
+    username: String(formData.get("username") ?? ""),
+  };
+
+  const parsed = registerFormSchema.safeParse({
     username: formData.get("username"),
     email: formData.get("email"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
-    phone: formData.get("phone") || undefined,
+    phone: phone || undefined,
   });
 
-  if (!parsed.success) return { fields: fieldErrors(parsed.error) };
+  if (!parsed.success) return { fields: fieldErrors(parsed.error), values };
 
   try {
-    const auth = await apiRegister(parsed.data);
-    if (!auth.token) return { error: "Account created, but no session was issued. Please sign in." };
+    // confirmPassword is a browser-side check only. It is dropped here so it
+    // never reaches the gateway and is never stored.
+    const { confirmPassword: _confirmPassword, ...registration } = parsed.data;
+    const auth = await apiRegister(registration);
+    if (!auth.token) {
+      return { error: "Account created, but no session was issued. Please sign in." };
+    }
     await setSessionCookie(auth.token, auth.expiresIn);
   } catch (error) {
     if (error instanceof ApiError) {
       if (error.status === 409) {
-        return { error: error.userMessage || "That username or email is already registered." };
+        return {
+          error: error.userMessage || "That username or email is already registered.",
+          values,
+        };
       }
-      return { error: error.userMessage };
+      return { error: error.userMessage, values };
     }
-    if (error instanceof NetworkError) return { error: error.userMessage };
-    return { error: "Could not create your account. Please try again." };
+    if (error instanceof NetworkError) return { error: error.userMessage, values };
+    return { error: "Could not create your account. Please try again.", values };
   }
 
   redirect("/dashboard");

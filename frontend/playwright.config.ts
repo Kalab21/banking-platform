@@ -40,6 +40,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
     {
+      // Portfolio captures. Reviewed by eye, so kept out of the CI projects and
+      // run deliberately: `npx playwright test --project=screenshots`.
+      name: "screenshots",
+      testMatch: /auth-screenshots\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+    },
+    {
       name: "live",
       testMatch: /.*\.live\.spec\.ts/,
       // A real 13-service stack answers more slowly than a stub, especially on

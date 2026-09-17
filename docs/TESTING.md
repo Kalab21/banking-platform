@@ -1,6 +1,6 @@
 # Testing
 
-402 automated tests run in CI: 319 backend, 70 frontend unit/component and 13
+432 automated tests run in CI: 330 backend, 83 frontend unit/component and 19
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -29,21 +29,22 @@ are not counted in the CI total.
 | Log integrity | JUnit 5, AssertJ | `LogSafe` — an untrusted value cannot end a log line and start another | 13 passing |
 | Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 passing |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 passing |
+| Validation | JUnit 5, Jakarta Validation | `RegisterPasswordPolicy` — the rule the console displays is the rule the server enforces | 11 passing |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | 6 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrency` — concurrent debits serialise, no lost update | 4 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovement` — concurrent duplicates, replay, key release | 8 passing |
-| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components | 70 passing |
-| End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout | 13 passing, in CI |
+| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting | 83 passing |
+| End-to-end | Playwright (offline) | Route protection, session cookie, auth form validation, password visibility, responsive layout down to 320px | 19 passing, in CI |
 | End-to-end | Playwright (live) | Sign-in, accounts, transfer, loan schedule, card masking, staff access, sign-out | 9, on demand |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack | On demand |
 
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 301 unit + 18 integration = 319
-cd frontend && npm run test                  # frontend: 70 unit/component
-cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
+mvn -B --no-transfer-progress clean verify   # backend: 312 unit + 18 integration = 330
+cd frontend && npm run test                  # frontend: 83 unit/component
+cd frontend && npm run test:e2e              # frontend: 19 offline end-to-end
 ```
 
 Unit tests run in the `test` phase. Integration tests are named `*IT` and bound to

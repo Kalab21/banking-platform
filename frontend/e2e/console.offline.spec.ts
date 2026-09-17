@@ -22,7 +22,7 @@ test.describe("route protection", () => {
   test("an anonymous visitor is sent to sign in", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   });
 
   test("the root path routes an anonymous visitor to sign in", async ({ page }) => {
@@ -61,21 +61,35 @@ test.describe("sign-in form", () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test("the password can be revealed and hidden again", async ({ page }) => {
+    await page.goto("/login");
+
+    const password = page.getByLabel("Password", { exact: true });
+    await password.fill("Password123");
+    await expect(password).toHaveAttribute("type", "password");
+
+    await page.getByRole("button", { name: "Show password" }).click();
+    await expect(password).toHaveAttribute("type", "text");
+
+    await page.getByRole("button", { name: "Hide password" }).click();
+    await expect(password).toHaveAttribute("type", "password");
+  });
+
   test("the password field is masked and the form is keyboard reachable", async ({ page }) => {
     await page.goto("/login");
 
-    await expect(page.getByLabel("Password")).toHaveAttribute("type", "password");
+    await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
 
     await page.getByLabel("Username").focus();
     await page.keyboard.press("Tab");
-    await expect(page.getByLabel("Password")).toBeFocused();
+    await expect(page.getByLabel("Password", { exact: true })).toBeFocused();
   });
 
   test("an unreachable gateway is reported as such, not as bad credentials", async ({ page }) => {
     await page.goto("/login");
 
     await page.getByLabel("Username").fill("demo.customer");
-    await page.getByLabel("Password").fill("DemoPassword123!");
+    await page.getByLabel("Password", { exact: true }).fill("DemoPassword123!");
     await page.getByRole("button", { name: "Sign in" }).click();
 
     // The server points at a dead port in this project, so this is the
@@ -94,13 +108,48 @@ test.describe("registration form", () => {
     await page.getByLabel("First name").fill("Ada");
     await page.getByLabel("Last name").fill("Lovelace");
     await page.getByLabel("Username").fill("ada");
-    await page.getByLabel("Email").fill("not-an-email");
-    await page.getByLabel("Password").fill("short");
+    await page.getByLabel("Email address").fill("not-an-email");
+    await page.getByLabel("Password", { exact: true }).fill("short");
+    await page.getByLabel("Confirm password").fill("short");
 
     await page.getByRole("button", { name: "Create account" }).click();
 
     await expect(page.getByText("Enter a valid email address")).toBeVisible();
     await expect(page.getByText("Password must be at least 8 characters")).toBeVisible();
+  });
+
+  test("reports a password that does not match its confirmation", async ({ page }) => {
+    await page.goto("/register");
+
+    await page.getByLabel("First name").fill("Ada");
+    await page.getByLabel("Last name").fill("Lovelace");
+    await page.getByLabel("Username").fill("ada.lovelace");
+    await page.getByLabel("Email address").fill("ada.lovelace@example.com");
+    await page.getByLabel("Password", { exact: true }).fill("Password123");
+    await page.getByLabel("Confirm password").fill("Password124");
+
+    await page.getByRole("button", { name: "Create account" }).click();
+
+    await expect(page.getByText("Passwords do not match")).toBeVisible();
+  });
+
+  test("ticks off the password rules as they are satisfied", async ({ page }) => {
+    await page.goto("/register");
+
+    await expect(page.getByText("0 of 4 password requirements met")).toBeAttached();
+
+    await page.getByLabel("Password", { exact: true }).fill("Password123");
+
+    await expect(page.getByText("4 of 4 password requirements met")).toBeAttached();
+  });
+
+  test("formats a phone number as it is typed", async ({ page }) => {
+    await page.goto("/register");
+
+    const phone = page.getByLabel("Phone number");
+    await phone.fill("2402881031");
+
+    await expect(phone).toHaveValue("(240) 288-1031");
   });
 });
 
@@ -140,21 +189,38 @@ test.describe("responsive layout", () => {
     expect(overflows).toBe(false);
   });
 
-  test("the desktop sign-in page shows the product context column", async ({ page }) => {
+  test("the desktop sign-in page shows the brand panel", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/login");
 
-    await expect(
-      page.getByRole("heading", { name: /a distributed banking core/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /bank securely/i })).toBeVisible();
   });
 
-  test("the product context column is hidden on a phone", async ({ page }) => {
+  test("the brand panel is hidden on a phone, so the form comes first", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/login");
 
-    await expect(
-      page.getByRole("heading", { name: /a distributed banking core/i }),
-    ).toBeHidden();
+    await expect(page.getByRole("heading", { name: /bank securely/i })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  });
+
+  test("the create-account page has no horizontal overflow on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/register");
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+    expect(overflows).toBe(false);
+  });
+
+  test("the sign-in page still fits a 320px viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.goto("/login");
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+    expect(overflows).toBe(false);
   });
 });
