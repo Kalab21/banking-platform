@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 355 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 359 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -254,6 +254,14 @@ repeated insufficient-funds responses do not open the breaker. When the breaker 
 open the caller receives `503` with `Retry-After`; a timeout returns `504` and
 reports the outcome as unknown, since the debit may have been applied.
 
+**Balance changes are serialised.** Every path in `account-service` that changes
+an account loads it with `SELECT ... FOR UPDATE`, so the read, the
+sufficiency check and the write happen under a row lock. Two simultaneous debits
+of 80 against a balance of 100 leave 20 and one refusal, not -60. Pessimistic
+rather than `@Version` and a retry: the same correctness with no replay of a
+money-movement decision. Proved against a real PostgreSQL container, and the
+tests fail if the lock is removed.
+
 **Idempotent money movement.** `POST /api/transactions/deposit`, `/withdraw` and
 `/transfer` require an `Idempotency-Key`. `transaction-service` records it under a
 unique constraint with a fingerprint of the caller and the request, so a repeat of
@@ -307,12 +315,12 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**355 automated tests run in CI** — 272 backend, 70 frontend unit/component and 13
+**359 automated tests run in CI** — 276 backend, 70 frontend unit/component and 13
 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
 they need all 13 services up and are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 14 integration
+mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 18 integration
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -377,11 +385,6 @@ These are the gaps between this project and a production ledger.
 - **Cross-service transfers are not atomic.** The debit and the credit are two
   separate Feign calls with no saga, compensating transaction or outbox. A failure
   after a successful debit leaves funds withdrawn but not credited.
-- **Balance updates have no optimistic or pessimistic locking.** `updateBalance` is
-  a read-modify-write with no `@Version` or `SELECT ... FOR UPDATE`, so two
-  genuinely distinct concurrent debits on the same account can interleave and lose
-  an update. Idempotency stops a *repeat* of one request applying twice; it does
-  not serialise two different ones.
 - **An unknown outcome is not reconciled automatically.** When a money-movement
   attempt reaches `account-service` and the answer is lost, the idempotency record
   settles as `UNKNOWN` and is logged. Nothing sweeps those rows or reverses a

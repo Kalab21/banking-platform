@@ -95,6 +95,8 @@ developing rather than by default.
 | Log injection | The request path is reduced to the RFC 3986 path alphabet before being logged |
 | Static analysis | CodeQL on Java and TypeScript; Trivy over dependencies, Dockerfiles and the base image |
 | Signing key | `JWT_SECRET` is required from the environment at runtime. No signing key is committed or used as a fallback: both services refuse to start without it, and reject a key shorter than 256 bits |
+| Repeated money movement | Deposits, withdrawals and transfers require an `Idempotency-Key`, recorded under a unique constraint with a fingerprint of the caller and the request. A repeat returns the original result; a concurrent duplicate executes once |
+| Concurrent balance changes | The account row is read `SELECT ... FOR UPDATE` on every path that changes it, so two debits serialise and the second is checked against what the first left |
 
 ## Next hardening candidates
 
@@ -135,17 +137,3 @@ account has it on by default, so the protection is advisory.
 
 **Smallest safe fix.** Require 2FA for `EMPLOYEE` and `ADMIN` roles, where the
 blast radius of a compromised account is largest.
-
-### 4. No concurrency control on the balance itself — high
-
-**Evidence.** `AccountServiceImpl.updateBalance` is a read-modify-write with no
-`@Version` and no `SELECT ... FOR UPDATE`.
-
-**Impact.** Two debits on one account can interleave: both read the same starting
-balance, both check their own sufficiency against it, and the second write
-overwrites the first. The money-movement endpoints are now idempotent, so a
-*repeat* of one request no longer applies twice — but two genuinely distinct
-concurrent debits can still lose an update.
-
-**Smallest safe fix.** Serialise the read-modify-write, either with a pessimistic
-row lock on the account being debited or with `@Version` and an explicit retry.

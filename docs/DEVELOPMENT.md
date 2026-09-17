@@ -182,6 +182,29 @@ This is also why the circuit breaker still has no retry. Idempotency makes a
 *client's* repeat safe; it does not make an automatic in-process retry of a
 half-completed downstream mutation safe, and nothing here changed that.
 
+**A pessimistic row lock on every balance change.** `updateBalance`,
+`updateStatus` and `updateOverdraftLimit` load the account through
+`findByIdForUpdate`, which issues `SELECT ... FOR UPDATE`. Reading the balance,
+deciding whether it is sufficient and writing the new figure all happen with the
+row locked, so two concurrent debits are applied one after the other rather than
+both against the same starting balance.
+
+Pessimistic rather than optimistic. `@Version` would also prevent the lost
+update, but by failing the loser with an exception that then has to be caught,
+re-read and replayed — and the replay has to re-run the overdraft rules, because
+the answer depends on the balance it now sees. A row lock gives the same
+correctness by making the second transaction wait, with no retry loop and no
+path where a debit is silently attempted twice. Contention on one account is
+low; this is a customer's chequing account, not a global counter.
+
+Locking is per account. Nothing in `account-service` holds two account locks at
+once, so there is no lock-ordering deadlock to design around: a transfer takes
+its two locks in two separate requests, in two separate transactions.
+
+The lock is held for the duration of the transaction, which includes the Kafka
+publish. `max.block.ms` is pinned to 1000 ms, so a broker outage extends the
+hold by at most a second rather than indefinitely.
+
 **A transfer is still not atomic across services.** The debit and the credit are
 two calls to `account-service`, which owns its own database. `@Transactional` on
 the transfer method covers this service's rows and nothing else. If the credit
@@ -218,12 +241,10 @@ appears hung.
    `notification`, `integration` and `application`, which have no service-layer
    tests.
 2. Transactional outbox and saga for cross-service transfers.
-3. Optimistic or pessimistic locking on `Account`, so two concurrent debits
-   cannot lose an update.
-4. A pending-KYC-documents endpoint so staff review is a queue rather than a
+3. A pending-KYC-documents endpoint so staff review is a queue rather than a
    per-customer lookup.
-5. Extend Resilience4j beyond the `transaction-service` → `account-service` hop,
+4. Extend Resilience4j beyond the `transaction-service` → `account-service` hop,
    and add bulkheads.
-6. JSON log output, a log aggregator, alerting rules and durable trace storage.
-7. Run the live Playwright and PowerShell suites against a Compose stack in CI,
+5. JSON log output, a log aggregator, alerting rules and durable trace storage.
+6. Run the live Playwright and PowerShell suites against a Compose stack in CI,
    and publish images to a registry.

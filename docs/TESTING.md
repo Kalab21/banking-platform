@@ -1,6 +1,6 @@
 # Testing
 
-355 automated tests run in CI: 272 backend, 70 frontend unit/component and 13
+359 automated tests run in CI: 276 backend, 70 frontend unit/component and 13
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -27,6 +27,7 @@ are not counted in the CI total.
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 passing |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | 6 passing |
+| Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrency` — concurrent debits serialise, no lost update | 4 passing |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovement` — concurrent duplicates, replay, key release | 8 passing |
 | Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components | 70 passing |
 | End-to-end | Playwright (offline) | Route protection, session cookie, form validation, responsive layout | 13 passing, in CI |
@@ -36,7 +37,7 @@ are not counted in the CI total.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 14 integration = 272
+mvn -B --no-transfer-progress clean verify   # backend: 258 unit + 18 integration = 276
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
@@ -103,6 +104,21 @@ survives a round trip without losing scale, negative balance and overdraft
 positions persist correctly, and the unique constraint on `account_number` is
 enforced by the database.
 
+`AccountBalanceConcurrencyIT` covers the lost update. `updateBalance` reads the
+balance, decides whether it is sufficient and writes a new figure; run twice at
+once without a row lock, both reads see the same starting balance, both checks
+pass, and the second write overwrites the first. Two simultaneous debits of 80
+against a balance of 100 leave exactly one success and 20.00, never -60.00; two
+debits that both fit leave 50.00 rather than 70.00 or 80.00; overdraft head-room
+is measured against what the previous debit left; and ten simultaneous debits of
+10 against 50 accept exactly five. A `CyclicBarrier` releases the threads
+together, because without it the first request usually finishes before the second
+starts and the test passes whether or not the row is locked.
+
+The tests were checked against the defect they describe: with the lock removed,
+all four fail — two 80 debits both succeed, ten of ten debits drain a balance of
+50, and the lost update leaves 80.00 where 50.00 is correct.
+
 `IdempotentMoneyMovementIT` covers the part of idempotency that only a database
 can settle. It runs outside a test-managed transaction, because the guard's
 correctness depends on committing its claim before the money moves — a
@@ -125,7 +141,7 @@ the test binds an entity manager to the thread the way `open-in-view` does,
 settles the record from another thread, and asserts that the store sees it —
 alongside the stale entity read, kept visible so the reason is not lost.
 
-Both require a running Docker daemon. `mvn test` skips them.
+All three require a running Docker daemon. `mvn test` skips them.
 
 ## Frontend tests
 
