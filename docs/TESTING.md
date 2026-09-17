@@ -1,6 +1,6 @@
 # Testing
 
-361 automated tests run in CI: 278 backend, 70 frontend unit/component and 13
+402 automated tests run in CI: 319 backend, 70 frontend unit/component and 13
 offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
 are not counted in the CI total.
 
@@ -20,6 +20,10 @@ are not counted in the CI total.
 | Authorization | JUnit 5, MockMvc | `TransactionAuthorization` — money movement and transaction visibility | 13 passing |
 | Authorization | JUnit 5, MockMvc | `UserKycAuthorization` — profile, KYC and username-lookup ownership | 12 passing |
 | Authorization | JUnit 5, MockMvc | `StatisticsAuthorization` — per-user ownership, platform figures staff-only | 10 passing |
+| Authorization | JUnit 5, MockMvc | `FraudAuthorization` — alerts staff-only, reviewer from caller identity | 8 passing |
+| Authorization | JUnit 5, MockMvc | `PaymentAuthorization` — payee and payment ownership, payer account resolved | 14 passing |
+| Authorization | JUnit 5, MockMvc | `NotificationAuthorization` — own notifications only | 7 passing |
+| Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 12 passing |
 | Authorization | JUnit 5, AssertJ | `AccessGuard` and `OwnershipMatrix` — the rules themselves, all four principals | 45 passing |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 passing |
 | Log integrity | JUnit 5, AssertJ | `LogSafe` — an untrusted value cannot end a log line and start another | 13 passing |
@@ -37,7 +41,7 @@ are not counted in the CI total.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 260 unit + 18 integration = 278
+mvn -B --no-transfer-progress clean verify   # backend: 301 unit + 18 integration = 319
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
