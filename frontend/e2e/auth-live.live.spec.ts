@@ -28,7 +28,12 @@ test.describe("signed-out journey", () => {
     // Registration issues a session, and onboarding ends on its own screen
     // rather than dropping the customer onto a dashboard they did not ask for.
     await page.waitForURL(/\/welcome$/, { timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: "Your account is open" })).toBeVisible();
+    // The route resolves before its profile fetch does, so this waits on the
+    // rendered page rather than on the navigation. A real stack answers more
+    // slowly than the default five seconds allows.
+    await expect(page.getByRole("heading", { name: "Your account is open" })).toBeVisible({
+      timeout: 60_000,
+    });
 
     // The session cookie is the only place the token lives.
     const cookie = (await page.context().cookies()).find((c) => c.name === "bp_session");

@@ -70,7 +70,11 @@ test.describe("onboarding, end to end", () => {
     // Onboarding ends on its own screen, which reads the profile back from the
     // server — so what it confirms is what was stored, not what was typed.
     await page.waitForURL(/\/welcome$/, { timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: "Your account is open" })).toBeVisible();
+    // The route resolves before its profile fetch does, so this waits on the
+    // rendered page rather than on the navigation.
+    await expect(page.getByRole("heading", { name: "Your account is open" })).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(page.getByText("Identity information submitted")).toBeVisible();
     await expect(page.getByText(/verification is pending review/i)).toBeVisible();
     await expect(page.getByText(/identity verified/i)).toHaveCount(0);

@@ -30,7 +30,7 @@ test.beforeAll(() => {
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username").fill(USERNAME);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL("**/dashboard");
 }
@@ -62,7 +62,7 @@ test.describe("signed-in banking flows", () => {
     await page.screenshot({ path: `${SHOTS}/01-login.png`, fullPage: false });
 
     await page.getByLabel("Username").fill(USERNAME);
-    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL("**/dashboard");
     await settle(page);

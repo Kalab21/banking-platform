@@ -1,4 +1,4 @@
-# Banking Platform — E2E Test Suite (Days 17+)
+﻿# Banking Platform — E2E Test Suite (Days 17+)
 # Prerequisites: docker compose up -d (all services healthy)
 # Run: .\e2e-tests.ps1
 
@@ -391,7 +391,11 @@ if ($history -and $history.Count -gt 0) {
     $latest = $history[0]
     Assert "History entry has delta" ($latest.delta -ne $null)
     Assert "History entry has reason" ($latest.changeReason -ne $null)
-    Write-Host "  Latest change: $($latest.delta > 0 ? '+' : '')$($latest.delta)  Reason=$($latest.changeReason)"
+    # No ternary, and no bare ">": both are PowerShell 7 syntax, and ">" is a
+    # redirection operator in 5.1 rather than a comparison. The script would not
+    # parse at all, so nothing below this line ran.
+    $sign = if ($latest.delta -gt 0) { "+" } else { "" }
+    Write-Host "  Latest change: $sign$($latest.delta)  Reason=$($latest.changeReason)"
 }
 
 # Verify Kafka drove score updates from loan repayment (Flow 3)

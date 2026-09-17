@@ -108,6 +108,7 @@ developing rather than by default.
 | Password storage | BCrypt |
 | Two-factor | TOTP (RFC 6238); with 2FA enabled, a correct password alone issues no token |
 | Card data | The full PAN never leaves the service boundary; responses carry a masked value and `last4` |
+| Identity number at onboarding | The Social Security number is read from the request, checked for format, reduced to its last four digits and dropped. Those four digits live in `customer_identity` rather than on the user row, so the entity `UserResponse` maps from has nothing sensitive to leak. The field is `@JsonProperty(access = WRITE_ONLY)` and excluded from the request's `toString()`, and validation messages name the rule rather than quoting the value |
 | Browser session | JWT in an httpOnly, SameSite=Lax cookie, never readable by page JavaScript |
 | Rate limiting | Redis token bucket at the gateway, per client IP |
 | Error hygiene | Denials expose no resource detail; the catch-all logs server-side and returns a generic message |
@@ -116,6 +117,21 @@ developing rather than by default.
 | Signing key | `JWT_SECRET` is required from the environment at runtime. No signing key is committed or used as a fallback: both services refuse to start without it, and reject a key shorter than 256 bits |
 | Repeated money movement | Deposits, withdrawals and transfers require an `Idempotency-Key`, recorded under a unique constraint with a fingerprint of the caller and the request. A repeat returns the original result; a concurrent duplicate executes once |
 | Concurrent balance changes | The account row is read `SELECT ... FOR UPDATE` on every path that changes it, so two debits serialise and the second is checked against what the first left |
+
+### On not hashing the identity number
+
+There is deliberately no digest of the full Social Security number alongside the
+four digits. A Social Security number has fewer than a billion possible values,
+so an unkeyed hash of one is recoverable by exhaustive search in seconds — it
+would look like a protection without being one. A keyed HMAC with a secret held
+outside the database would be defensible, but only in aid of something that
+actually needs to match identities across records, and nothing here does.
+
+Nothing in this system verifies an identity. There is no verification provider
+behind it, so the stored status is `SUBMITTED`, the enum has no other value, and
+no screen reports an identity as verified. Passing a format check is not
+verification, and saying otherwise would be the product making a claim about
+itself that is not true.
 
 ## Next hardening candidates
 
