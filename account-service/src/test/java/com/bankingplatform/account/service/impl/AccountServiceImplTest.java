@@ -94,7 +94,7 @@ class AccountServiceImplTest {
     }
 
     private Account whenBalanceUpdated(Account existing, BalanceUpdateRequest request) {
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(existing));
+        when(accountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(existing));
         when(accountRepository.save(any(Account.class))).thenAnswer(i -> i.getArgument(0));
 
         accountService.updateBalance(ACCOUNT_ID, request);
@@ -165,7 +165,7 @@ class AccountServiceImplTest {
         @DisplayName("is rejected when the amount exceeds balance plus overdraft head-room")
         void insufficientFunds() {
             Account existing = account(AccountStatus.ACTIVE, "100.00", "500.00", "0.00");
-            when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(existing));
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(existing));
 
             // available = 100 + 500 - 0 = 600
             assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID, request("DEBIT", "700.00")))
@@ -181,7 +181,7 @@ class AccountServiceImplTest {
         @DisplayName("head-room already consumed by an existing overdraft is not offered twice")
         void insufficientFundsCountsExistingOverdraft() {
             Account existing = account(AccountStatus.OVERDRAWN, "0.00", "500.00", "400.00");
-            when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(existing));
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(existing));
 
             // available = 0 + 500 - 400 = 100
             assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID, request("DEBIT", "150.00")))
@@ -279,7 +279,7 @@ class AccountServiceImplTest {
         @ParameterizedTest(name = "a {0} account rejects a debit")
         @EnumSource(value = AccountStatus.class, names = {"FROZEN", "CLOSED"})
         void blockedStatusRejectsDebit(AccountStatus status) {
-            when(accountRepository.findById(ACCOUNT_ID))
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
                     .thenReturn(Optional.of(account(status, "500.00", "0.00", "0.00")));
 
             assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID, request("DEBIT", "10.00")))
@@ -292,7 +292,7 @@ class AccountServiceImplTest {
         @ParameterizedTest(name = "a {0} account rejects a credit")
         @EnumSource(value = AccountStatus.class, names = {"FROZEN", "CLOSED"})
         void blockedStatusRejectsCredit(AccountStatus status) {
-            when(accountRepository.findById(ACCOUNT_ID))
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
                     .thenReturn(Optional.of(account(status, "500.00", "0.00", "0.00")));
 
             assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID, request("CREDIT", "10.00")))
@@ -304,7 +304,7 @@ class AccountServiceImplTest {
         @Test
         @DisplayName("a closed account cannot be reopened")
         void closedAccountCannotBeReopened() {
-            when(accountRepository.findById(ACCOUNT_ID))
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
                     .thenReturn(Optional.of(account(AccountStatus.CLOSED, "0.00", "0.00", "0.00")));
 
             assertThatThrownBy(() -> accountService.updateStatus(ACCOUNT_ID, AccountStatus.ACTIVE))
@@ -317,7 +317,7 @@ class AccountServiceImplTest {
         @Test
         @DisplayName("an active account can be frozen")
         void activeAccountCanBeFrozen() {
-            when(accountRepository.findById(ACCOUNT_ID))
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
                     .thenReturn(Optional.of(account(AccountStatus.ACTIVE, "0.00", "0.00", "0.00")));
             when(accountRepository.save(any(Account.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -330,7 +330,7 @@ class AccountServiceImplTest {
         @Test
         @DisplayName("an unknown account id is reported as not found")
         void unknownAccountIsNotFound() {
-            when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID, request("CREDIT", "10.00")))
                     .isInstanceOf(ResourceNotFoundException.class)
@@ -364,7 +364,7 @@ class AccountServiceImplTest {
         @Test
         @DisplayName("a rejected debit writes no audit row and publishes nothing")
         void rejectedDebitLeavesNoTrace() {
-            when(accountRepository.findById(ACCOUNT_ID))
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
                     .thenReturn(Optional.of(account(AccountStatus.ACTIVE, "10.00", "0.00", "0.00")));
 
             assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID, request("DEBIT", "999.00")))

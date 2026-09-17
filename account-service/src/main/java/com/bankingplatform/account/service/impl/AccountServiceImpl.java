@@ -89,10 +89,19 @@ public class AccountServiceImpl implements AccountService {
                 .toList();
     }
 
+    /**
+     * Applies a credit or a debit to one account.
+     *
+     * <p>The account is loaded {@code FOR UPDATE}. Everything from here to the
+     * commit — reading the balance, deciding whether there is enough, writing
+     * the new figure — happens with the row locked, so two concurrent debits
+     * serialise instead of interleaving and the second one's sufficiency check
+     * sees the balance the first one left.
+     */
     @Override
     @Transactional
     public AccountResponse updateBalance(Long id, BalanceUpdateRequest request) {
-        Account account = findById(id);
+        Account account = findByIdForUpdate(id);
 
         if (account.getStatus() == AccountStatus.FROZEN || account.getStatus() == AccountStatus.CLOSED) {
             throw new AccountStatusException("Cannot transact on a " + account.getStatus() + " account");
@@ -141,10 +150,17 @@ public class AccountServiceImpl implements AccountService {
         return accountMapper.toResponse(saved);
     }
 
+    /**
+     * Freezes, closes or reactivates an account.
+     *
+     * <p>Locked for the same reason as a balance change: a debit that pushes
+     * the account into overdraft writes the status too, and an unlocked
+     * read-modify-write here could overwrite that with a stale value.
+     */
     @Override
     @Transactional
     public AccountResponse updateStatus(Long id, AccountStatus status) {
-        Account account = findById(id);
+        Account account = findByIdForUpdate(id);
         if (account.getStatus() == AccountStatus.CLOSED) {
             throw new AccountStatusException("Cannot reopen a closed account");
         }
@@ -153,17 +169,36 @@ public class AccountServiceImpl implements AccountService {
         return accountMapper.toResponse(accountRepository.save(account));
     }
 
+    /**
+     * Sets the overdraft limit.
+     *
+     * <p>Locked because the limit is an input to the sufficiency check, so
+     * changing it concurrently with a debit must be ordered against that debit
+     * rather than racing it.
+     */
     @Override
     @Transactional
     public AccountResponse updateOverdraftLimit(Long id, UpdateOverdraftRequest request) {
-        Account account = findById(id);
+        Account account = findByIdForUpdate(id);
         account.setOverdraftLimit(request.getOverdraftLimit());
         audit("ACCOUNT", id, "OVERDRAFT_UPDATE", null, "New limit: " + request.getOverdraftLimit());
         return accountMapper.toResponse(accountRepository.save(account));
     }
 
+    /** Unlocked read, for the query paths. */
     private Account findById(Long id) {
         return accountRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found with id: " + id));
+    }
+
+    /**
+     * Locked read, for every path that changes the row it just read.
+     *
+     * <p>Must be called inside a transaction — the lock is released at commit,
+     * and outside one it would be released immediately and guarantee nothing.
+     */
+    private Account findByIdForUpdate(Long id) {
+        return accountRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Account not found with id: " + id));
     }
 
