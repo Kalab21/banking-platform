@@ -13,12 +13,15 @@ export async function markReadAction(
   _prev: NotificationActionState,
   formData: FormData,
 ): Promise<NotificationActionState> {
-  const session = await requireSession();
+  // Still called for the gate it applies: an unauthenticated caller never
+  // reaches the request. The id it returns is no longer needed, because the
+  // service marks the caller's own notification.
+  await requireSession();
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id)) return { error: "That alert could not be identified." };
 
   try {
-    await markNotificationRead(id, session.userId);
+    await markNotificationRead(id);
     revalidatePath("/notifications");
     revalidatePath("/dashboard");
     return {};

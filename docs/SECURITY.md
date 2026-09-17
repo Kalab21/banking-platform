@@ -50,14 +50,33 @@ boolean fails open.
 | | Customer (own) | Customer (another's) | Employee | Admin |
 |---|---|---|---|---|
 | Accounts, transactions, profile, KYC, per-user statistics | yes | **no** | yes | yes |
-| Open an account | for self | **no** | for anyone | for anyone |
-| Move money | from own accounts | **no** | — | — |
+| Payees, payments, notifications, applications | yes | **no** | yes | yes |
+| Open an account, submit an application | for self | **no** | for anyone | for anyone |
+| Move money, pay from an account | from own accounts | **no** | — | — |
+| Cancel an application, remove a payee | own only | **no** | yes | yes |
 | Freeze account, overdraft limit | **no** | **no** | yes | yes |
 | Platform and daily statistics | **no** | **no** | yes | yes |
 | KYC review, credit-score update | **no** | **no** | yes | yes |
+| Application queue by status, manual decision | **no** | **no** | yes | yes |
+| Fraud alerts: list, read, review | **no** | **no** | yes | yes |
 
 An id in a path or a `userId` in a request body is caller input. It is checked
 against the identity the gateway established, never trusted as proof of ownership.
+
+That rule was applied unevenly at first. `fraud-detection-service`,
+`payment-service`, `notification-service` and `application-service` read the
+`userId` from the path, body or query string and acted on it directly, so any
+authenticated customer could reach another customer's payees, notifications and
+applications, and could list, read and resolve fraud alerts across the whole
+platform. Running the full stack is what surfaced it; the unit suites at the
+time asserted nothing about those services. All four now resolve the owner from
+stored state and authorise against it, the same way the account and transaction
+services do, and each has a regression suite that fails if the guard is removed.
+
+Fraud alerts are staff-only in every direction. An alert is a control applied to
+a customer, so the customer it names is not among the principals who may read or
+close it — and the reviewer recorded against a decision is taken from the caller
+the gateway authenticated, never from the request body.
 
 Denials return 403 and are refused before the service layer runs, so a rejected
 request writes nothing and moves no money. A request that establishes no identity

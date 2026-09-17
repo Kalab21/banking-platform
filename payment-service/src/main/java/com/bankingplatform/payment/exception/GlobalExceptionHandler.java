@@ -41,6 +41,25 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, extractFeignMessage(ex), req.getRequestURI());
     }
 
+    /**
+     * account-service refused the caller, so the caller is refused here too.
+     *
+     * <p>Ownership of a payment is resolved by asking account-service who owns
+     * the payer account, and that lookup carries the caller's identity. When
+     * the account belongs to someone else the hop returns 403, and without this
+     * mapping the denial fell through to the catch-all and was reported as 500
+     * — an enforced control that reads like a broken server.
+     */
+    @ExceptionHandler(FeignException.Forbidden.class)
+    public ResponseEntity<ErrorResponse> handleFeignForbidden(HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, "Not permitted to access this resource", req.getRequestURI());
+    }
+
+    @ExceptionHandler(FeignException.Unauthorized.class)
+    public ResponseEntity<ErrorResponse> handleFeignUnauthorized(HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, "Authentication required", req.getRequestURI());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest req) {
         String message = ex.getBindingResult().getFieldErrors().stream()

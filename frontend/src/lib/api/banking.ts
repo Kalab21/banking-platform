@@ -240,11 +240,11 @@ export function getNotifications(userId: number, page = 0, size = 20): Promise<P
   );
 }
 
-export function markNotificationRead(id: number, userId: number): Promise<Notification> {
-  return apiFetch<Notification>(`/api/notifications/${id}/read`, {
-    method: "PUT",
-    query: { userId },
-  });
+export function markNotificationRead(id: number): Promise<Notification> {
+  // No userId: the service marks the caller's own notification, identified by
+  // the session the gateway resolves. Sending one would suggest the client
+  // chooses whose notification is read.
+  return apiFetch<Notification>(`/api/notifications/${id}/read`, { method: "PUT" });
 }
 
 export function markAllNotificationsRead(userId: number): Promise<void> {

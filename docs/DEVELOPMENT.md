@@ -88,11 +88,11 @@ Selected routes, all reached through the gateway on `:8080`:
 | `POST` | `/api/auth/2fa/setup`, `/api/auth/2fa/verify` | TOTP enrolment and verification |
 | `GET` `POST` | `/api/accounts` | Open and list accounts |
 | `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement — requires `Idempotency-Key` |
-| `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments and beneficiaries |
+| `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments and beneficiaries (owner or staff) |
 | `POST` | `/api/loans`, `/api/credit-cards` | Lending and cards |
 | `GET` | `/api/statistics` | Aggregated read models |
-| `GET` | `/api/notifications` | Paginated user alerts |
-| `GET` | `/api/fraud` | Fraud alerts (employee/admin) |
+| `GET` | `/api/notifications` | Paginated user alerts (owner or staff) |
+| `GET` | `/api/fraud` | Fraud alerts — list, read and review, all employee/admin |
 | `POST` | `/api/integrations/wire`, `/ach`, `/swift` | External rails (simulated) |
 
 ## Direct service access

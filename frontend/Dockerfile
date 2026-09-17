@@ -44,7 +44,14 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+
+# Next.js serves static assets from public/, but the directory is optional and
+# this project has none — and git cannot track an empty directory, so a clean
+# clone does not have one. The runner stage copies it unconditionally, which
+# made `docker compose build frontend` fail on any checkout that had never had
+# the folder created by hand. Creating it here keeps the copy valid without
+# committing a placeholder asset nobody serves.
+RUN mkdir -p public && npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app

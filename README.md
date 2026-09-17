@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 361 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 402 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -228,7 +228,8 @@ then authorises the request against the resource's owner: a valid token is not
 permission to read or change a particular account, profile or transaction. A
 `userId` in a path or request body is treated as caller input, never as proof of
 ownership. Staff roles may act across customers where a workflow requires it;
-account freeze, overdraft limits and platform-wide statistics are staff-only.
+account freeze, overdraft limits, platform-wide statistics, the application
+queue and every fraud-alert operation are staff-only.
 
 Direct balance mutation is service-to-service only and lives on `/internal/**`,
 which the gateway does not route. The business services publish no host ports, so
@@ -315,20 +316,20 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**361 automated tests run in CI** — 278 backend, 70 frontend unit/component and 13
+**402 automated tests run in CI** — 319 backend, 70 frontend unit/component and 13
 offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
 they need all 13 services up and are not counted in the CI total.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 260 unit + 18 integration
+mvn -B --no-transfer-progress clean verify   # backend: 301 unit + 18 integration
 cd frontend && npm run test                  # frontend: 70 unit/component
 cd frontend && npm run test:e2e              # frontend: 13 offline end-to-end
 ```
 
 Coverage is deep on balances and loan arithmetic, plus card masking, the 2FA gate,
 the API error contract, request correlation, the circuit-breaker policy and
-resource-ownership authorization across accounts, money movement, profiles, KYC
-and statistics. The integration tests run `@DataJpaTest` against a real
+resource-ownership authorization across accounts, money movement, profiles, KYC,
+statistics, payees and payments, notifications, applications and fraud alerts. The integration tests run `@DataJpaTest` against a real
 PostgreSQL 16 container, so entity/migration drift fails the build and the
 idempotency guarantees are proved against the database that enforces them rather
 than against a mock.
