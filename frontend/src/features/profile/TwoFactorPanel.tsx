@@ -103,7 +103,7 @@ export function TwoFactorPanel({ enabled }: { enabled: boolean }) {
       {enabled ? <DisableFlow /> : <EnrolFlow />}
 
       <p className="border-t border-line pt-3 text-xs text-ink-subtle">
-        Note: this platform enrols and verifies an authenticator secret, but sign-in does not yet
+        Note: this platform enrolls and verifies an authenticator secret, but sign-in does not yet
         prompt for a code. Enabling this records the second factor without adding a second step at
         login.
       </p>

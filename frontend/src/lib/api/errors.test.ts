@@ -58,7 +58,31 @@ describe("ApiError", () => {
 describe("NetworkError", () => {
   it("distinguishes an unreachable gateway from a rejected request", () => {
     const error = new NetworkError(new Error("ECONNREFUSED"));
-    expect(error.userMessage).toContain("Could not reach the banking API");
     expect(error.name).toBe("NetworkError");
+    // The log keeps the operational detail.
+    expect(error.message).toContain("gateway");
+  });
+
+  it("does not put our infrastructure on the customer's screen", () => {
+    const shown = new NetworkError(new Error("ECONNREFUSED")).userMessage;
+
+    expect(shown).toMatch(/could not reach your accounts/i);
+    for (const word of ["gateway", "Docker", "localhost", "8080", "service", "API"]) {
+      expect(shown).not.toContain(word);
+    }
+  });
+});
+
+describe("messages a customer is shown", () => {
+  it("never names a process, a port or a container", () => {
+    // Every branch of userMessage, so a new one cannot quietly reintroduce
+    // developer language.
+    const statuses = [400, 401, 403, 404, 409, 422, 500, 503, 504];
+    for (const status of statuses) {
+      const shown = new ApiError(status, "", "/api/accounts").userMessage;
+      for (const word of ["gateway", "Docker", "localhost", "8080", "JWT", "stack trace"]) {
+        expect(shown, `status ${status}`).not.toContain(word);
+      }
+    }
   });
 });

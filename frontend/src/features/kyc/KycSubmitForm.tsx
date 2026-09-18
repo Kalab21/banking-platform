@@ -8,7 +8,7 @@ const INITIAL: KycFormState = {};
 
 const DOCUMENT_TYPES = [
   { value: "PASSPORT", label: "Passport" },
-  { value: "DRIVERS_LICENSE", label: "Driver's licence" },
+  { value: "DRIVERS_LICENSE", label: "Driver's license" },
   { value: "NATIONAL_ID", label: "National ID" },
   { value: "PROOF_OF_ADDRESS", label: "Proof of address" },
 ];

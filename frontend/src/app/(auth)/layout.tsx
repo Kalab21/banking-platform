@@ -31,7 +31,7 @@ const VALUE_POINTS: { icon: typeof ShieldCheck; title: string; detail: string }[
   {
     icon: ShieldCheck,
     title: "Protected money movement",
-    detail: "Every transfer is authorised against the account it draws on.",
+    detail: "Every transfer is authorized against the account it draws on.",
   },
   {
     icon: Eye,
