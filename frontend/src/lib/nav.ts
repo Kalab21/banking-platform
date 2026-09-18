@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   Bell,
   ClipboardList,
   CreditCard,
@@ -48,6 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
       { href: "/accounts", label: "Accounts", icon: Landmark },
+      { href: "/move-money", label: "Move Money", icon: ArrowLeftRight },
       { href: "/transactions", label: "Transactions", icon: ReceiptText },
       { href: "/payments", label: "Payments", icon: HandCoins },
       { href: "/cards", label: "Credit Cards", icon: CreditCard },

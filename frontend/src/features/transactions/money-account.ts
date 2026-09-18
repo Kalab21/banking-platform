@@ -24,6 +24,12 @@ export interface MoneyAccountOption {
   /** e.g. `••••2024`, for confirmation and receipt lines. */
   maskedNumber: string;
   currency: string;
+  /**
+   * Shown on the withdrawal review, where "you have this much available" is the
+   * figure the decision turns on. It is a number the customer already sees on
+   * their own accounts page, so nothing new crosses the boundary.
+   */
+  availableBalance: number;
 }
 
 /** Narrows accounts to the fields the money forms may see. */
@@ -36,5 +42,6 @@ export function toMoneyAccountOptions(accounts: Account[]): MoneyAccountOption[]
     )}`,
     maskedNumber: maskAccountNumber(account.accountNumber),
     currency: account.currency,
+    availableBalance: account.availableBalance,
   }));
 }

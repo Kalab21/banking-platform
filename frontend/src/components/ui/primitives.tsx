@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 
@@ -52,8 +52,16 @@ export function CardHeader({
   );
 }
 
-export function CardBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("px-5 py-4", className)}>{children}</div>;
+export function CardBody({
+  children,
+  className,
+  ...props
+}: { children: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...props} className={cn("px-5 py-4", className)}>
+      {children}
+    </div>
+  );
 }
 
 // --------------------------------------------------------------------- badges
