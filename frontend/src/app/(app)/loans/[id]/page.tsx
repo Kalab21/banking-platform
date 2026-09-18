@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/session";
 import {
   getAmortizationSchedule,
@@ -14,10 +15,13 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Detail,
+  DetailList,
   EmptyState,
   ErrorState,
+  Money,
   PageHeader,
-  StatTile,
+  ProgressBar,
   TableShell,
   Td,
   Th,
@@ -25,6 +29,7 @@ import {
 } from "@/components/ui/primitives";
 import { formatCurrency, formatDate, formatPercent, humanise } from "@/lib/format";
 import { RepaymentProgress } from "@/features/loans/RepaymentProgress";
+import { balanceProgress } from "@/features/loans/progress";
 
 export const metadata: Metadata = { title: "Loan" };
 
@@ -58,34 +63,91 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
     throw error;
   }
 
+  const progress = balanceProgress(loan.principal, loan.remainingBalance);
+
   return (
     <>
-      <PageHeader
-        title={`${humanise(loan.loanType)} #${loan.id}`}
-        description={`${loan.termMonths}-month term at ${formatPercent(loan.interestRate)} APR`}
-        action={
-          <Link href="/loans" className="text-sm font-medium text-accent hover:underline">
-            Back to loans
-          </Link>
-        }
-      />
+      <Link
+        href="/loans"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      >
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+        Back to loans
+      </Link>
 
-      <Badge tone={statusTone(loan.status)}>{humanise(loan.status)}</Badge>
+      <section
+        aria-labelledby="loan-heading"
+        className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-7"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 id="loan-heading" className="text-xl font-semibold tracking-tight text-ink">
+              {humanise(loan.loanType)}
+            </h1>
+            <p className="mt-1 text-sm text-ink-subtle">
+              {loan.termMonths}-month term at {formatPercent(loan.interestRate)} · loan #{loan.id}
+            </p>
+          </div>
+          <Badge tone={statusTone(loan.status)}>{humanise(loan.status)}</Badge>
+        </div>
 
-      <section aria-label="Loan summary" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Outstanding" value={formatCurrency(loan.remainingBalance, loan.currency)} />
-        <StatTile label="Monthly payment" value={formatCurrency(loan.monthlyPayment, loan.currency)} />
-        <StatTile
-          label="Payments made"
-          value={`${loan.paymentsMade} of ${loan.termMonths}`}
-          hint={loan.nextPaymentDate ? `Next due ${formatDate(loan.nextPaymentDate)}` : "No payment due"}
-        />
-        <StatTile label="Total interest" value={formatCurrency(loan.totalInterest, loan.currency)} />
+        <div className="mt-6 flex flex-wrap items-end gap-x-10 gap-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-ink-subtle">Remaining balance</p>
+            <Money
+              amount={loan.remainingBalance}
+              currency={loan.currency}
+              size="lg"
+              className="mt-1 block text-ink"
+            />
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-ink-subtle">Monthly payment</p>
+            <Money
+              amount={loan.monthlyPayment}
+              currency={loan.currency}
+              size="lg"
+              className="mt-1 block text-ink"
+            />
+          </div>
+        </div>
+
+        {progress ? (
+          <div className="mt-6">
+            <ProgressBar
+              value={progress.percent}
+              label={`Loan balance reduced by ${progress.percent}%, from ${formatCurrency(loan.principal, loan.currency)} to ${formatCurrency(loan.remainingBalance, loan.currency)}`}
+            />
+            <p className="mt-2 text-xs text-ink-subtle">
+              {progress.percent}% of the original {formatCurrency(loan.principal, loan.currency)}{" "}
+              balance repaid
+            </p>
+          </div>
+        ) : null}
+
+        <DetailList columns={3} className="mt-6 border-t border-line pt-5">
+          <Detail label="Original principal">
+            <span className="tabular">{formatCurrency(loan.principal, loan.currency)}</span>
+          </Detail>
+          <Detail label="Payments made">
+            <span className="tabular">
+              {loan.paymentsMade} of {loan.termMonths}
+            </span>
+          </Detail>
+          <Detail label="Next payment">{formatDate(loan.nextPaymentDate)}</Detail>
+          <Detail label="Interest rate">
+            <span className="tabular">{formatPercent(loan.interestRate)}</span>
+          </Detail>
+          <Detail label="Total interest">
+            <span className="tabular">{formatCurrency(loan.totalInterest, loan.currency)}</span>
+          </Detail>
+          <Detail label="Disbursed">{formatDate(loan.disbursedAt)}</Detail>
+        </DetailList>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Repayment progress" />
+          <CardHeader title="Balance progress" />
           <CardBody>
             <RepaymentProgress
               principal={loan.principal}

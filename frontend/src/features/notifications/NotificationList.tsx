@@ -57,20 +57,38 @@ export function NotificationList({ notifications }: { notifications: Notificatio
       {notifications.map((n) => (
         <li
           key={n.id}
-          className={`flex items-start justify-between gap-4 px-5 py-4 ${
-            n.isRead ? "" : "bg-accent-soft/40"
+          className={`flex items-start gap-3 px-5 py-4 sm:gap-4 ${
+            n.isRead ? "" : "bg-primary-soft/50"
           }`}
         >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-ink">{n.title}</p>
+          {/*
+           * Unread is carried by a dot, a tinted row, a bolder title and the
+           * words "Unread" for a screen reader. A customer who cannot
+           * distinguish the tint still has three other signals.
+           */}
+          <span className="mt-1.5 flex h-2 w-2 shrink-0 items-center justify-center">
+            {n.isRead ? null : (
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-primary" />
+            )}
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className={`text-sm text-ink ${n.isRead ? "font-medium" : "font-semibold"}`}>
+                {n.title}
+              </p>
               <Badge tone={n.isRead ? "neutral" : "accent"}>{humanise(n.type)}</Badge>
               {n.isRead ? null : <span className="sr-only">Unread</span>}
             </div>
-            <p className="mt-1 text-sm text-ink-muted">{n.message}</p>
-            <p className="mt-1 text-xs text-ink-subtle">{formatDateTime(n.createdAt)}</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-muted">{n.message}</p>
+            <p className="mt-1.5 text-xs text-ink-subtle">{formatDateTime(n.createdAt)}</p>
           </div>
-          {n.isRead ? null : <MarkReadButton id={n.id} />}
+
+          {n.isRead ? null : (
+            <div className="shrink-0">
+              <MarkReadButton id={n.id} />
+            </div>
+          )}
         </li>
       ))}
     </ul>
