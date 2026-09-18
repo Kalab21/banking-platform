@@ -49,8 +49,14 @@ export function TransactionRow({
       </div>
 
       <div className="shrink-0 text-right">
+        {/*
+         * The direction comes from the transaction type, not from the sign of
+         * the amount: the API records every amount as a positive number, so a
+         * withdrawal of 500 and a deposit of 500 are the same figure and only
+         * the type tells them apart.
+         */}
         <Money
-          amount={transaction.amount}
+          amount={credit ? Math.abs(transaction.amount) : -Math.abs(transaction.amount)}
           currency={transaction.currency}
           signed
           size="sm"

@@ -1,6 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Badge, EmptyState, ErrorState, StatTile, statusTone } from "@/components/ui/primitives";
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  Money,
+  ProgressBar,
+  StatTile,
+  statusTone,
+} from "@/components/ui/primitives";
 
 describe("EmptyState", () => {
   it("tells the user what is missing and why", () => {
@@ -68,5 +76,62 @@ describe("statusTone", () => {
   it("falls back to neutral for anything unrecognised", () => {
     expect(statusTone("SOMETHING_NEW")).toBe("neutral");
     expect(statusTone(null)).toBe("neutral");
+  });
+});
+
+describe("Money", () => {
+  it("renders an amount in its own currency, not a hardcoded one", () => {
+    render(<Money amount={1234.5} currency="EUR" />);
+    expect(screen.getByText("€1,234.50")).toBeInTheDocument();
+  });
+
+  it("shows a dash rather than NaN, Infinity or null", () => {
+    const { rerender } = render(<Money amount={Number.NaN} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+
+    rerender(<Money amount={null} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+
+    rerender(<Money amount={undefined} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("signs a figure when asked, taking the sign from the amount", () => {
+    const { rerender } = render(<Money amount={250} signed />);
+    expect(screen.getByText("+$250.00")).toBeInTheDocument();
+
+    rerender(<Money amount={-250} signed />);
+    expect(screen.getByText("−$250.00")).toBeInTheDocument();
+  });
+
+  it("keeps the sign of a negative balance when not asked to sign it", () => {
+    // An overdraft is real. Dropping the minus would show money that is not there.
+    render(<Money amount={-240.5} />);
+    expect(screen.getByText("-$240.50")).toBeInTheDocument();
+  });
+});
+
+describe("ProgressBar", () => {
+  it("carries a name that says what it measures", () => {
+    render(<ProgressBar value={25} label="25% of a $10,000 credit limit used" />);
+
+    const bar = screen.getByRole("progressbar");
+    expect(bar).toHaveAccessibleName("25% of a $10,000 credit limit used");
+    expect(bar).toHaveAttribute("aria-valuenow", "25");
+  });
+
+  it("clamps what it draws without being asked to lie about it", () => {
+    // The caller reports the true figure in text; the bar only has to stay
+    // inside its track.
+    const { rerender } = render(<ProgressBar value={140} label="Over limit" />);
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+
+    rerender(<ProgressBar value={-20} label="Below zero" />);
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+  });
+
+  it("survives a value that is not a number", () => {
+    render(<ProgressBar value={Number.NaN} label="Unknown" />);
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
   });
 });

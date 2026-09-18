@@ -17,7 +17,14 @@ export function utilisation(
     return { percent: 0, tone: "primary" };
   }
 
-  const percent = Math.round((balance / limit) * 100);
+  /*
+   * Floored at zero but not capped at a hundred, and the asymmetry is the
+   * point. A credit balance — a customer who has overpaid — means none of the
+   * limit is in use, so "−3% used" would be a statement about nothing. Being
+   * over the limit is a real condition the customer needs to see, so that
+   * number is reported as it is and only the bar drawing it is clamped.
+   */
+  const percent = Math.max(Math.round((balance / limit) * 100), 0);
 
   // Over the limit is a problem; approaching it is worth noticing. Tone is a
   // supplement to the number, never the only way to read it.
