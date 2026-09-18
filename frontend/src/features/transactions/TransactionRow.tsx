@@ -41,7 +41,12 @@ export function TransactionRow({
         <p className="truncate text-sm font-medium text-ink">
           {transaction.description || humanise(transaction.type)}
         </p>
-        <p className="truncate text-xs text-ink-subtle">
+        {/*
+         * Wraps rather than truncates. In a narrow column the single-line
+         * version cut the transaction type to "With…", which is worse than a
+         * second line.
+         */}
+        <p className="text-xs text-ink-subtle">
           {formatDateTime(transaction.createdAt)}
           {accountNumber ? ` · ${maskAccountNumber(accountNumber)}` : ""}
           {transaction.description ? ` · ${humanise(transaction.type)}` : ""}

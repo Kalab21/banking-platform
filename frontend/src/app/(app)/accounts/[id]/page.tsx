@@ -114,7 +114,7 @@ export default async function AccountDetailPage({
       </section>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Card>
             <CardHeader
               title="Transactions"
@@ -128,7 +128,15 @@ export default async function AccountDetailPage({
                 </Link>
               }
             />
-            {transactions.length === 0 ? (
+            {page === null ? (
+              <CardBody>
+                {/* A failed request, not an account with nothing on it. */}
+                <ErrorState
+                  title="We could not load this account's transactions"
+                  message="The transaction service did not answer. The balance above is unaffected."
+                />
+              </CardBody>
+            ) : transactions.length === 0 ? (
               <EmptyState
                 title="No transactions on this account"
                 description="Deposits, withdrawals and transfers will be listed here."

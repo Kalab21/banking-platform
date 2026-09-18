@@ -94,19 +94,29 @@ export default async function DashboardPage() {
    * account, which is the same number of requests the page made before.
    */
   const histories = await Promise.all(
-    accounts.map(async (account) => ({
-      account,
-      transactions: (await getTransactions(account.id, 0, 12))?.content ?? [],
-    })),
+    accounts.map(async (account) => ({ account, page: await getTransactions(account.id, 0, 12) })),
   );
-  const busiest = histories.reduce<(typeof histories)[number] | undefined>(
+
+  /*
+   * A null page means the request did not succeed; a page with no content
+   * means the account has no transactions. Those are different facts and the
+   * panels below say different things about them — "this account has no
+   * transactions" is a claim, and it must not be made on the strength of a
+   * gateway timeout.
+   */
+  const historyUnavailable = accounts.length > 0 && histories.every((h) => h.page === null);
+  const loaded = histories.filter((h) => h.page !== null);
+
+  const busiest = loaded.reduce<(typeof loaded)[number] | undefined>(
     (best, current) =>
-      best === undefined || current.transactions.length > best.transactions.length ? current : best,
+      best === undefined || (current.page?.content.length ?? 0) > (best.page?.content.length ?? 0)
+        ? current
+        : best,
     undefined,
   );
 
   const primaryAccount = busiest?.account;
-  const recent = busiest?.transactions ?? [];
+  const recent = busiest?.page?.content ?? [];
   const points: BalancePoint[] = [...recent]
     .reverse()
     .map((t) => ({ at: t.createdAt, balance: t.balanceAfter }));
@@ -187,7 +197,16 @@ export default async function DashboardPage() {
             />
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          /*
+           * The track count follows the number of cards. A fixed three-column
+           * grid holding two accounts leaves a third of the row empty, which
+           * reads as something failing to load.
+           */
+          <div
+            className={`grid gap-4 sm:grid-cols-2 ${
+              accounts.length >= 3 ? "xl:grid-cols-3" : ""
+            }`}
+          >
             {accounts.slice(0, 3).map((account) => (
               <AccountCard key={account.id} account={account} />
             ))}
@@ -196,9 +215,15 @@ export default async function DashboardPage() {
       </section>
 
       {/* ----------------------------------------------- history + activity */}
+      {/*
+       * `min-w-0` on the columns, not decoration: a grid item defaults to
+       * `min-width: auto` and the chart inside reports an intrinsic minimum
+       * width, so without it the column refuses to narrow and the dashboard
+       * grows a horizontal scrollbar on a phone.
+       */}
       <div className="grid gap-6 lg:grid-cols-5">
-        <div className="space-y-6 lg:col-span-3">
-          <Card>
+        <div className="min-w-0 lg:col-span-3">
+          <Card className="h-full">
             <CardHeader
               title="Balance history"
               description={
@@ -208,7 +233,12 @@ export default async function DashboardPage() {
               }
             />
             <CardBody>
-              {points.length >= MIN_POINTS_FOR_CHART ? (
+              {historyUnavailable ? (
+                <ErrorState
+                  title="We could not load your balance history"
+                  message="The transaction service did not answer. Your balances above are unaffected."
+                />
+              ) : points.length >= MIN_POINTS_FOR_CHART ? (
                 <BalanceTrendChart points={points} currency={currency} />
               ) : (
                 <EmptyState
@@ -224,7 +254,7 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Card className="h-full">
             <CardHeader
               title="Recent activity"
@@ -237,7 +267,14 @@ export default async function DashboardPage() {
                 </Link>
               }
             />
-            {recent.length === 0 ? (
+            {historyUnavailable ? (
+              <CardBody>
+                <ErrorState
+                  title="We could not load your recent activity"
+                  message="The transaction service did not answer. Try again shortly."
+                />
+              </CardBody>
+            ) : recent.length === 0 ? (
               <EmptyState
                 title="No transactions yet"
                 description="Deposits, withdrawals and transfers will appear here."

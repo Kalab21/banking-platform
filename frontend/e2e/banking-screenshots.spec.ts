@@ -55,11 +55,17 @@ async function settle(page: Page) {
  * full account number. Asserted rather than assumed: these files get committed.
  */
 async function assertNothingSensitive(page: Page) {
-  const body = (await page.locator("body").textContent()) ?? "";
-  expect(body, "a full Social Security number").not.toMatch(/\b\d{3}-\d{2}-\d{4}\b/);
-  expect(body, "the password").not.toContain(PASSWORD);
-  expect(body, "a full account number").not.toMatch(/\bBA\d{12}\b/);
-  expect(body, "a full card number").not.toMatch(/\b\d{13,19}\b/);
+  /*
+   * `innerText` rather than `textContent`: the latter includes the contents of
+   * inline <script> tags, whose timestamps and hashes contain long digit runs
+   * that look exactly like a card number to a regular expression. What matters
+   * is what appears in the picture, which is the rendered text.
+   */
+  const visible = await page.locator("body").innerText();
+  expect(visible, "a full Social Security number").not.toMatch(/\b\d{3}-\d{2}-\d{4}\b/);
+  expect(visible, "the password").not.toContain(PASSWORD);
+  expect(visible, "a full account number").not.toMatch(/\bBA\d{12}\b/);
+  expect(visible, "a full card number").not.toMatch(/\b\d{13,19}\b/);
 }
 
 test.describe("authenticated product screenshots", () => {

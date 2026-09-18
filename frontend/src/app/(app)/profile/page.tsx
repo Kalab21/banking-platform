@@ -13,9 +13,6 @@ import {
   EmptyState,
   ErrorState,
   PageHeader,
-  TableShell,
-  Td,
-  Th,
   statusTone,
 } from "@/components/ui/primitives";
 import { formatDate, formatDateTime, humanise } from "@/lib/format";
@@ -181,33 +178,28 @@ export default async function ProfilePage() {
               description="Documents you send for verification will be listed here with their review status."
             />
           ) : (
-            <TableShell label="KYC documents">
-              <thead>
-                <tr>
-                  <Th>Type</Th>
-                  <Th>Reference</Th>
-                  <Th>Status</Th>
-                  <Th>Submitted</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((d) => (
-                  <tr key={d.id} className="hover:bg-sunken">
-                    <Td>{humanise(d.documentType)}</Td>
-                    <Td className="font-mono text-xs text-ink-subtle">{d.documentRef}</Td>
-                    <Td>
-                      <Badge tone={statusTone(d.status)}>{humanise(d.status)}</Badge>
-                      {d.rejectionReason ? (
-                        <span className="mt-1 block text-xs text-critical">
-                          {d.rejectionReason}
-                        </span>
-                      ) : null}
-                    </Td>
-                    <Td>{formatDateTime(d.createdAt)}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableShell>
+            /*
+             * Rows rather than a four-column table. In a half-width card the
+             * table needed 640px and scrolled sideways, which in practice meant
+             * the submission date was simply cut off.
+             */
+            <ul className="divide-y divide-line">
+              {documents.map((d) => (
+                <li key={d.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">{humanise(d.documentType)}</p>
+                    <p className="truncate font-mono text-xs text-ink-subtle">{d.documentRef}</p>
+                    <p className="mt-0.5 text-xs text-ink-subtle">
+                      Submitted {formatDateTime(d.createdAt)}
+                    </p>
+                    {d.rejectionReason ? (
+                      <p className="mt-1 text-xs text-critical">{d.rejectionReason}</p>
+                    ) : null}
+                  </div>
+                  <Badge tone={statusTone(d.status)}>{humanise(d.status)}</Badge>
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
       </div>

@@ -162,12 +162,15 @@ test.describe("the signed-in product, against real data", () => {
     const { userId, headers } = await signIn(page, request);
 
     const accounts = await (await request.get(`${GATEWAY}/api/accounts/user/${userId}`, { headers })).json();
-    const page0 = await (
-      await request.get(`${GATEWAY}/api/transactions/account/${accounts[0].id}?page=0&size=5`, {
-        headers,
-      })
-    ).json();
-    const first = page0.content[0];
+    const response = await request.get(
+      `${GATEWAY}/api/transactions/account/${accounts[0].id}?page=0&size=5`,
+      { headers },
+    );
+    // A non-200 here means the transaction service is not answering, which is
+    // a different failure from the page rendering the wrong thing. Say which.
+    expect(response.status(), "the transaction service did not answer").toBe(200);
+
+    const first = (await response.json())?.content?.[0];
     test.skip(!first, "The seeded customer has no transactions on their first account.");
 
     await page.goto("/transactions");

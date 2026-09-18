@@ -2,7 +2,14 @@ import type { Metadata } from "next";
 import { requireSession } from "@/lib/session";
 import { getAccounts, getTransactions } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
-import { Card, CardHeader, EmptyState, ErrorState, PageHeader } from "@/components/ui/primitives";
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from "@/components/ui/primitives";
 import { MoneyForms } from "@/features/transactions/MoneyForms";
 import { TransactionRow } from "@/features/transactions/TransactionRow";
 import type { Transaction } from "@/types/api";
@@ -33,6 +40,9 @@ export default async function TransactionsPage() {
   // Combine the recent history of every account into one timeline.
   const pages = await Promise.all(accounts.map((a) => getTransactions(a.id, 0, 20)));
   const accountNumbers = new Map(accounts.map((a) => [a.id, a.accountNumber]));
+  // Null means the call failed. An account with nothing on it comes back as a
+  // page with empty content, which is a different thing to tell the customer.
+  const activityUnavailable = accounts.length > 0 && pages.every((p) => p === null);
   const all: Transaction[] = pages
     .flatMap((p) => p?.content ?? [])
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -60,7 +70,14 @@ export default async function TransactionsPage() {
               : undefined
           }
         />
-        {all.length === 0 ? (
+        {activityUnavailable ? (
+          <CardBody>
+            <ErrorState
+              title="We could not load your activity"
+              message="The transaction service did not answer. Try again shortly."
+            />
+          </CardBody>
+        ) : all.length === 0 ? (
           <EmptyState
             title="Nothing has moved yet"
             description="Once you deposit or transfer, the record will appear here."
