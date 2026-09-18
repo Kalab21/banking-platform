@@ -9,22 +9,24 @@ import {
 } from "@/features/transactions/actions";
 import { Button, FormError, MoneyField, SelectField, SuccessNote, TextField } from "@/components/ui/form";
 import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { formatCurrency, humanise, maskAccountNumber } from "@/lib/format";
-import type { Account } from "@/types/api";
+import { formatCurrency } from "@/lib/format";
+import type { MoneyAccountOption } from "@/features/transactions/money-account";
 
 const INITIAL: MoneyFormState = {};
 
-function accountLabel(a: Account): string {
-  return `${humanise(a.accountType)} ${maskAccountNumber(a.accountNumber)} — ${formatCurrency(a.balance, a.currency)}`;
-}
-
-function AccountOptions({ accounts }: { accounts: Account[] }) {
+/*
+ * These forms take `MoneyAccountOption`, never `Account`. The server builds the
+ * labels; the account number does not cross into the browser. See
+ * `money-account.ts` for why that boundary is drawn here rather than at render
+ * time.
+ */
+function AccountOptions({ accounts }: { accounts: MoneyAccountOption[] }) {
   return (
     <>
       <option value="">Select an account</option>
       {accounts.map((a) => (
         <option key={a.id} value={a.id}>
-          {accountLabel(a)}
+          {a.label}
         </option>
       ))}
     </>
@@ -37,7 +39,7 @@ function SingleAccountForm({
   accounts,
 }: {
   kind: "deposit" | "withdraw";
-  accounts: Account[];
+  accounts: MoneyAccountOption[];
 }) {
   const action = kind === "deposit" ? depositAction : withdrawAction;
   const [state, formAction, pending] = useActionState(action, INITIAL);
@@ -107,7 +109,7 @@ function SingleAccountForm({
  * Transfers move money between parties, so this asks for explicit confirmation
  * before submitting rather than firing on the first click.
  */
-function TransferForm({ accounts }: { accounts: Account[] }) {
+function TransferForm({ accounts }: { accounts: MoneyAccountOption[] }) {
   const [state, formAction, pending] = useActionState(transferAction, INITIAL);
   const [confirming, setConfirming] = useState(false);
   const [amount, setAmount] = useState("");
@@ -179,8 +181,7 @@ function TransferForm({ accounts }: { accounts: Account[] }) {
         <div className="space-y-3 rounded-md border border-caution/40 bg-caution-soft px-4 py-3">
           <p className="text-sm text-caution">
             Send <strong>{formatCurrency(Number(amount) || 0, fromAccount?.currency ?? "USD")}</strong>{" "}
-            from {fromAccount ? maskAccountNumber(fromAccount.accountNumber) : "—"} to{" "}
-            {toAccount ? maskAccountNumber(toAccount.accountNumber) : "—"}?
+            from {fromAccount?.maskedNumber ?? "—"} to {toAccount?.maskedNumber ?? "—"}?
           </p>
           <div className="flex gap-2">
             <Button type="submit" pending={pending}>
@@ -205,7 +206,7 @@ function TransferForm({ accounts }: { accounts: Account[] }) {
   );
 }
 
-export function MoneyForms({ accounts }: { accounts: Account[] }) {
+export function MoneyForms({ accounts }: { accounts: MoneyAccountOption[] }) {
   if (accounts.length === 0) {
     return (
       <Card>

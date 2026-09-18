@@ -11,6 +11,7 @@ import {
   PageHeader,
 } from "@/components/ui/primitives";
 import { MoneyForms } from "@/features/transactions/MoneyForms";
+import { toMoneyAccountOptions } from "@/features/transactions/money-account";
 import { TransactionRow } from "@/features/transactions/TransactionRow";
 import type { Transaction } from "@/types/api";
 
@@ -58,8 +59,13 @@ export default async function TransactionsPage() {
        * The forms are untouched: their idempotency keys, their unknown-outcome
        * handling and the semantics of each request are the money-movement
        * contract, and this pass is about how the page reads, not what it does.
+       *
+       * They are handed a narrowed view of each account rather than the account
+       * itself: everything a Client Component receives is serialised into the
+       * page, so passing `Account` published the raw account number alongside
+       * the masked label the customer actually sees.
        */}
-      <MoneyForms accounts={accounts} />
+      <MoneyForms accounts={toMoneyAccountOptions(accounts)} />
 
       <Card>
         <CardHeader
