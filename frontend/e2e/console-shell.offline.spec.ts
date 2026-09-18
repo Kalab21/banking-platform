@@ -191,6 +191,23 @@ test.describe("signed-in layout", () => {
     });
   }
 
+  for (const path of ["/profile", "/accounts", "/transactions", "/cards", "/loans"]) {
+    test(`${path} has no horizontal overflow at 390px`, async ({ page }) => {
+      /*
+       * A grid or flex item defaults to `min-width: auto`, so a card holding a
+       * select with long option text — or a table with a minimum width —
+       * refuses to shrink and drags the page wider than the screen. The
+       * profile page did exactly that: 658px of content in a 390px viewport,
+       * found by driving the real product rather than by looking at it.
+       */
+      await page.setViewportSize(PHONE);
+      await signIn(page);
+      await page.goto(path);
+
+      expect(await hasHorizontalOverflow(page)).toBe(false);
+    });
+  }
+
   test("the permanent sidebar is not rendered on a phone", async ({ page }) => {
     await page.setViewportSize(PHONE);
     await signIn(page);

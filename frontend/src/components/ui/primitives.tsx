@@ -6,6 +6,16 @@ import { formatCurrency } from "@/lib/format";
 
 // ------------------------------------------------------------------- surfaces
 
+/**
+ * The surface most content sits on.
+ *
+ * `min-w-0` is load-bearing rather than cosmetic. A grid or flex item defaults
+ * to `min-width: auto`, which means it refuses to shrink below the intrinsic
+ * width of its widest child — so a card holding a select with long option text,
+ * or a table with a minimum width, pushes the whole page wider than the screen
+ * and produces a horizontal scrollbar on a phone. This lets the card shrink and
+ * leaves the scrolling to whichever child actually needs it.
+ */
 export function Card({
   children,
   className,
@@ -16,7 +26,9 @@ export function Card({
   as?: "section" | "div" | "article";
 }) {
   return (
-    <Tag className={cn("rounded-lg border border-line bg-surface", className)}>{children}</Tag>
+    <Tag className={cn("min-w-0 rounded-lg border border-line bg-surface", className)}>
+      {children}
+    </Tag>
   );
 }
 
