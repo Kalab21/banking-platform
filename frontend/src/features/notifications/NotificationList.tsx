@@ -77,7 +77,14 @@ export function NotificationList({ notifications }: { notifications: Notificatio
               <p className={`text-sm text-ink ${n.isRead ? "font-medium" : "font-semibold"}`}>
                 {n.title}
               </p>
-              <Badge tone={n.isRead ? "neutral" : "accent"}>{humanise(n.type)}</Badge>
+              {/*
+               * The type badge is dropped when it just repeats the title, which
+               * is most of the time — "Application Approved" beside
+               * "Application Approved" is noise dressed as information.
+               */}
+              {humanise(n.type).toLowerCase() === n.title.trim().toLowerCase() ? null : (
+                <Badge tone={n.isRead ? "neutral" : "accent"}>{humanise(n.type)}</Badge>
+              )}
               {n.isRead ? null : <span className="sr-only">Unread</span>}
             </div>
             <p className="mt-1 text-sm leading-relaxed text-ink-muted">{n.message}</p>
