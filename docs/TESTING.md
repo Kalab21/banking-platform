@@ -1,50 +1,66 @@
 # Testing
 
-432 automated tests run in CI: 330 backend, 83 frontend unit/component and 19
-offline end-to-end. A further 9 live-stack Playwright scenarios run on demand and
-are not counted in the CI total.
+691 automated tests run in CI: 430 backend (405 unit and
+web-slice, 25 integration against a real PostgreSQL), 192 frontend
+unit/component and 69 offline end-to-end. A further 42 live-stack
+Playwright scenarios and a PowerShell full-stack suite run on demand and are not
+counted in the CI total.
+
+Counts are per test case as the runners report them — JUnit `tests` in the
+surefire and failsafe XML, Vitest test cases, Playwright tests. They are not
+assertion counts, which are larger and less comparable.
 
 ## Suites
 
 | Layer | Tooling | Scope | Result |
 |---|---|---|---|
-| Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | 21 passing |
-| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | 27 passing |
-| Unit | JUnit 5, Mockito, AssertJ | `CreditCardMasking` PAN masking and `last4` derivation | 12 passing |
-| Unit | JUnit 5, Mockito, AssertJ | `LoginTwoFactor` TOTP gate at sign-in | 6 passing |
-| Unit | JUnit 5, AssertJ | `RequestIdPropagation` — id minted, preserved, sanitised, forwarded | 18 passing |
-| Unit | JUnit 5, Resilience4j | `AccountServiceCircuitBreaker` — breaker policy and status mapping | 9 passing |
-| Web slice | JUnit 5, MockMvc | `ApiErrorContract` — invalid input returns 4xx, errors expose no internals | 5 passing |
-| Authorization | JUnit 5, MockMvc | `AccountAuthorization` — account ownership, staff-only operations, fail-closed | 19 passing |
-| Authorization | JUnit 5, MockMvc | `BalanceMutationBoundary` — public path removed, internal path intact | 6 passing |
-| Authorization | JUnit 5, MockMvc | `TransactionAuthorization` — money movement and transaction visibility | 13 passing |
-| Authorization | JUnit 5, MockMvc | `UserKycAuthorization` — profile, KYC and username-lookup ownership | 12 passing |
-| Authorization | JUnit 5, MockMvc | `StatisticsAuthorization` — per-user ownership, platform figures staff-only | 10 passing |
-| Authorization | JUnit 5, MockMvc | `FraudAuthorization` — alerts staff-only, reviewer from caller identity | 8 passing |
-| Authorization | JUnit 5, MockMvc | `PaymentAuthorization` — payee and payment ownership, payer account resolved | 14 passing |
-| Authorization | JUnit 5, MockMvc | `NotificationAuthorization` — own notifications only | 7 passing |
-| Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 12 passing |
-| Authorization | JUnit 5, AssertJ | `AccessGuard` and `OwnershipMatrix` — the rules themselves, all four principals | 45 passing |
-| Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 passing |
-| Log integrity | JUnit 5, AssertJ | `LogSafe` — an untrusted value cannot end a log line and start another | 13 passing |
-| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 passing |
-| Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 passing |
-| Validation | JUnit 5, Jakarta Validation | `RegisterPasswordPolicy` — the rule the console displays is the rule the server enforces | 11 passing |
-| Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 passing |
-| Integration | Testcontainers, PostgreSQL 16 | `account-service` migrations and persistence | 6 passing |
-| Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrency` — concurrent debits serialise, no lost update | 4 passing |
-| Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovement` — concurrent duplicates, replay, key release | 8 passing |
-| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting | 83 passing |
-| End-to-end | Playwright (offline) | Route protection, session cookie, auth form validation, password visibility, responsive layout down to 320px | 19 passing, in CI |
-| End-to-end | Playwright (live) | Sign-in, accounts, transfer, loan schedule, card masking, staff access, sign-out | 9, on demand |
-| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack | On demand |
+| Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | 23 |
+| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | 27 |
+| Unit | JUnit 5, Mockito, AssertJ | `CreditCardMasking` PAN masking and `last4` derivation | 12 |
+| Unit | JUnit 5, Mockito, AssertJ | `LoginTwoFactor` TOTP gate at sign-in | 6 |
+| Unit | JUnit 5, AssertJ | `RequestIdPropagation` — id minted, preserved, sanitised, forwarded | 18 |
+| Unit | JUnit 5, Resilience4j | `AccountServiceCircuitBreaker` — breaker policy and status mapping | 9 |
+| Unit | JUnit 5, AssertJ | `LogSafe` — an untrusted value cannot end a log line and start another | 13 |
+| Web slice | JUnit 5, MockMvc | `ApiErrorContract` — invalid input returns 4xx, errors expose no internals | 5 |
+| Web slice | JUnit 5, MockMvc | `RegistrationErrorResponse` — the shape a failed registration returns | 5 |
+| Persistence | JUnit 5, Mockito | `OnboardingPersistence` — what onboarding stores, and what it drops | 13 |
+| Validation | JUnit 5, Jakarta Validation | `OnboardingRequestValidation` — every field rule the console mirrors | 47 |
+| Validation | JUnit 5, Jakarta Validation | `RegisterPasswordPolicy` — the rule the console displays is the rule the server enforces | 11 |
+| Authorization | JUnit 5, AssertJ | `AccessGuard` — the rules themselves | 23 |
+| Authorization | JUnit 5, AssertJ | `OwnershipMatrix` — all four principals against every resource class | 20 |
+| Authorization | JUnit 5, MockMvc | `CallerIdentityExceptionHandler` — denial maps to 403, missing identity to 401 | 6 |
+| Authorization | JUnit 5, MockMvc | `AccountAuthorization` — account ownership, staff-only operations, fail-closed | 19 |
+| Authorization | JUnit 5, MockMvc | `BalanceMutationBoundary` — public path removed, internal path intact | 6 |
+| Authorization | JUnit 5, MockMvc | `TransactionAuthorization` — money movement and transaction visibility | 13 |
+| Authorization | JUnit 5, MockMvc | `UserKycAuthorization` — profile, KYC and username-lookup ownership | 12 |
+| Authorization | JUnit 5, MockMvc | `StatisticsAuthorization` — per-user ownership, platform figures staff-only | 10 |
+| Authorization | JUnit 5, MockMvc | `FraudAuthorization` — alerts staff-only, reviewer from caller identity | 8 |
+| Authorization | JUnit 5, MockMvc | `PaymentAuthorization` — payee and payment ownership, payer account resolved | 14 |
+| Authorization | JUnit 5, MockMvc | `NotificationAuthorization` — own notifications only | 7 |
+| Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 12 |
+| Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 15 |
+| Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 13 |
+| Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 |
+| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 |
+| Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
+| Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 |
+| Integration | Testcontainers, PostgreSQL 16 | `AccountRepositoryIT` — migrations and persistence | 6 |
+| Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
+| Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovementIT` — concurrent duplicates, replay, key release | 8 |
+| Integration | Testcontainers, PostgreSQL 16 | `CustomerProfileMigrationIT` — the customer-profile migration | 7 |
+| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification | 192 |
+| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 192 above) | 23 |
+| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 192 above) | 9 |
+| End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
+| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport | 42, on demand |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals | On demand |
 
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 312 unit + 18 integration = 330
-cd frontend && npm run test                  # frontend: 83 unit/component
-cd frontend && npm run test:e2e              # frontend: 19 offline end-to-end
+mvn -B --no-transfer-progress clean verify   # backend: 405 unit + 25 integration = 430
+cd frontend && npm run test                  # frontend: 192 unit/component
+cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 
 Unit tests run in the `test` phase. Integration tests are named `*IT` and bound to
@@ -162,16 +178,27 @@ them.
 
 ## End-to-end split
 
-**Offline (13 tests, in CI).** Drives a production build of the console with the
-gateway pointed at a dead port. Covers route protection, expired and malformed
-sessions, form validation, responsive layout, and two architecture guarantees:
-the session cookie is httpOnly, and the token never appears in the HTML sent to
-the browser. No backend required.
+**Offline (69 tests, in CI).** Drives a production build of the console with the
+backend pointed at a dead port. Covers route protection, expired and malformed
+sessions, form validation, responsive layout down to 320px, and three
+architecture guarantees: the session cookie is httpOnly, the token never appears
+in the HTML sent to the browser, and a page that cannot load its data says so
+rather than rendering a zero. No backend required.
 
-**Live (9 tests, on demand).** Requires all 13 services plus a seeded customer.
+**Live (42 tests, on demand).** Requires all 13 services plus a seeded customer.
 Covers sign-in to a dashboard showing real balances, account and transaction
-history, transfer review and confirmation, loan amortization, card masking,
-staff-route denial for a customer, sign-out, and a phone viewport.
+history, the full money-movement journeys, loan amortization, card masking,
+staff-route denial for a customer, sign-out, onboarding, and a phone viewport.
+
+Two live groups are worth calling out. `move-money.live.spec.ts` drives deposit,
+withdrawal and transfer through details, review and receipt, and then reads the
+balances and transaction counts back from the API: the assertion is that the
+money moved *once*, by the amount confirmed, including when confirm is
+double-clicked. `rsc-boundary.live.spec.ts` checks the three surfaces a browser
+sees — delivered HTML, the RSC/Flight response captured during a real client
+navigation, and the DOM including `aria-label`, `title` and `data-*` — for the
+signed-in customer's real account numbers, and never prints the value when it
+fails.
 
 ```bash
 # offline — no backend required
@@ -195,13 +222,62 @@ self-only rules. `GatewayIdentitySpoofing` covers the property the rest depends
 on: a client sending `X-User-Id` and `X-User-Role` alongside a valid token has
 those values replaced with the ones derived from the token.
 
+## The PowerShell full-stack suite
+
+`e2e-tests.ps1` drives the whole platform through the gateway: registration,
+account opening, money movement, a credit-card application through Kafka to an
+issued card, a loan through disbursement and repayment, KYC submission,
+notifications, external rails and TOTP enrolment.
+
+Three things about how it is written are worth stating, because each was wrong
+before.
+
+**A refusal is asserted as a refusal.** Platform statistics, the daily snapshot,
+application review and KYC review are staff-only, and the suite runs with a
+customer token. It used to call them and assert that data came back, so it
+finished with red lines every run — the authorization was right and the test was
+wrong. Those are now explicit `Assert-Refused` checks against the expected HTTP
+status, using a helper that reports the status rather than swallowing the
+exception and returning `$null`. Three places that quietly incremented the pass
+counter when a call came back empty are gone.
+
+**Eventual consistency is waited for, not slept through.** The card and the loan
+are created by Kafka consumers. Fixed sleeps were a guess about consumer
+scheduling; `Wait-For` polls until the fact holds, returns the moment it does
+and fails clearly at a deadline. The one remaining sleep is a TOTP window, which
+genuinely is a duration.
+
+**It fails the process.** The suite exits non-zero when any assertion failed. It
+previously printed `FAILED: n` and exited 0, so nothing could gate on it. It
+also no longer prints a one-time code.
+
+```powershell
+docker compose up -d
+.\e2e-tests.ps1        # exits 0 only when every assertion passed
+```
+
 ## Coverage boundary
 
 Coverage is deep on the services holding the most consequential arithmetic —
 balances and amortization — plus card masking, the 2FA gate, the shared API error
-contract, request correlation, the circuit-breaker policy and resource-ownership
-authorization across accounts, money movement, profiles, KYC and statistics.
+contract, request correlation, the circuit-breaker policy, and resource-ownership
+authorization across accounts, money movement, profiles, KYC, statistics,
+payees, payments, notifications, applications, fraud alerts, loans and cards.
 
-`payment`, `notification`, `integration` and `application` services still have no
-service-layer tests, and only `account-service` has an integration test against a
-real database.
+It is not even, and the uneven parts are worth naming.
+
+`payment`, `notification`, `integration` and `application` services have
+authorization suites but no service-layer tests: what those services *do* with a
+request, once it is allowed, is covered only through the live suites.
+
+Three services run against a real PostgreSQL through Testcontainers —
+`account-service` for migrations, persistence and concurrent balance changes,
+`transaction-service` for idempotent money movement under concurrency, and
+`user-service` for the customer-profile migration. The rest are tested against
+mocks, so a mapping or migration fault in them would surface only when the stack
+runs.
+
+`loan-service` and `credit-card-service` now have authorization suites at the
+HTTP boundary, added with the ownership fix. Their arithmetic is covered by the
+existing `LoanServiceImpl` unit tests; `credit-card-service` has masking tests
+but no service-layer coverage of purchase, cash advance or payment.

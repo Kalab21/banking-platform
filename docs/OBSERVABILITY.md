@@ -100,4 +100,10 @@ below that.
 - Traces are stored in memory and are lost when Zipkin restarts.
 - Kafka consumers inherit trace context from Spring Kafka instrumentation; the
   asynchronous hops are not separately verified here.
-- There are no alerting rules.
+- There are no alerting rules, and no route for one to fire down. Prometheus
+  scrapes and Grafana draws; nothing pages anyone.
+- Idempotency records that settle `UNKNOWN` are logged for reconciliation at
+  `ERROR` with the key and the accounts involved, and nothing reads that log
+  automatically. Reconciling them is a manual exercise against the transaction
+  history — which is also what the console tells a customer to check when it
+  cannot confirm an outcome.

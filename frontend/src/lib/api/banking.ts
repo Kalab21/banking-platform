@@ -306,6 +306,31 @@ export function getBeneficiaries(userId: number): Promise<Beneficiary[]> {
   return apiFetchOptional<Beneficiary[]>(`/api/payments/beneficiaries/user/${userId}`, {}, []);
 }
 
+/**
+ * Saves a payee.
+ *
+ * `userId` is a parameter rather than something the caller may choose: every
+ * call site passes the session's own id, and the backend re-checks it with
+ * `AccessGuard.requireTargetUserAllowed` before anything is written.
+ */
+export function createBeneficiary(
+  userId: number,
+  beneficiary: {
+    name: string;
+    nickname?: string;
+    accountNumber: string;
+    bankName?: string;
+    routingNumber?: string;
+    beneficiaryType: string;
+    currency: string;
+  },
+): Promise<Beneficiary> {
+  return apiFetch<Beneficiary>("/api/payments/beneficiaries", {
+    method: "POST",
+    body: { userId, ...beneficiary },
+  });
+}
+
 export function getPayments(accountId: number): Promise<Payment[]> {
   return apiFetchOptional<Payment[]>(`/api/payments/account/${accountId}`, {}, []);
 }

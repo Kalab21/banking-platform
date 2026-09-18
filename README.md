@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 432 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 691 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 42 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -202,10 +202,27 @@ markable-as-read alerts.
 conversion. These are simulated stubs; no real banking network is contacted.
 
 **Console** (`frontend`) — two-step sign-in challenging for a TOTP code before any
-session cookie is written; customer views for dashboard, accounts, transactions,
-payments, loans, cards, notifications and profile; staff views for KYC review, the
-application queue and fraud alerts. Pages fetch through React Server Components and
-mutate through Server Actions, so the browser never holds a bearer token.
+session cookie is written; customer views for dashboard, accounts, move money,
+transactions, payments, loans, cards, notifications and profile; staff views for
+KYC review, the application queue and fraud alerts. Pages fetch through React
+Server Components and mutate through Server Actions, so the browser never holds
+a bearer token.
+
+Moving money is its own route and its own journey: choose transfer, deposit or
+withdrawal, fill in the details, review exactly what is about to happen against
+masked accounts, and confirm once. The id sent as the `Idempotency-Key` is
+minted when the customer reaches the review step and reused for every attempt at
+that same payment, so retrying a refused request is the same operation rather
+than a second one. A request whose outcome the platform cannot establish — the
+backend answers 504, or 500 for a transfer that debited and failed to credit —
+says so, claims neither success nor failure, offers no button that would send it
+again, and points at the transaction history.
+
+What a Client Component receives is narrowed on the server. Anything handed
+across that boundary is serialised into the page, so the money forms get a view
+model carrying an id, a label and a masked number rather than the account
+record, and the full account number never reaches the browser in the HTML, the
+RSC payload or the DOM.
 
 **Edge** (`api-gateway`) — Spring Cloud Gateway with Eureka-backed load-balanced
 routing to 11 downstream services; JWT validation filter injecting `X-User-Id` /
@@ -336,14 +353,18 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**432 automated tests run in CI** — 330 backend, 83 frontend unit/component and 19
-offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
-they need all 13 services up and are not counted in the CI total.
+**691 automated tests run in CI** — 430 backend (405 unit and web-slice, 25
+integration against a real PostgreSQL), 192 frontend unit/component and 69
+offline end-to-end. A further **42 live-stack Playwright scenarios** and a
+PowerShell full-stack suite run on demand; they need all 13 services up and are
+not counted in the CI total.
+
+Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 312 unit + 18 integration
-cd frontend && npm run test                  # frontend: 83 unit/component
-cd frontend && npm run test:e2e              # frontend: 19 offline end-to-end
+mvn -B --no-transfer-progress clean verify   # backend: 405 unit + 25 integration = 430
+cd frontend && npm run test                  # frontend: 192 unit/component
+cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 
 Coverage is deep on balances and loan arithmetic, plus card masking, the 2FA gate,
@@ -420,11 +441,19 @@ These are the gaps between this project and a production ledger.
   customer rather than a queue. Application and fraud views are read-only.
 - **The live Playwright suite does not run on every CI push.** Starting 13 services
   per push is not a sensible trade, so only the offline suite is wired into CI. The
-  9 live scenarios are automated but triggered on demand.
+  42 live scenarios and the PowerShell suite are automated but triggered on demand.
 - **Test coverage is uneven.** Accounts, loans, cards, 2FA, transactions,
   statistics and the authorization rules are covered; `payment`, `notification`,
-  `integration` and `application` services have no service-layer tests, and only
-  `account-service` has an integration test against a real database.
+  `integration` and `application` services have authorization suites but no
+  service-layer tests. Three services run against a real PostgreSQL through
+  Testcontainers — `account-service`, `transaction-service` and `user-service` —
+  and the rest are tested against mocks.
+- **Money-moving writes beyond deposit, withdrawal and transfer are not in the
+  console.** Payment creation, scheduled payments, loan repayment and card
+  payment all exist in the backend, but none of those endpoints requires an
+  `Idempotency-Key` the way `/api/transactions/*` does. A UI for them would be
+  the one money path where a lost response could not be retried safely, so they
+  are deliberately absent rather than half-built.
 - **Authorization is enforced per request, not per field.** A staff role grants
   access to a customer's whole record rather than to specific fields, and there
   is no audit of which staff member viewed which customer.

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/primitives";
 import { formatCurrency, formatDate, humanise, maskAccountNumber } from "@/lib/format";
 import type { Payment } from "@/types/api";
+import { AddBeneficiary } from "@/features/payments/AddBeneficiary";
 
 export const metadata: Metadata = { title: "Payments" };
 
@@ -57,6 +58,14 @@ export default async function PaymentsPage() {
         title="Payments"
         description="Beneficiaries, settled payments and anything scheduled to run."
       />
+
+      {/*
+        * The only write on this page. Creating a payment moves money and has no
+        * idempotency record behind it, so that stays out of the console; saving
+        * a payee moves nothing. The component is handed no beneficiary data —
+        * it is a form, and the session supplies whose profile it writes to.
+        */}
+      <AddBeneficiary />
 
       <Card>
         <CardHeader title="Beneficiaries" description="Payees saved against your profile." />

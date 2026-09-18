@@ -322,3 +322,35 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return result;
 }
+
+/**
+ * A saved payee.
+ *
+ * `userId` is deliberately absent: it comes from the session on the server, so
+ * the browser cannot name whose profile the payee is saved against. The account
+ * number is required here even though the backend accepts it as optional — a
+ * payee with no account number is not a payee anyone can pay.
+ */
+export const beneficiarySchema = z.object({
+  name: z.string().trim().min(1, "Enter the payee's name").max(100, "That name is too long"),
+  nickname: z.string().trim().max(60, "That nickname is too long").optional(),
+  accountNumber: z
+    .string()
+    .trim()
+    .min(4, "Enter the account number")
+    .max(34, "That account number is too long")
+    .regex(/^[A-Za-z0-9-]+$/, "Use letters, numbers and hyphens only"),
+  bankName: z.string().trim().max(100, "That bank name is too long").optional(),
+  routingNumber: z
+    .string()
+    .trim()
+    .regex(/^\d{9}$/, "A routing number is nine digits")
+    .optional()
+    .or(z.literal("")),
+  beneficiaryType: z.enum(["INTERNAL", "EXTERNAL_ACH", "WIRE", "SWIFT"], {
+    message: "Choose how this payee is paid",
+  }),
+  currency: z.string().trim().length(3, "Use a three-letter currency code"),
+});
+
+export type BeneficiaryInput = z.infer<typeof beneficiarySchema>;
