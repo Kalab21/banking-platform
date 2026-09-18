@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/session";
-import { getCreditScore, getKycDocuments, getUser } from "@/lib/api/banking";
+import { getCurrentUser } from "@/lib/current-user";
+import { getCreditScore, getKycDocuments } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import {
   Badge,
   Card,
   CardBody,
   CardHeader,
+  Detail,
+  DetailList,
   EmptyState,
   ErrorState,
   PageHeader,
-  TableShell,
-  Td,
-  Th,
   statusTone,
 } from "@/components/ui/primitives";
 import { formatDate, formatDateTime, humanise } from "@/lib/format";
@@ -32,7 +32,7 @@ export default async function ProfilePage() {
   let creditScore;
   try {
     [profile, documents, creditScore] = await Promise.all([
-      getUser(session.userId),
+      getCurrentUser(session.userId),
       getKycDocuments(session.userId),
       getCreditScore(session.userId),
     ]);
@@ -41,130 +41,130 @@ export default async function ProfilePage() {
       return (
         <>
           <PageHeader title="Profile & security" />
-          <ErrorState message={error.userMessage} />
+          <ErrorState title="We could not load your profile" message={error.userMessage} />
         </>
       );
     }
     throw error;
   }
 
+  const fullName = [profile.firstName, profile.middleName, profile.lastName]
+    .filter(Boolean)
+    .join(" ");
+  const cityLine = [profile.city, stateName(profile.state)].filter(Boolean).join(", ");
+
   return (
     <>
       <PageHeader
         title="Profile & security"
-        description="Your details, identity verification and second factor."
+        description="The details on your account, and the controls that protect it."
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* ------------------------------------------------------- personal */}
         <Card>
-          <CardHeader title="Your details" />
+          <CardHeader title="Personal information" />
           <CardBody>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-ink-subtle">Name</dt>
-                <dd className="text-ink">
-                  {[profile.firstName, profile.middleName, profile.lastName]
-                    .filter(Boolean)
-                    .join(" ")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Date of birth</dt>
-                <dd className="text-ink">
-                  {profile.dateOfBirth ? formatDate(profile.dateOfBirth) : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Username</dt>
-                <dd className="text-ink">{profile.username}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Email</dt>
-                <dd className="break-all text-ink">{profile.email}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Phone</dt>
-                <dd className="text-ink">
-                  {profile.phone ? formatPhone(profile.phone) : "—"}
-                </dd>
-              </div>
-              {/*
-               * The address the customer gave at onboarding, read back from the
-               * columns it was written to. This is the check on whether asking
-               * for it was honest: a field collected by a form and not shown
-               * again was decoration.
-               */}
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-ink-subtle">Home address</dt>
-                <dd className="text-ink">
-                  {profile.streetAddress ? (
-                    <>
-                      {profile.streetAddress}
-                      {profile.addressLine2 ? `, ${profile.addressLine2}` : ""}
-                      <br />
-                      {[profile.city, stateName(profile.state)].filter(Boolean).join(", ")}{" "}
-                      {profile.postalCode}
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Role</dt>
-                <dd className="text-ink">{humanise(profile.role)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Customer since</dt>
-                <dd className="text-ink">{formatDate(profile.createdAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Credit score</dt>
-                <dd className="tabular text-ink">
-                  {creditScore ? `${creditScore.score} (${creditScore.rating})` : "Not yet scored"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">KYC</dt>
-                <dd>
-                  <Badge tone={statusTone(profile.kycStatus)}>{humanise(profile.kycStatus)}</Badge>
-                </dd>
-              </div>
-              {/*
-               * Four digits, because four digits is all that was kept. The
-               * status says the details were submitted; it does not say they
-               * were verified, because nothing has verified them.
-               */}
-              <div>
-                <dt className="text-xs text-ink-subtle">Social Security number</dt>
-                <dd className="tabular text-ink">
-                  {profile.ssnLast4 ? maskedSsn(profile.ssnLast4) : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Identity</dt>
-                <dd className="text-ink">
-                  {profile.identityStatus === "SUBMITTED"
-                    ? "Submitted — verification pending"
-                    : "Not submitted"}
-                </dd>
-              </div>
-            </dl>
+            <DetailList>
+              <Detail label="Name">{fullName}</Detail>
+              <Detail label="Date of birth">
+                {profile.dateOfBirth ? formatDate(profile.dateOfBirth) : "Not on file"}
+              </Detail>
+              <Detail label="Username">{profile.username}</Detail>
+              <Detail label="Customer since">{formatDate(profile.createdAt)}</Detail>
+            </DetailList>
           </CardBody>
         </Card>
 
+        {/* -------------------------------------------------------- contact */}
         <Card>
-          <CardHeader
-            title="Two-factor authentication"
-            description="Time-based one-time passwords (TOTP)."
-          />
-          <TwoFactorPanel enabled={profile.twoFactorEnabled} />
+          <CardHeader title="Contact" />
+          <CardBody>
+            <DetailList>
+              <Detail label="Email">
+                <span className="break-all">{profile.email}</span>
+              </Detail>
+              <Detail label="Phone">
+                {profile.phone ? formatPhone(profile.phone) : "Not on file"}
+              </Detail>
+            </DetailList>
+          </CardBody>
+        </Card>
+
+        {/* -------------------------------------------------------- address */}
+        <Card>
+          <CardHeader title="Home address" />
+          <CardBody>
+            {profile.streetAddress ? (
+              <address className="text-sm not-italic leading-relaxed text-ink">
+                {profile.streetAddress}
+                {profile.addressLine2 ? (
+                  <>
+                    <br />
+                    {profile.addressLine2}
+                  </>
+                ) : null}
+                <br />
+                {cityLine} {profile.postalCode}
+              </address>
+            ) : (
+              <p className="text-sm text-ink-muted">
+                No address on file. Accounts opened before onboarding existed do not have one.
+              </p>
+            )}
+          </CardBody>
+        </Card>
+
+        {/* ------------------------------------------------------- identity */}
+        <Card>
+          <CardHeader title="Identity" />
+          <CardBody>
+            <DetailList>
+              {/*
+               * Four digits, because four digits is all the server keeps. The
+               * status says the details were submitted and nothing more: there
+               * is no verification provider behind this system, and passing a
+               * format check is not verification.
+               */}
+              <Detail label="Social Security number">
+                <span className="tabular">
+                  {profile.ssnLast4 ? maskedSsn(profile.ssnLast4) : "Not on file"}
+                </span>
+              </Detail>
+              <Detail label="Identity status">
+                {profile.identityStatus === "SUBMITTED"
+                  ? "Submitted — verification pending"
+                  : "Not submitted"}
+              </Detail>
+              <Detail label="Know-your-customer">
+                <Badge tone={statusTone(profile.kycStatus)}>{humanise(profile.kycStatus)}</Badge>
+              </Detail>
+              <Detail label="Credit score">
+                <span className="tabular">
+                  {creditScore ? `${creditScore.score} · ${creditScore.rating}` : "Not yet scored"}
+                </span>
+              </Detail>
+            </DetailList>
+          </CardBody>
         </Card>
       </div>
 
+      {/* -------------------------------------------------------- security */}
+      <Card>
+        <CardHeader
+          title="Two-factor authentication"
+          description="A time-based one-time password from an authenticator app, checked at sign-in."
+        />
+        <TwoFactorPanel enabled={profile.twoFactorEnabled} />
+      </Card>
+
+      {/* ------------------------------------------------------- documents */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Submit a document" description="Identity verification for your account." />
+        <Card className="h-fit">
+          <CardHeader
+            title="Submit a document"
+            description="Identity documents are reviewed by staff before a status changes."
+          />
           <CardBody>
             <KycSubmitForm />
           </CardBody>
@@ -175,34 +175,31 @@ export default async function ProfilePage() {
           {documents.length === 0 ? (
             <EmptyState
               title="Nothing submitted yet"
-              description="Documents you send for verification will be listed here."
+              description="Documents you send for verification will be listed here with their review status."
             />
           ) : (
-            <TableShell label="KYC documents">
-              <thead>
-                <tr>
-                  <Th>Type</Th>
-                  <Th>Reference</Th>
-                  <Th>Status</Th>
-                  <Th>Submitted</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((d) => (
-                  <tr key={d.id} className="hover:bg-sunken">
-                    <Td>{humanise(d.documentType)}</Td>
-                    <Td className="font-mono text-xs text-ink-subtle">{d.documentRef}</Td>
-                    <Td>
-                      <Badge tone={statusTone(d.status)}>{humanise(d.status)}</Badge>
-                      {d.rejectionReason ? (
-                        <span className="mt-1 block text-xs text-critical">{d.rejectionReason}</span>
-                      ) : null}
-                    </Td>
-                    <Td>{formatDateTime(d.createdAt)}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableShell>
+            /*
+             * Rows rather than a four-column table. In a half-width card the
+             * table needed 640px and scrolled sideways, which in practice meant
+             * the submission date was simply cut off.
+             */
+            <ul className="divide-y divide-line">
+              {documents.map((d) => (
+                <li key={d.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">{humanise(d.documentType)}</p>
+                    <p className="truncate font-mono text-xs text-ink-subtle">{d.documentRef}</p>
+                    <p className="mt-0.5 text-xs text-ink-subtle">
+                      Submitted {formatDateTime(d.createdAt)}
+                    </p>
+                    {d.rejectionReason ? (
+                      <p className="mt-1 text-xs text-critical">{d.rejectionReason}</p>
+                    ) : null}
+                  </div>
+                  <Badge tone={statusTone(d.status)}>{humanise(d.status)}</Badge>
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
       </div>

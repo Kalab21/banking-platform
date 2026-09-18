@@ -2,12 +2,18 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatCurrency } from "@/lib/format";
+import { balanceProgress } from "@/features/loans/progress";
 
 /**
- * Principal repaid versus principal outstanding.
+ * How much of the borrowed amount is still outstanding.
  *
  * Both figures come straight from the loan record: `principal` and
  * `remainingBalance`. Nothing is estimated.
+ *
+ * Described as the balance coming down rather than as principal repaid. A
+ * repayment is split between principal and interest, and this record does not
+ * carry the split — so "principal repaid" would credit interest payments to the
+ * principal and overstate the position.
  */
 export function RepaymentProgress({
   principal,
@@ -18,11 +24,12 @@ export function RepaymentProgress({
   remainingBalance: number;
   currency?: string;
 }) {
-  const repaid = Math.max(principal - remainingBalance, 0);
-  const percent = principal > 0 ? Math.round((repaid / principal) * 100) : 0;
+  const progress = balanceProgress(principal, remainingBalance);
+  const repaid = progress?.reduced ?? 0;
+  const percent = progress?.percent ?? 0;
 
   const data = [
-    { name: "Repaid", value: repaid, fill: "var(--color-accent)" },
+    { name: "Repaid", value: repaid, fill: "var(--color-primary)" },
     { name: "Outstanding", value: Math.max(remainingBalance, 0), fill: "var(--color-line)" },
   ];
 
@@ -31,7 +38,7 @@ export function RepaymentProgress({
       <div
         className="h-32 w-32 shrink-0"
         role="img"
-        aria-label={`${percent}% of principal repaid: ${formatCurrency(repaid, currency)} of ${formatCurrency(principal, currency)}.`}
+        aria-label={`Loan balance reduced by ${percent}%: ${formatCurrency(repaid, currency)} of ${formatCurrency(principal, currency)} borrowed.`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -63,7 +70,7 @@ export function RepaymentProgress({
 
       <figcaption className="min-w-0 space-y-1 text-sm">
         <p className="tabular text-2xl font-semibold text-ink">{percent}%</p>
-        <p className="text-ink-muted">of principal repaid</p>
+        <p className="text-ink-muted">of the original balance repaid</p>
         <p className="text-xs text-ink-subtle">
           {formatCurrency(repaid, currency)} of {formatCurrency(principal, currency)}
         </p>

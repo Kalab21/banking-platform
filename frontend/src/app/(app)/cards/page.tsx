@@ -1,18 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { requireSession } from "@/lib/session";
 import { getCreditCards } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import {
   Badge,
   Card,
-  CardBody,
+  Detail,
+  DetailList,
   EmptyState,
   ErrorState,
+  Money,
   PageHeader,
+  ProgressBar,
   statusTone,
 } from "@/components/ui/primitives";
-import { formatCurrency, formatDate, formatPercent, humanise } from "@/lib/format";
+import { formatCurrency, formatDate, formatPercent, formatNumber, humanise } from "@/lib/format";
+import { VirtualCard } from "@/features/cards/VirtualCard";
+import { utilisation } from "@/features/cards/utilisation";
 
 export const metadata: Metadata = { title: "Credit cards" };
 
@@ -27,7 +33,7 @@ export default async function CardsPage() {
       return (
         <>
           <PageHeader title="Credit cards" />
-          <ErrorState message={error.userMessage} />
+          <ErrorState title="We could not load your cards" message={error.userMessage} />
         </>
       );
     }
@@ -38,82 +44,96 @@ export default async function CardsPage() {
     <>
       <PageHeader
         title="Credit cards"
-        description="Limits, balances and rewards. Card numbers are always shown masked."
+        description="Balances, limits and rewards. Card numbers are always shown masked."
       />
 
       {cards.length === 0 ? (
         <Card>
           <EmptyState
             title="No credit cards"
-            description="Approved card applications will appear here."
+            description="Approved card applications will appear here with their limit, balance and statement dates."
           />
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-6">
           {cards.map((card) => {
-            const used = card.creditLimit > 0 ? (card.currentBalance / card.creditLimit) * 100 : 0;
+            const used = utilisation(card.currentBalance, card.creditLimit);
             return (
-              <Card key={card.id}>
-                <CardBody className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link
-                        href={`/cards/${card.id}`}
-                        className="text-sm font-semibold text-accent hover:underline"
-                      >
-                        {humanise(card.cardType)} card
-                      </Link>
-                      <p className="tabular mt-0.5 text-sm text-ink-subtle">
-                        {card.maskedCardNumber}
-                      </p>
-                    </div>
-                    <Badge tone={statusTone(card.status)}>{humanise(card.status)}</Badge>
-                  </div>
+              <Card key={card.id} className="overflow-hidden">
+                <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,20rem)_1fr] lg:items-start">
+                  <VirtualCard card={card} />
 
-                  <div>
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-ink-subtle">Balance</span>
-                      <span className="tabular text-lg font-semibold text-ink">
-                        {formatCurrency(card.currentBalance, card.currency)}
-                      </span>
+                  <div className="min-w-0 space-y-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-base font-semibold text-ink">
+                          {humanise(card.cardType)} card
+                        </h2>
+                        <p className="tabular mt-0.5 text-sm text-ink-subtle">
+                          {card.maskedCardNumber}
+                        </p>
+                      </div>
+                      <Badge tone={statusTone(card.status)}>{humanise(card.status)}</Badge>
                     </div>
-                    <div
-                      className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-sunken"
-                      role="img"
-                      aria-label={`${Math.round(used)}% of the credit limit used.`}
+
+                    <div>
+                      <div className="flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-ink-subtle">
+                            Current balance
+                          </p>
+                          <Money
+                            amount={card.currentBalance}
+                            currency={card.currency}
+                            size="lg"
+                            className="mt-1 block text-ink"
+                          />
+                        </div>
+                        <p className="text-sm text-ink-muted">
+                          <span className="tabular font-medium text-ink">
+                            {formatCurrency(card.availableCredit, card.currency)}
+                          </span>{" "}
+                          available
+                        </p>
+                      </div>
+
+                      <div className="mt-3">
+                        <ProgressBar
+                          value={used.percent}
+                          tone={used.tone}
+                          label={`${used.percent}% of a ${formatCurrency(card.creditLimit, card.currency)} credit limit used`}
+                        />
+                        <p className="mt-2 text-xs text-ink-subtle">
+                          {used.percent}% of {formatCurrency(card.creditLimit, card.currency)} limit
+                          used
+                        </p>
+                      </div>
+                    </div>
+
+                    <DetailList columns={2} className="border-t border-line pt-4">
+                      <Detail label="Minimum due">
+                        <span className="tabular">
+                          {formatCurrency(card.minimumPaymentDue, card.currency)}
+                        </span>
+                      </Detail>
+                      <Detail label="Payment due">{formatDate(card.paymentDueDate)}</Detail>
+                      <Detail label="APR">
+                        <span className="tabular">{formatPercent(card.apr)}</span>
+                      </Detail>
+                      <Detail label="Rewards">
+                        <span className="tabular">{formatNumber(card.rewardsPoints)} points</span>
+                      </Detail>
+                    </DetailList>
+
+                    <Link
+                      href={`/cards/${card.id}`}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                     >
-                      <div
-                        className="h-full rounded-full bg-accent"
-                        style={{ width: `${Math.min(Math.max(used, 0), 100)}%` }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-xs text-ink-subtle">
-                      {formatCurrency(card.availableCredit, card.currency)} available of{" "}
-                      {formatCurrency(card.creditLimit, card.currency)}
-                    </p>
+                      View card activity
+                      <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                    </Link>
                   </div>
-
-                  <dl className="grid grid-cols-2 gap-3 border-t border-line pt-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-ink-subtle">Minimum due</dt>
-                      <dd className="tabular text-ink">
-                        {formatCurrency(card.minimumPaymentDue, card.currency)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-ink-subtle">Due date</dt>
-                      <dd className="text-ink">{formatDate(card.paymentDueDate)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-ink-subtle">APR</dt>
-                      <dd className="tabular text-ink">{formatPercent(card.apr)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-ink-subtle">Rewards</dt>
-                      <dd className="tabular text-ink">{card.rewardsPoints} pts</dd>
-                    </div>
-                  </dl>
-                </CardBody>
+                </div>
               </Card>
             );
           })}

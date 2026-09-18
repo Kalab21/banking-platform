@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatCompactCurrency, formatCurrency, formatDate } from "@/lib/format";
+import { formatCompactCurrency, formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
 export interface BalancePoint {
   /** ISO timestamp of the transaction that produced this balance. */
@@ -35,6 +35,21 @@ export function BalanceTrendChart({
 }) {
   const summary = `Balance moved from ${formatCurrency(points[0]?.balance, currency)} to ${formatCurrency(points[points.length - 1]?.balance, currency)} across ${points.length} transactions.`;
 
+  /*
+   * Axis labels follow the span they cover. A demo account's transactions can
+   * all land within a minute of each other, and four ticks reading the same
+   * date looks like a broken chart rather than a short history — so under two
+   * days the axis shows the time instead.
+   */
+  const first = new Date(points[0]?.at ?? 0).getTime();
+  const last = new Date(points[points.length - 1]?.at ?? 0).getTime();
+  const withinTwoDays = Number.isFinite(first) && Number.isFinite(last) && last - first < 2 * 86_400_000;
+
+  const axisLabel = (iso: string) =>
+    withinTwoDays
+      ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(iso))
+      : formatDate(iso);
+
   return (
     <figure className="m-0">
       <div className="h-56 w-full" role="img" aria-label={summary}>
@@ -51,7 +66,7 @@ export function BalanceTrendChart({
 
             <XAxis
               dataKey="at"
-              tickFormatter={(v: string) => formatDate(v)}
+              tickFormatter={axisLabel}
               tick={{ fill: "var(--color-ink-subtle)", fontSize: 11 }}
               stroke="var(--color-line-strong)"
               tickLine={false}
@@ -67,7 +82,7 @@ export function BalanceTrendChart({
 
             <Tooltip
               formatter={(value) => [formatCurrency(Number(value), currency), "Balance"]}
-              labelFormatter={(label) => formatDate(String(label))}
+              labelFormatter={(label) => formatDateTime(String(label))}
               contentStyle={{
                 borderRadius: 6,
                 border: "1px solid var(--color-line-strong)",

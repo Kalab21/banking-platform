@@ -1,10 +1,21 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { formatCurrency } from "@/lib/format";
 
 /** Shared presentational building blocks. Server-safe — no client hooks here. */
 
 // ------------------------------------------------------------------- surfaces
 
+/**
+ * The surface most content sits on.
+ *
+ * `min-w-0` is load-bearing rather than cosmetic. A grid or flex item defaults
+ * to `min-width: auto`, which means it refuses to shrink below the intrinsic
+ * width of its widest child — so a card holding a select with long option text,
+ * or a table with a minimum width, pushes the whole page wider than the screen
+ * and produces a horizontal scrollbar on a phone. This lets the card shrink and
+ * leaves the scrolling to whichever child actually needs it.
+ */
 export function Card({
   children,
   className,
@@ -15,7 +26,9 @@ export function Card({
   as?: "section" | "div" | "article";
 }) {
   return (
-    <Tag className={cn("rounded-lg border border-line bg-surface", className)}>{children}</Tag>
+    <Tag className={cn("min-w-0 rounded-lg border border-line bg-surface", className)}>
+      {children}
+    </Tag>
   );
 }
 
@@ -172,6 +185,128 @@ export function StatTile({
         {value}
       </p>
       {hint ? <p className="mt-1 text-xs text-ink-subtle">{hint}</p> : null}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ financial
+
+/**
+ * A monetary figure.
+ *
+ * Tabular numerals so that a column of amounts lines up digit-for-digit, which
+ * is the difference between a list of numbers and a statement. Size is a prop
+ * because the same component sets a headline balance and a row amount.
+ */
+export function Money({
+  amount,
+  currency = "USD",
+  size = "md",
+  signed = false,
+  className,
+}: {
+  amount: number | null | undefined;
+  currency?: string;
+  size?: "sm" | "md" | "lg" | "hero";
+  /** Prefixes an explicit + or − — for a row where direction is the point. */
+  signed?: boolean;
+  className?: string;
+}) {
+  const sizes = {
+    sm: "text-sm",
+    md: "text-base",
+    lg: "text-2xl font-semibold tracking-tight",
+    hero: "text-[2.5rem] leading-[1.1] font-semibold tracking-tight sm:text-[3rem]",
+  } as const;
+
+  const known = amount !== null && amount !== undefined && Number.isFinite(amount);
+  const sign = signed && known ? (amount >= 0 ? "+" : "−") : "";
+  const value = formatCurrency(known && signed ? Math.abs(amount) : amount, currency);
+
+  return (
+    <span className={cn("tabular", sizes[size], className)}>
+      {sign}
+      {value}
+    </span>
+  );
+}
+
+/**
+ * A bounded progress bar with a real accessible name.
+ *
+ * Clamped on purpose: a balance above its limit, or a loan whose figures have
+ * not settled, would otherwise draw a bar past the end of its track. The number
+ * shown alongside is the true one; only the drawing is clamped.
+ */
+export function ProgressBar({
+  value,
+  label,
+  tone = "primary",
+}: {
+  /** Percentage, 0–100. Values outside that range are clamped for display. */
+  value: number;
+  /** Read by assistive technology. Say what the bar measures, not "progress". */
+  label: string;
+  tone?: "primary" | "caution" | "critical";
+}) {
+  const safe = Number.isFinite(value) ? Math.min(Math.max(value, 0), 100) : 0;
+  const fill = {
+    primary: "bg-primary",
+    caution: "bg-caution",
+    critical: "bg-critical",
+  }[tone];
+
+  return (
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(safe)}
+      aria-label={label}
+      className="h-2 w-full overflow-hidden rounded-full bg-sunken"
+    >
+      <div className={cn("h-full rounded-full transition-[width]", fill)} style={{ width: `${safe}%` }} />
+    </div>
+  );
+}
+
+/**
+ * Label-and-value pairs.
+ *
+ * A definition list rather than a grid of divs, because that is what this is,
+ * and a screen reader announces the pairing instead of two unrelated strings.
+ */
+export function DetailList({
+  children,
+  columns = 2,
+  className,
+}: {
+  children: ReactNode;
+  columns?: 1 | 2 | 3;
+  className?: string;
+}) {
+  const cols = {
+    1: "grid-cols-1",
+    2: "grid-cols-1 sm:grid-cols-2",
+    3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  }[columns];
+
+  return <dl className={cn("grid gap-x-6 gap-y-4", cols, className)}>{children}</dl>;
+}
+
+export function Detail({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">{label}</dt>
+      <dd className="mt-1 text-sm text-ink">{children}</dd>
     </div>
   );
 }

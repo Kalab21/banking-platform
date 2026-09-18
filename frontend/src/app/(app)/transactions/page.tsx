@@ -4,19 +4,21 @@ import { getAccounts, getTransactions } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import {
   Card,
+  CardBody,
   CardHeader,
   EmptyState,
   ErrorState,
   PageHeader,
-  TableShell,
-  Td,
-  Th,
 } from "@/components/ui/primitives";
-import { formatCurrency, formatDateTime, humanise, isCredit, maskAccountNumber } from "@/lib/format";
 import { MoneyForms } from "@/features/transactions/MoneyForms";
+import { toMoneyAccountOptions } from "@/features/transactions/money-account";
+import { TransactionRow } from "@/features/transactions/TransactionRow";
 import type { Transaction } from "@/types/api";
 
 export const metadata: Metadata = { title: "Transactions" };
+
+/** How many lines of combined history to render before it stops being a list. */
+const MAX_ROWS = 50;
 
 export default async function TransactionsPage() {
   const session = await requireSession();
@@ -29,7 +31,7 @@ export default async function TransactionsPage() {
       return (
         <>
           <PageHeader title="Transactions" />
-          <ErrorState message={error.userMessage} />
+          <ErrorState title="We could not load your transactions" message={error.userMessage} />
         </>
       );
     }
@@ -39,6 +41,9 @@ export default async function TransactionsPage() {
   // Combine the recent history of every account into one timeline.
   const pages = await Promise.all(accounts.map((a) => getTransactions(a.id, 0, 20)));
   const accountNumbers = new Map(accounts.map((a) => [a.id, a.accountNumber]));
+  // Null means the call failed. An account with nothing on it comes back as a
+  // page with empty content, which is a different thing to tell the customer.
+  const activityUnavailable = accounts.length > 0 && pages.every((p) => p === null);
   const all: Transaction[] = pages
     .flatMap((p) => p?.content ?? [])
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -47,46 +52,58 @@ export default async function TransactionsPage() {
     <>
       <PageHeader
         title="Transactions"
-        description="Move money between accounts and review everything that has settled."
+        description="Move money between your accounts and review everything that has settled."
       />
 
-      <MoneyForms accounts={accounts} />
+      {/*
+       * The forms are untouched: their idempotency keys, their unknown-outcome
+       * handling and the semantics of each request are the money-movement
+       * contract, and this pass is about how the page reads, not what it does.
+       *
+       * They are handed a narrowed view of each account rather than the account
+       * itself: everything a Client Component receives is serialised into the
+       * page, so passing `Account` published the raw account number alongside
+       * the masked label the customer actually sees.
+       */}
+      <MoneyForms accounts={toMoneyAccountOptions(accounts)} />
 
       <Card>
-        <CardHeader title="Activity" description="Most recent first, across all your accounts." />
-        {all.length === 0 ? (
+        <CardHeader
+          title="Activity"
+          description={
+            all.length > 0
+              ? `Most recent first, across ${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}.`
+              : undefined
+          }
+        />
+        {activityUnavailable ? (
+          <CardBody>
+            <ErrorState
+              title="We could not load your activity"
+              message="The transaction service did not answer. Try again shortly."
+            />
+          </CardBody>
+        ) : all.length === 0 ? (
           <EmptyState
             title="Nothing has moved yet"
             description="Once you deposit or transfer, the record will appear here."
           />
         ) : (
-          <TableShell label="All transactions">
-            <thead>
-              <tr>
-                <Th>Date</Th>
-                <Th>Account</Th>
-                <Th>Description</Th>
-                <Th>Type</Th>
-                <Th align="right">Amount</Th>
-                <Th align="right">Balance after</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {all.slice(0, 50).map((t) => (
-                <tr key={`${t.accountId}-${t.transactionRef}`} className="hover:bg-sunken">
-                  <Td>{formatDateTime(t.createdAt)}</Td>
-                  <Td>{maskAccountNumber(accountNumbers.get(t.accountId))}</Td>
-                  <Td>{t.description || "—"}</Td>
-                  <Td>{humanise(t.type)}</Td>
-                  <Td align="right" className={isCredit(t.type) ? "text-positive" : undefined}>
-                    {isCredit(t.type) ? "+" : "−"}
-                    {formatCurrency(Math.abs(t.amount), t.currency)}
-                  </Td>
-                  <Td align="right">{formatCurrency(t.balanceAfter, t.currency)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableShell>
+          /*
+           * Rows rather than a six-column table. The table version needed a
+           * horizontal scrollbar on any phone, which is not a way to read a
+           * bank statement.
+           */
+          <ul className="divide-y divide-line">
+            {all.slice(0, MAX_ROWS).map((t) => (
+              <TransactionRow
+                key={`${t.accountId}-${t.transactionRef}`}
+                transaction={t}
+                accountNumber={accountNumbers.get(t.accountId)}
+                showBalanceAfter
+              />
+            ))}
+          </ul>
         )}
       </Card>
     </>
