@@ -1,4 +1,4 @@
-# Banking Platform — E2E Test Suite (Days 17+)
+﻿# Banking Platform — E2E Test Suite (Days 17+)
 # Prerequisites: docker compose up -d (all services healthy)
 # Run: .\e2e-tests.ps1
 
@@ -76,7 +76,25 @@ function Get-TOTP($secret) {
 Write-Host "`n=== SETUP ===" -ForegroundColor Cyan
 
 $ts = Get-Date -Format "yyyyMMddHHmmss"
-$regBody = @{ username="e2euser$ts"; email="e2e$ts@bank.com"; password="Test1234!"; firstName="E2E"; lastName="User"; phoneNumber="5550001111" }
+# Onboarding requires a full profile. Every value is synthetic: example.com,
+# the 555-01xx range reserved for fiction, and a Social Security number
+# reserved for demonstration use. The server keeps only its last four digits.
+# Note "phone", not "phoneNumber" — the latter was never a field on the
+# request and was being silently discarded.
+$regBody = @{
+    username      = "e2euser$ts"
+    email         = "e2e$ts@example.com"
+    password      = "Test1234!"
+    firstName     = "E2E"
+    lastName      = "User"
+    dateOfBirth   = "1990-01-15"
+    phone         = "2405550148"
+    streetAddress = "123 Example Street"
+    city          = "Silver Spring"
+    state         = "MD"
+    postalCode    = "20910"
+    ssn           = "123-45-6789"
+}
 $auth = Post "$GW/api/auth/register" $regBody
 Assert "Register user" ($auth -and $auth.token)
 $TOKEN = $auth.token
@@ -373,7 +391,11 @@ if ($history -and $history.Count -gt 0) {
     $latest = $history[0]
     Assert "History entry has delta" ($latest.delta -ne $null)
     Assert "History entry has reason" ($latest.changeReason -ne $null)
-    Write-Host "  Latest change: $($latest.delta > 0 ? '+' : '')$($latest.delta)  Reason=$($latest.changeReason)"
+    # No ternary, and no bare ">": both are PowerShell 7 syntax, and ">" is a
+    # redirection operator in 5.1 rather than a comparison. The script would not
+    # parse at all, so nothing below this line ran.
+    $sign = if ($latest.delta -gt 0) { "+" } else { "" }
+    Write-Host "  Latest change: $sign$($latest.delta)  Reason=$($latest.changeReason)"
 }
 
 # Verify Kafka drove score updates from loan repayment (Flow 3)

@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -35,8 +36,37 @@ public class User {
     @Column(name = "last_name", nullable = false, length = 50)
     private String lastName;
 
+    @Column(name = "middle_name", length = 50)
+    private String middleName;
+
     @Column(length = 20)
     private String phone;
+
+    /*
+     * Profile captured at onboarding. Nullable at the database level because
+     * this table already holds accounts created before onboarding existed;
+     * RegisterRequest requires them, so a new customer cannot skip them while a
+     * legacy row stays valid.
+     */
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(name = "street_address", length = 120)
+    private String streetAddress;
+
+    @Column(name = "address_line_2", length = 60)
+    private String addressLine2;
+
+    @Column(length = 60)
+    private String city;
+
+    /** Two-letter USPS abbreviation, stored upper case. */
+    @Column(length = 2)
+    private String state;
+
+    @Column(name = "postal_code", length = 10)
+    private String postalCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

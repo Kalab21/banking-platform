@@ -45,11 +45,24 @@ not settable through the API. It is off by default.
 
 ## Smoke test
 
+Registration opens an account, so it asks for what opening one needs: a legal
+name, a date of birth, a US residential address and an identity number. Every
+value below is synthetic — `example.com`, the `555-01xx` range reserved for
+fiction, and a Social Security number reserved for demonstration use.
+
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"demo","email":"demo@example.com","password":"Password123!","firstName":"Demo","lastName":"User"}'
+  -d '{"username":"demo","email":"demo@example.com","password":"Password123!",
+       "firstName":"Demo","lastName":"User","dateOfBirth":"1990-01-15",
+       "phone":"2405550148","streetAddress":"123 Example Street",
+       "city":"Silver Spring","state":"MD","postalCode":"20910",
+       "ssn":"123-45-6789"}'
 ```
+
+The server checks the Social Security number's format, keeps its last four
+digits and discards the rest. No column holds the whole number and no endpoint
+returns one.
 
 ## Building behind a TLS-inspecting proxy
 

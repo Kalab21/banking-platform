@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { AuthCard } from "@/components/layout/AuthCard";
 import { LoginForm } from "@/features/auth/LoginForm";
 import { getSession } from "@/lib/session";
 
@@ -11,5 +12,9 @@ export default async function LoginPage() {
 
   // The heading lives in the form: it changes when the second factor is
   // requested, and the page has no way to know that has happened.
-  return <LoginForm />;
+  return (
+    <AuthCard width="form">
+      <LoginForm />
+    </AuthCard>
+  );
 }

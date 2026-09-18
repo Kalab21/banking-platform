@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.LocalDate;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +44,10 @@ class RegisterPasswordPolicyTest {
         factory.close();
     }
 
+    /**
+     * A request that is complete apart from the password, so that the only
+     * violations these tests can see are password violations.
+     */
     private static RegisterRequest requestWith(String password) {
         RegisterRequest request = new RegisterRequest();
         request.setUsername("testperson");
@@ -50,6 +55,13 @@ class RegisterPasswordPolicyTest {
         request.setFirstName("Test");
         request.setLastName("Person");
         request.setPassword(password);
+        request.setDateOfBirth(LocalDate.of(1990, 1, 15));
+        request.setPhone("2405550148");
+        request.setStreetAddress("123 Example Street");
+        request.setCity("Silver Spring");
+        request.setState("MD");
+        request.setPostalCode("20910");
+        request.setSsn("123-45-6789");
         return request;
     }
 

@@ -60,8 +60,26 @@ export interface RegisterPayload {
   email: string;
   password: string;
   firstName: string;
+  middleName?: string;
   lastName: string;
-  phone?: string;
+  /** ISO date, `YYYY-MM-DD`. */
+  dateOfBirth: string;
+  /** Ten digits, not a formatted display string. */
+  phone: string;
+  streetAddress: string;
+  addressLine2?: string;
+  city: string;
+  /** Two-letter USPS code. */
+  state: string;
+  postalCode: string;
+  /**
+   * Nine digits, sent once.
+   *
+   * The server checks the shape, keeps the last four digits and discards the
+   * rest. Nothing on this side stores it: it is read from the form, passed
+   * through this call, and gone.
+   */
+  ssn: string;
 }
 
 export function register(payload: RegisterPayload): Promise<AuthResponse> {

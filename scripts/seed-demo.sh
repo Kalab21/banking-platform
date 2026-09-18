@@ -69,9 +69,15 @@ ok "gateway reachable"
 # ---------------------------------------------------------------- the customer
 
 say "Creating demo customer"
+# Onboarding requires a full profile: date of birth, a mailing address and an
+# identity number. Every value below is synthetic — example.com, the 555-01xx
+# range reserved for fiction, and a Social Security number reserved for
+# demonstration use. The server keeps only the last four digits of that number.
 AUTH=$(api POST /api/auth/register "$(cat <<JSON
 {"username":"${USERNAME}","email":"${USERNAME}@example.com","password":"${PASSWORD}",
- "firstName":"Ada","lastName":"Lovelace","phone":"5550000000"}
+ "firstName":"Ada","lastName":"Lovelace","dateOfBirth":"1990-01-15","phone":"2405550148",
+ "streetAddress":"123 Example Street","city":"Silver Spring","state":"MD","postalCode":"20910",
+ "ssn":"123-45-6789"}
 JSON
 )")
 TOKEN=$(echo "$AUTH" | json token)

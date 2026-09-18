@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatCurrency,
+  formatDate,
   formatPercent,
   humanise,
   isCredit,
@@ -77,5 +78,18 @@ describe("isCredit", () => {
   it("treats withdrawals and outgoing transfers as money out", () => {
     expect(isCredit("WITHDRAWAL")).toBe(false);
     expect(isCredit("TRANSFER_OUT")).toBe(false);
+  });
+});
+
+describe("formatDate with a date-only value", () => {
+  it("shows the calendar date, not the day before", () => {
+    // A date of birth is a calendar date, not an instant. Parsed as UTC
+    // midnight and formatted in a timezone behind UTC, it would read as the
+    // previous day.
+    expect(formatDate("1990-01-15")).toBe("Jan 15, 1990");
+  });
+
+  it("still formats a full timestamp", () => {
+    expect(formatDate("2026-03-09T14:30:00Z")).toMatch(/Mar \d, 2026/);
   });
 });
