@@ -34,19 +34,25 @@ bearer token.
 
 ## Screenshots
 
-Captured automatically from the running seeded demo stack using Playwright.
+Captured automatically from the running seeded demo stack using Playwright. Every
+figure shown is the seeded synthetic customer's real data, read through the
+gateway from the services that own it.
 
-| Sign in | Dashboard |
+| Dashboard | Accounts |
 |---|---|
-| ![Sign-in page](docs/screenshots/01-login-desktop.png) | ![Customer dashboard](docs/screenshots/02-dashboard.png) |
+| ![Customer dashboard showing total balance, account cards, balance history and recent activity](docs/screenshots/13-dashboard-desktop.png) | ![Accounts page with a card per account showing balance, available balance and status](docs/screenshots/15-accounts.png) |
 
-| Account & transactions | Transfer confirmation |
+| Credit card | Loans |
 |---|---|
-| ![Account detail with transaction history](docs/screenshots/03-accounts-transactions.png) | ![Transfer review step](docs/screenshots/04-transfer.png) |
+| ![Credit card page with the card, balance, credit utilisation, minimum due, APR and rewards](docs/screenshots/18-cards.png) | ![Loans page showing remaining balance, balance progress, monthly payment and next payment date](docs/screenshots/19-loans.png) |
 
-| Loan detail & amortization | Mobile |
+| Profile & security | Mobile |
 |---|---|
-| ![Loan detail with amortization schedule](docs/screenshots/05-loan-details.png) | <img src="docs/screenshots/06-mobile.png" alt="Dashboard on a phone viewport" width="260"> |
+| ![Profile page grouped into personal, contact, address and identity sections with a masked Social Security number](docs/screenshots/20-profile-security.png) | <img src="docs/screenshots/14-dashboard-mobile.png" alt="Dashboard on a phone viewport" width="260"> |
+
+| Sign in | Transactions |
+|---|---|
+| ![Sign-in page](docs/screenshots/01-login-desktop.png) | ![Transactions page with deposit, withdraw and transfer forms above the combined activity list](docs/screenshots/17-transactions.png) |
 
 | Onboarding — personal details | Onboarding — review |
 |---|---|
