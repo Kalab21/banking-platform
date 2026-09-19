@@ -88,8 +88,7 @@ Independent services per business domain, each owning its own PostgreSQL databas
 Asynchronous propagation over Kafka, so a transaction can update statistics, fire
 notifications and trigger fraud scoring without the money path depending on any of them. A
 single authenticated entry point validates JWTs once and forwards the identity it derived
-downstream, replacing anything the client sent. Every state-changing operation writes an
-`audit_log` row alongside its domain write, inside the same transaction.
+downstream, replacing anything the client sent.
 
 ![Northbank system architecture](docs/architecture/northbank-system-architecture.svg)
 
@@ -97,7 +96,8 @@ Several services both publish and consume: an approved application, for example,
 to `account-service` or `credit-card-service` to create what was approved.
 
 **13 backend processes total:** Eureka, the API Gateway and 11 business services. The
-Next.js console runs as a separate process and is the only client of the gateway.
+Next.js console runs as a separate process; browser banking requests reach the platform
+through this BFF and the gateway.
 
 <details>
 <summary><strong>Service inventory and ports</strong></summary>
@@ -131,15 +131,12 @@ Ports, databases and Kafka topics are also listed in
 |---|---|
 | **Backend** | Java 17, Spring Boot 3.3.6, Spring Cloud Gateway + Eureka, OpenFeign |
 | **Frontend** | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, Recharts |
-| **Messaging** | Apache Kafka — 9 event topics, 7 of them consumed today, feeding statistics, notifications and fraud scoring |
+| **Messaging** | Apache Kafka — domain events for statistics, notifications, fraud signals and application-driven issuance workflows |
 | **Data** | PostgreSQL 16, database per service, Flyway migrations, `ddl-auto: validate`; Redis 7 for rate limits, velocity counters and read-model cache |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, Brave tracing to Zipkin, `X-Request-Id` correlation |
 | **Testing** | 722 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
-
-**Scale:** 13 backend processes plus a Next.js console, 328 Java source files, 29 REST
-controllers, 94 endpoints, 9 Kafka topics, 28 Flyway migrations.
 
 <details>
 <summary><strong>Full technology stack with versions</strong></summary>
@@ -336,63 +333,27 @@ development, the API reference and build notes are in
 
 ## Engineering tradeoffs
 
-These are the gaps between this project and a production ledger. Each one is a decision
-rather than an oversight.
+### Distributed transfer consistency
 
-- **Cross-service transfers are not atomic.** The debit and the credit are two Feign calls
-  with no saga, compensating transaction or outbox.
-- **Unknown outcomes are not reconciled automatically.** They settle as `UNKNOWN` and are
-  logged; nothing sweeps those rows yet.
-- **No Kafka dead-letter topic.** A poisoned message retries rather than parking.
-- **Service-to-service calls rely on network isolation** — no host ports and no gateway
-  route — rather than mutual TLS or a service credential.
-- **Observability has no durable storage or alert routing.** Dashboards and traces exist;
-  paging does not.
-- **External rails are simulated.** No banking network is contacted.
-- **Some money-write UIs are deliberately deferred.** Payment creation, scheduled payments,
-  loan repayment and card payment exist in the backend, but none of those endpoints requires
-  an `Idempotency-Key` the way `/api/transactions/*` does, so a console UI for them would be
-  the one money path where a lost response could not be retried safely.
+Account-to-account transfers cross a service boundary rather than using a distributed
+transaction. Partial or uncertain outcomes are surfaced as unknown and require
+reconciliation rather than an unsafe automatic retry. A complete production-oriented
+solution would require a deliberate saga, outbox and compensation design.
 
-<details>
-<summary><strong>The full list, with the reasoning behind each</strong></summary>
+### Service-to-service identity
 
-- **Cross-service transfers are not atomic.** The debit and the credit are two separate
-  Feign calls with no saga, compensating transaction or outbox. A failure after a successful
-  debit leaves funds withdrawn but not credited, which is why that case is surfaced to the
-  customer as unknown rather than as a failure.
-- **An unknown outcome is not reconciled automatically.** When a money-movement attempt
-  reaches `account-service` and the answer is lost, the idempotency record settles as
-  `UNKNOWN` and is logged. Nothing sweeps those rows or reverses a half-applied transfer;
-  that needs the saga or outbox above.
-- **Only one Feign path is protected.** `transaction-service` to `account-service` has a
-  circuit breaker and timeout; the other Feign callers have neither, so a slow downstream
-  service still propagates latency upstream.
-- **The console is read-mostly for staff.** Employees can review KYC documents, but the
-  backend has no endpoint listing all pending documents, so review is per customer rather
-  than a queue. Application and fraud views are read-only.
-- **The live Playwright suite does not run on every CI push.** Starting 13 backend processes
-  per push is not a sensible trade, so only the offline suite is wired into CI. The 34 live
-  scenarios and the PowerShell suite are automated but triggered on demand.
-- **Test coverage is uneven.** Accounts, loans, cards, 2FA, transactions, statistics and the
-  authorization rules are covered; `payment`, `notification`, `integration` and
-  `application` have authorization suites but no service-layer tests. Three services run
-  against a real PostgreSQL through Testcontainers — `account-service`,
-  `transaction-service` and `user-service` — and the rest are tested against mocks.
-- **Money-moving writes beyond deposit, withdrawal and transfer are not in the console.**
-  Those endpoints do not require an `Idempotency-Key`, so they are deliberately absent
-  rather than half-built.
-- **Authorization is enforced per request, not per field.** A staff role grants access to a
-  customer's whole record rather than to specific fields, and there is no audit of which
-  staff member viewed which customer.
-- **Two-factor authentication is optional.** It is enforced at sign-in once enabled, but no
-  account has it on by default, including staff accounts.
-- **Service-to-service calls are not authenticated.** Network isolation is sound for a
-  single Compose network and would not be sufficient across a shared cluster.
-- **External rails are simulated.** The wire / ACH / SWIFT and FX endpoints model request,
-  response and persistence shape only.
+Internal calls rely on isolation inside the local Compose network. A shared production
+cluster would require workload identity, signed service credentials or mTLS rather than
+network placement alone.
 
-</details>
+### External financial rails
+
+Wire, ACH and SWIFT integrations are simulated adapters. The project demonstrates
+contracts, persistence and failure handling without connecting to real financial networks
+or moving real money.
+
+> Additional limitations and future-hardening items are documented in the
+> [engineering case study](docs/PORTFOLIO_CASE_STUDY.md).
 
 ---
 

@@ -66,9 +66,9 @@ customer sees a 403.
 
 ## My Engineering Work
 
-The platform is my own work end to end: the service decomposition, every
-business service, the gateway and its identity filter, the event flows, the
-Next.js console, the test suites and the infrastructure definitions.
+My engineering work across Northbank focused on the distributed-system, security,
+correctness and customer-experience concerns that determine whether financial
+workflows behave safely under failure.
 
 The work that took the most judgment, rather than the most typing:
 

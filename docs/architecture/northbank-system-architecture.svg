@@ -88,7 +88,7 @@
 <polygon points="834.0,602 829.05,611 838.95,611" fill="#0F766E"/>
 <text x="846.0" y="638" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="start">consume</text>
 <rect x="30" y="660" width="1140" height="62" rx="12" fill="#E8F5F3" stroke="#0F766E" stroke-width="1.5"/>
-<text x="600" y="687" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">Apache Kafka — domain events, 9 topics</text>
+<text x="600" y="687" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">Apache Kafka — domain events</text>
 <text x="600" y="708" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="middle">statistics, notifications and fraud scoring update off the money-movement path</text>
 <rect x="30" y="758" width="560" height="86" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
 <text x="310" y="787" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">PostgreSQL 16</text>
