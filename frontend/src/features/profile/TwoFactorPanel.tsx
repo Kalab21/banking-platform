@@ -103,9 +103,8 @@ export function TwoFactorPanel({ enabled }: { enabled: boolean }) {
       {enabled ? <DisableFlow /> : <EnrolFlow />}
 
       <p className="border-t border-line pt-3 text-xs text-ink-subtle">
-        Note: this platform enrols and verifies an authenticator secret, but sign-in does not yet
-        prompt for a code. Enabling this records the second factor without adding a second step at
-        login.
+        When two-factor authentication is enabled, you will need a current 6-digit code from your
+        authenticator app each time you sign in.
       </p>
     </CardBody>
   );

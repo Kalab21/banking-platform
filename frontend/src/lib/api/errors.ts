@@ -52,7 +52,7 @@ export class ApiError extends Error {
       case 422:
         return "Some of those details could not be processed.";
       case 503:
-        return "That service is temporarily unavailable. Try again shortly.";
+        return "That is temporarily unavailable. Please try again shortly.";
       default:
         return this.status >= 500
           ? "Something went wrong on our side. Please try again."
@@ -61,7 +61,14 @@ export class ApiError extends Error {
   }
 }
 
-/** The gateway could not be reached at all. Distinct from an HTTP error. */
+/**
+ * The gateway could not be reached at all. Distinct from an HTTP error.
+ *
+ * Two messages, deliberately. `message` is for the server log, where naming
+ * the gateway is the useful thing to say. `userMessage` is for the screen,
+ * where it is not: a customer cannot act on "check that the gateway is
+ * running", and the names of our processes are not their business.
+ */
 export class NetworkError extends Error {
   constructor(cause?: unknown) {
     super("Could not reach the banking API. Check that the gateway is running.");
@@ -70,6 +77,6 @@ export class NetworkError extends Error {
   }
 
   get userMessage(): string {
-    return this.message;
+    return "We could not reach your accounts just now. Please try again in a moment.";
   }
 }

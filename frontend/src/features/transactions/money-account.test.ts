@@ -40,6 +40,7 @@ describe("the account view the money forms receive", () => {
       label: "Checking ••••2024 — $11,131.99",
       maskedNumber: "••••2024",
       currency: "USD",
+      availableBalance: 11_631.99,
     });
   });
 
@@ -59,7 +60,13 @@ describe("the account view the money forms receive", () => {
     }
 
     for (const option of options) {
-      expect(Object.keys(option).sort()).toEqual(["currency", "id", "label", "maskedNumber"]);
+      expect(Object.keys(option).sort()).toEqual([
+        "availableBalance",
+        "currency",
+        "id",
+        "label",
+        "maskedNumber",
+      ]);
     }
   });
 

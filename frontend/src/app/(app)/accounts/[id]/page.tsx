@@ -121,7 +121,7 @@ export default async function AccountDetailPage({
               description={page ? `${page.totalElements} recorded on this account` : undefined}
               action={
                 <Link
-                  href="/transactions"
+                  href="/move-money"
                   className="text-sm font-medium text-primary hover:underline"
                 >
                   Move money

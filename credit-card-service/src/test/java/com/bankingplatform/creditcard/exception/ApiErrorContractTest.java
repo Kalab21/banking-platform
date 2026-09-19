@@ -75,6 +75,16 @@ class ApiErrorContractTest {
         }
 
         @Test
+        @DisplayName("a path with no handler is 404, not 500")
+        void unknownPathIsNotFound() throws Exception {
+            // A mistyped URL used to reach the catch-all and come back as a
+            // server error, which reads like a fault worth probing.
+            mvc.perform(get("/api/credit-cards/nope/zzz"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("No such endpoint"));
+        }
+
+        @Test
         @DisplayName("the wrong HTTP verb is 405, not 500")
         void wrongMethodIsMethodNotAllowed() throws Exception {
             mvc.perform(get("/api/credit-cards"))

@@ -35,8 +35,17 @@ The backend runs in Docker while the console reloads locally.
 Drives the public API through the gateway — no direct database writes, no
 production configuration — and prints the generated credentials. Seeds two
 accounts, twelve transactions, a beneficiary, a loan with its amortization
-schedule and first repayment, and two KYC documents awaiting review. Names and
-numbers are synthetic, and re-running creates a fresh customer.
+schedule and first repayment, a credit card with three purchases and a payment,
+and two KYC documents awaiting review. Names and numbers are synthetic, and
+re-running creates a fresh customer.
+
+`SEED_BACKDATE=1` additionally spreads the dates, which is the one step that
+writes to the databases directly: `created_at` is a `@CreationTimestamp` and is
+deliberately not settable through the API. Transactions are spread over the
+preceding eight weeks with the two legs of a transfer kept on the same
+timestamp, the accounts are opened before their first transaction, and the
+customer is registered before their accounts. It exists so screenshots have a
+real date range, it is off by default, and it needs the Compose stack.
 
 `SEED_BACKDATE=1` additionally spreads the seeded transaction timestamps over the
 preceding weeks so the dashboard balance chart has a date range. That step writes
@@ -45,10 +54,17 @@ not settable through the API. It is off by default.
 
 ## Smoke test
 
-Registration opens an account, so it asks for what opening one needs: a legal
-name, a date of birth, a US residential address and an identity number. Every
-value below is synthetic — `example.com`, the `555-01xx` range reserved for
-fiction, and a Social Security number reserved for demonstration use.
+Registration creates the customer — an identity and a profile — and nothing
+else. No deposit account is opened by it. A checking or savings account comes
+later, from an application (`POST /api/applications` with a
+`CHECKING_ACCOUNT` or `SAVINGS_ACCOUNT` type) or directly through
+`POST /api/accounts`; the seed script does the latter.
+
+Registration still asks for what opening an account will need, because
+collecting it once is the point: a legal name, a date of birth, a US
+residential address and an identity number. Every value below is synthetic —
+`example.com`, the `555-01xx` range reserved for fiction, and a Social Security
+number reserved for demonstration use.
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
@@ -102,10 +118,12 @@ Selected routes, all reached through the gateway on `:8080`:
 | `GET` `POST` | `/api/accounts` | Open and list accounts |
 | `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement — requires `Idempotency-Key` |
 | `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments and beneficiaries (owner or staff) |
-| `POST` | `/api/loans`, `/api/credit-cards` | Lending and cards |
-| `GET` | `/api/statistics` | Aggregated read models |
+| `POST` | `/api/loans`, `/api/credit-cards` | Lending and cards (owner or staff) |
+| `GET` `POST` | `/api/loans/{id}/...`, `/api/credit-cards/{id}/...` | Detail, schedule, repayment, purchase, card payment — owner or staff |
+| `GET` | `/api/statistics/users/{id}` | A customer's own read models (owner or staff) |
+| `GET` | `/api/statistics/platform`, `/api/statistics/daily` | Platform-wide read models — employee/admin only |
 | `GET` | `/api/notifications` | Paginated user alerts (owner or staff) |
-| `GET` | `/api/fraud` | Fraud alerts — list, read and review, all employee/admin |
+| `GET` | `/api/fraud/alerts` | Fraud alerts — list, read and review, all employee/admin |
 | `POST` | `/api/integrations/wire`, `/ach`, `/swift` | External rails (simulated) |
 
 ## Direct service access
@@ -194,6 +212,22 @@ automatically.
 This is also why the circuit breaker still has no retry. Idempotency makes a
 *client's* repeat safe; it does not make an automatic in-process retry of a
 half-completed downstream mutation safe, and nothing here changed that.
+
+**How the console holds up its end.** The key is only worth anything if the
+client reuses it, and at first the console did not: it minted one inside each
+server action, on every invocation, so every resubmission was a different
+logical operation and the table above never applied. The browser now mints one
+opaque id when the customer reaches the review step and sends it with every
+attempt at that same payment. A refusal that moved nothing keeps the key, so a
+retry is the same operation. Only starting a new payment mints a new one.
+
+The console also reads the outcome column rather than flattening it. 503 is the
+only server status it treats as a definite "nothing happened", because that is
+the only one the backend promises: the circuit was open and the call never left
+`transaction-service`. 504 and a bare 500 are treated as unknown, as is a
+transport failure, where the answer may be the thing that was lost. For an
+unknown outcome the console claims neither result, offers no control that would
+resend, and points the customer at their transaction history.
 
 **A pessimistic row lock on every balance change.** `updateBalance`,
 `updateStatus` and `updateOverdraftLimit` load the account through

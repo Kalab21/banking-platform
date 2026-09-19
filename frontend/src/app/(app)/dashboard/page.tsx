@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, HandCoins, Landmark, ReceiptText, ShieldCheck } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, HandCoins, Landmark, ShieldCheck } from "lucide-react";
 import { requireSession } from "@/lib/session";
 import { getCurrentUser } from "@/lib/current-user";
 import {
@@ -35,15 +35,10 @@ export const metadata: Metadata = { title: "Overview" };
 /** Below this many transactions a line chart would imply a trend that isn't there. */
 const MIN_POINTS_FOR_CHART = 4;
 
-/**
- * Every destination here is a route that exists today. Deliberately no
- * Transfer, Deposit or Withdraw tiles: those belong to the money-movement work
- * and pointing at the current forms with new buttons would advertise a flow
- * that is about to be replaced.
- */
+/** Every destination here is a route that exists today. */
 const QUICK_ACTIONS = [
   { href: "/accounts", label: "Accounts", icon: Landmark },
-  { href: "/transactions", label: "Move money", icon: ReceiptText },
+  { href: "/move-money", label: "Move money", icon: ArrowLeftRight },
   { href: "/payments", label: "Payments", icon: HandCoins },
   { href: "/profile", label: "Security", icon: ShieldCheck },
 ];

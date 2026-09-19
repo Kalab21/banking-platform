@@ -100,11 +100,12 @@ test.describe("sign-in form", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     // The server points at a dead port in this project, so this is the
-    // gateway-unreachable path rather than a rejected password.
+    // unreachable-backend path rather than a rejected password. The wording is
+    // the customer's, not ours: it must not name the gateway.
     // Scoped to the form: Next.js renders its own route announcer with role="alert".
-    await expect(
-      page.locator("form").getByRole("alert"),
-    ).toContainText(/could not reach the banking api/i);
+    const alert = page.locator("form").getByRole("alert");
+    await expect(alert).toContainText(/could not reach your accounts/i);
+    await expect(alert).not.toContainText(/gateway|docker|localhost/i);
   });
 });
 

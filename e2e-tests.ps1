@@ -15,33 +15,113 @@ function Assert($label, $condition, $detail = "") {
     }
 }
 
+# Returns the HTTP status of a request rather than its body, so a refusal can
+# be asserted as a refusal. The helpers below swallow the exception and hand
+# back $null, which cannot tell 403 apart from a service being down.
+function Status($method, $url, $token = $null, $body = $null) {
+    $headers = @{ "Content-Type" = "application/json" }
+    if ($token) { $headers["Authorization"] = "Bearer $token" }
+    if ($method -eq "POST") { $headers["Idempotency-Key"] = "e2e-$([guid]::NewGuid())" }
+    try {
+        $args = @{ Uri = $url; Method = $method; Headers = $headers; TimeoutSec = $script:WRITE_TIMEOUT }
+        if ($body) { $args["Body"] = ($body | ConvertTo-Json -Depth 10) }
+        $response = Invoke-WebRequest @args -UseBasicParsing
+        return [int]$response.StatusCode
+    } catch {
+        if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode }
+        return 0
+    }
+}
+
+# An authorization assertion, stated as one: this caller must be refused, with
+# this status, and the refusal is the pass condition.
+function Assert-Refused($label, $method, $url, $token, $expected = 403, $body = $null) {
+    $status = Status $method $url $token $body
+    Assert "$label (expects $expected)" ($status -eq $expected) "got HTTP $status"
+}
+
+<#
+    Waits for an eventually-consistent condition instead of guessing at a sleep.
+
+    The card and the loan are created by Kafka consumers, so how long they take
+    depends on broker and consumer scheduling, not on a number anyone can pick
+    in advance. A fixed sleep either wastes time or fails on a slow machine;
+    this returns the moment the condition holds and says so clearly when the
+    deadline passes. It reports whether the condition held; the caller reads the
+    value back itself.
+#>
+<#
+    How many records a response actually carried.
+
+    Two PowerShell traps meet here. @($null) has a Count of 1, so wrapping a
+    failed call in @() produces a "list of one" that passes a Count -gt 0 check
+    while holding nothing — a false pass, which is worse than a red line. And a
+    function that returns @(...) unrolls it on the way out, so a single-element
+    result arrives at the caller as a bare object whose .Count is empty.
+
+    Returning the number sidesteps both: an int cannot be unrolled, and a
+    failed call counts as zero.
+#>
+function CountOf($value) {
+    return @($value | Where-Object { $null -ne $_ }).Count
+}
+
+function Wait-For($label, [scriptblock]$condition, $timeoutSeconds = 180, $intervalSeconds = 3) {
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    $elapsed = 0
+    while ((Get-Date) -lt $deadline) {
+        if (& $condition) {
+            Write-Host "  [wait] $label settled after ${elapsed}s" -ForegroundColor DarkGray
+            return $true
+        }
+        Start-Sleep -Seconds $intervalSeconds
+        $elapsed += $intervalSeconds
+    }
+    Write-Host "  [wait] $label did not settle within ${timeoutSeconds}s" -ForegroundColor Red
+    return $false
+}
+
+<#
+    Client timeouts, not service budgets.
+
+    These drive a cold stack: the first request down any path pays class
+    loading, connection-pool warm-up and, for money movement, a first hop to
+    account-service. Thirteen JVMs sharing one development machine make that
+    slow in a way that says nothing about correctness, and a 30-second client
+    timeout was failing disbursement on its first call and cascading into the
+    repayment that follows it. Generous here so a timeout means something is
+    actually wrong.
+#>
+$script:READ_TIMEOUT = 60
+$script:WRITE_TIMEOUT = 120
+
 function Post($url, $body, $token = $null) {
     # Money movement requires an Idempotency-Key; the other endpoints ignore it.
     # A new value per call, because each step here is a distinct operation.
     $headers = @{ "Content-Type" = "application/json"; "Idempotency-Key" = "e2e-$([guid]::NewGuid())" }
     if ($token) { $headers["Authorization"] = "Bearer $token" }
-    try { return Invoke-RestMethod $url -Method POST -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec 30 }
+    try { return Invoke-RestMethod $url -Method POST -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec $script:WRITE_TIMEOUT }
     catch { Write-Host "    POST $url => $($_.Exception.Message)" -ForegroundColor DarkYellow; return $null }
 }
 
 function Get($url, $token = $null) {
     $headers = @{}
     if ($token) { $headers["Authorization"] = "Bearer $token" }
-    try { return Invoke-RestMethod $url -Method GET -Headers $headers -TimeoutSec 15 }
+    try { return Invoke-RestMethod $url -Method GET -Headers $headers -TimeoutSec $script:READ_TIMEOUT }
     catch { Write-Host "    GET $url => $($_.Exception.Message)" -ForegroundColor DarkYellow; return $null }
 }
 
 function Put($url, $body, $token = $null) {
     $headers = @{ "Content-Type" = "application/json" }
     if ($token) { $headers["Authorization"] = "Bearer $token" }
-    try { return Invoke-RestMethod $url -Method PUT -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec 15 }
+    try { return Invoke-RestMethod $url -Method PUT -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec $script:WRITE_TIMEOUT }
     catch { Write-Host "    PUT $url => $($_.Exception.Message)" -ForegroundColor DarkYellow; return $null }
 }
 
 function Delete($url, $body, $token = $null) {
     $headers = @{ "Content-Type" = "application/json" }
     if ($token) { $headers["Authorization"] = "Bearer $token" }
-    try { return Invoke-RestMethod $url -Method DELETE -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec 15 }
+    try { return Invoke-RestMethod $url -Method DELETE -Body ($body | ConvertTo-Json -Depth 10) -Headers $headers -TimeoutSec $script:WRITE_TIMEOUT }
     catch { Write-Host "    DELETE $url => $($_.Exception.Message)" -ForegroundColor DarkYellow; return $null }
 }
 
@@ -171,24 +251,24 @@ if ($ccApp.status -eq "REJECTED") {
     Assert "Application auto-rejected (score 0 < 650)" $true
     # Manual review is staff-only, so a customer token is refused here. That
     # refusal is the assertion: the endpoint exists and the role check holds.
-    $review = Put "$GW/api/applications/$CC_APP_ID/review" @{ status="APPROVED"; reviewerNotes="Manual E2E approval"; approvedAmount=5000.00 } $TOKEN
-    if ($review -ne $null) {
-        Assert "Staff manually approves credit card application" ($review.status -eq "DISBURSED")
-    } else {
-        Write-Host "  [NOTE] Application review requires EMPLOYEE/ADMIN role - use a staff token" -ForegroundColor DarkYellow
-        $script:PASS++
-    }
+    Assert-Refused "Customer cannot review their own application" "PUT" `
+        "$GW/api/applications/$CC_APP_ID/review" $TOKEN 403 `
+        @{ status="APPROVED"; reviewerNotes="Manual E2E approval"; approvedAmount=5000.00 }
 } else {
     Assert "Application auto-approved (credit score qualifies)" ($ccApp.status -eq "DISBURSED")
     Assert "No manual review needed" $true
 }
 
-# Wait for Kafka consumer to create the card
-Write-Host "  Waiting 5s for Kafka consumer..." -ForegroundColor DarkYellow
-Start-Sleep -Seconds 5
-
-$cards = Get "$GW/api/credit-cards/user/$USER_ID" $TOKEN
-Assert "Credit card created via Kafka" ($cards -and $cards.Count -gt 0)
+# The card is created by a Kafka consumer, so this waits for the fact rather
+# than for a duration.
+# Wait for the fact, then read it back plainly. Taking the value straight out
+# of Wait-For coupled the assertion to how PowerShell collects a function's
+# output streams, which is not what this test is about.
+$null = Wait-For "credit card created via Kafka" {
+    (CountOf (Get "$GW/api/credit-cards/user/$USER_ID" $TOKEN)) -gt 0
+} 180 3
+$cards = @(Get "$GW/api/credit-cards/user/$USER_ID" $TOKEN | Where-Object { $null -ne $_ })
+Assert "Credit card created via Kafka" ($cards.Count -gt 0)
 
 if ($cards -and $cards.Count -gt 0) {
     $CARD_ID = $cards[0].id
@@ -229,22 +309,18 @@ $LOAN_APP_ID = $loanApp.id
 
 if ($loanApp.status -eq "REJECTED") {
     # Staff-only, as above.
-    $loanReview = Put "$GW/api/applications/$LOAN_APP_ID/review" @{ status="APPROVED"; reviewerNotes="Manual E2E approval"; approvedAmount=10000.00 } $TOKEN
-    if ($loanReview -ne $null) {
-        Assert "Staff manually approves loan application" ($loanReview.status -eq "DISBURSED")
-    } else {
-        Write-Host "  [NOTE] Application review requires EMPLOYEE/ADMIN role - use a staff token" -ForegroundColor DarkYellow
-        $script:PASS++
-    }
+    Assert-Refused "Customer cannot review their own loan application" "PUT" `
+        "$GW/api/applications/$LOAN_APP_ID/review" $TOKEN 403 `
+        @{ status="APPROVED"; reviewerNotes="Manual E2E approval"; approvedAmount=10000.00 }
 } else {
     Assert "Loan application auto-approved (credit score qualifies)" ($loanApp.status -eq "DISBURSED")
 }
 
-Write-Host "  Waiting 5s for Kafka consumer..."
-Start-Sleep -Seconds 5
-
-$loans = Get "$GW/api/loans/user/$USER_ID" $TOKEN
-Assert "Loan created via Kafka" ($loans -and $loans.Count -gt 0)
+$null = Wait-For "loan created via Kafka" {
+    (CountOf (Get "$GW/api/loans/user/$USER_ID" $TOKEN)) -gt 0
+} 180 3
+$loans = @(Get "$GW/api/loans/user/$USER_ID" $TOKEN | Where-Object { $null -ne $_ })
+Assert "Loan created via Kafka" ($loans.Count -gt 0)
 
 if ($loans -and $loans.Count -gt 0) {
     $LOAN_ID = $loans[0].id
@@ -299,7 +375,13 @@ Write-Host "`n=== FLOW 6: Wire Transfer ===" -ForegroundColor Cyan
 $wire = Post "$GW/api/integrations/wire-transfer" @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="London Corp Ltd"; beneficiaryAccount="GB29NWBK60161331926819"; swiftCode="NWBKGB2L"; bankName="NatWest"; bankCountry="GB"; amount=5000.00; currency="USD"; purpose="Business payment" } $TOKEN
 Assert "WIRE transfer initiated" ($wire -and $wire.transferRef)
 Assert "Status = PENDING" ($wire.status -eq "PENDING")
-Assert "Estimated arrival = T+2" ($wire.estimatedArrival -eq (Get-Date).AddDays(2).ToString("yyyy-MM-dd"))
+# The services run in UTC and this script runs in the machine's local zone, so
+# either side of midnight the two disagree about what "today" is. Both readings
+# of T+2 are accepted; T+3 still fails.
+Assert "Estimated arrival = T+2" (@(
+        (Get-Date).AddDays(2).ToString("yyyy-MM-dd"),
+        (Get-Date).ToUniversalTime().AddDays(2).ToString("yyyy-MM-dd")
+    ) -contains $wire.estimatedArrival) "got $($wire.estimatedArrival)"
 Write-Host "  TransferRef=$($wire.transferRef)  EstimatedArrival=$($wire.estimatedArrival)"
 
 if ($wire -and $wire.transferRef) {
@@ -316,21 +398,30 @@ Write-Host "  USD->GBP rate=$($fxRate.rate)"
 # SWIFT transfer
 $swift = Post "$GW/api/integrations/swift-transfer" @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Tokyo Partners"; iban="JP1234567890"; swiftCode="BOTKTOKX"; bankName="Bank of Tokyo"; bankCountry="JP"; amount=2000.00; currency="USD"; purpose="Services" } $TOKEN
 Assert "SWIFT transfer initiated" ($swift -and $swift.transferType -eq "SWIFT")
-Assert "SWIFT estimated arrival = T+5" ($swift.estimatedArrival -eq (Get-Date).AddDays(5).ToString("yyyy-MM-dd"))
+Assert "SWIFT estimated arrival = T+5" (@(
+        (Get-Date).AddDays(5).ToString("yyyy-MM-dd"),
+        (Get-Date).ToUniversalTime().AddDays(5).ToString("yyyy-MM-dd")
+    ) -contains $swift.estimatedArrival) "got $($swift.estimatedArrival)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 7: Platform Statistics ===" -ForegroundColor Cyan
 
-$stats = Get "$GW/api/statistics/platform" $TOKEN
-Assert "Platform stats returned" ($stats -ne $null)
-Write-Host "  TotalAccounts=$($stats.totalAccounts)  TotalTransactions=$($stats.totalTransactions)"
-
-$userStats = Get "$GW/api/statistics/users/$USER_ID" $TOKEN
-Assert "User stats returned" ($userStats -ne $null)
+# Platform-wide and daily statistics are staff-only. A customer token must be
+# refused, and that refusal is the assertion — not a red line in the output.
+Assert-Refused "Customer cannot read platform statistics" "GET" `
+    "$GW/api/statistics/platform" $TOKEN 403
 
 $today = Get-Date -Format "yyyy-MM-dd"
-$daily = Get "$GW/api/statistics/daily?date=$today" $TOKEN
-Assert "Daily snapshot returned" ($daily -ne $null)
+Assert-Refused "Customer cannot read the daily snapshot" "GET" `
+    "$GW/api/statistics/daily?date=$today" $TOKEN 403
+
+# Their own statistics are theirs to read.
+$userStats = Get "$GW/api/statistics/users/$USER_ID" $TOKEN
+Assert "Customer reads their own statistics" ($userStats -ne $null)
+
+# And nobody else's.
+Assert-Refused "Customer cannot read another customer's statistics" "GET" `
+    "$GW/api/statistics/users/999999" $TOKEN 403
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 8: Notifications ===" -ForegroundColor Cyan
@@ -365,14 +456,8 @@ Write-Host "  KycStatus=$($userAfterKyc.kycStatus)"
 
 # Review document (requires EMPLOYEE/ADMIN role — will be 403 with customer token)
 # In production use an admin token. Here we verify the endpoint exists and returns expected error.
-$reviewResult = Put "$GW/api/kyc/documents/$DOC1_ID/review" @{ status="APPROVED"; reviewedBy=1 } $TOKEN
-if ($reviewResult -ne $null) {
-    Assert "Review document (APPROVED)" ($reviewResult.status -eq "APPROVED")
-    Write-Host "  DocumentStatus=$($reviewResult.status)"
-} else {
-    Write-Host "  [NOTE] Review endpoint requires EMPLOYEE/ADMIN role — use admin token in production" -ForegroundColor DarkYellow
-    $script:PASS++  # endpoint exists, auth working correctly
-}
+Assert-Refused "Customer cannot approve their own KYC document" "PUT" `
+    "$GW/api/kyc/documents/$DOC1_ID/review" $TOKEN 403 @{ status="APPROVED"; reviewedBy=1 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 10: Credit Score ===" -ForegroundColor Cyan
@@ -383,8 +468,12 @@ Assert "Score is in valid range (300-850)" ($score.score -ge 300 -and $score.sco
 Assert "Rating field present" ($score.rating -ne $null)
 Write-Host "  Score=$($score.score)  Rating=$($score.rating)"
 
-$history = Get "$GW/api/users/$USER_ID/credit-score/history" $TOKEN
-Assert "Credit score history returned" ($history -ne $null)
+# An empty history is a valid answer for a customer who has just registered, so
+# the assertion is that the endpoint answers rather than that it returns rows.
+# `$empty -ne $null` is falsy in PowerShell, which is what made this red.
+$history = @(Get "$GW/api/users/$USER_ID/credit-score/history" $TOKEN | Where-Object { $null -ne $_ })
+Assert "Credit score history is readable" `
+    ((Status "GET" "$GW/api/users/$USER_ID/credit-score/history" $TOKEN) -eq 200)
 Write-Host "  History entries=$($history.Count)"
 
 if ($history -and $history.Count -gt 0) {
@@ -421,7 +510,9 @@ if ($setup -and $setup.secret) {
 
     # Compute TOTP code from secret
     $totpCode = Get-TOTP $SECRET
-    Write-Host "  Computed TOTP code=$totpCode"
+    # The code itself is not printed: a test log is not a place to practise
+    # writing down one-time codes, synthetic or otherwise.
+    Write-Host "  Computed a TOTP code from the enrolment secret"
 
     # Verify + enable
     $verifyResult = Post "$GW/api/auth/2fa/verify?userId=$USER_ID" @{ code=$totpCode } $TOKEN
@@ -451,3 +542,7 @@ Write-Host "`n=== RESULTS ===" -ForegroundColor Cyan
 Write-Host "  PASSED: $PASS" -ForegroundColor Green
 Write-Host "  FAILED: $FAIL" -ForegroundColor $(if ($FAIL -eq 0) { "Green" } else { "Red" })
 Write-Host "  TOTAL:  $($PASS + $FAIL)`n"
+
+# A suite that prints FAIL and exits 0 is not a suite anything can gate on.
+if ($FAIL -gt 0) { exit 1 }
+exit 0

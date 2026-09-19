@@ -9,10 +9,11 @@ import { fieldErrors, twoFactorCodeSchema } from "@/lib/validation";
 /**
  * Two-factor enrolment.
  *
- * Worth being precise about what this does: the backend's 2FA endpoints enrol
- * and verify an authenticator secret, but `POST /api/auth/login` does not
- * currently challenge for a TOTP code. Enabling 2FA here records the secret and
- * flips `twoFactorEnabled`; it does not yet add a second step at sign-in.
+ * Enrolment here is the first half of a second factor that sign-in enforces.
+ * `POST /api/auth/login` checks `twoFactorEnabled`, and for an enrolled account
+ * a correct password alone answers `twoFactorRequired` and issues no token; the
+ * session begins only after a valid TOTP code. Disabling 2FA removes the secret
+ * and the challenge with it.
  */
 
 export interface TwoFactorState {

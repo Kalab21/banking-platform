@@ -152,6 +152,7 @@ test.describe("when the gateway cannot be reached", () => {
   const pages = [
     { path: "/dashboard", heading: "Overview" },
     { path: "/accounts", heading: "Accounts" },
+    { path: "/move-money", heading: "Move money" },
     { path: "/transactions", heading: "Transactions" },
     { path: "/cards", heading: "Credit cards" },
     { path: "/loans", heading: "Loans" },
@@ -168,9 +169,11 @@ test.describe("when the gateway cannot be reached", () => {
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       // Scoped to the page: Next.js renders its own route announcer with
       // role="alert", which is empty and not what is being asserted here.
+      // Customer wording, not ours: the screen must not name the gateway.
       await expect(page.locator("main").getByRole("alert")).toContainText(
-        /could not reach the banking api/i,
+        /could not reach your accounts/i,
       );
+      await expect(page.locator("main")).not.toContainText(/gateway|docker|localhost/i);
 
       const body = (await page.locator("main").textContent()) ?? "";
       expect(body, "a failed page must not render a currency amount").not.toMatch(
@@ -191,7 +194,7 @@ test.describe("signed-in layout", () => {
     });
   }
 
-  for (const path of ["/profile", "/accounts", "/transactions", "/cards", "/loans"]) {
+  for (const path of ["/profile", "/accounts", "/move-money", "/transactions", "/cards", "/loans"]) {
     test(`${path} has no horizontal overflow at 390px`, async ({ page }) => {
       /*
        * A grid or flex item defaults to `min-width: auto`, so a card holding a

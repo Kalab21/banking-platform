@@ -10,9 +10,8 @@ import {
   ErrorState,
   PageHeader,
 } from "@/components/ui/primitives";
-import { MoneyForms } from "@/features/transactions/MoneyForms";
-import { toMoneyAccountOptions } from "@/features/transactions/money-account";
 import { TransactionRow } from "@/features/transactions/TransactionRow";
+import Link from "next/link";
 import type { Transaction } from "@/types/api";
 
 export const metadata: Metadata = { title: "Transactions" };
@@ -52,20 +51,16 @@ export default async function TransactionsPage() {
     <>
       <PageHeader
         title="Transactions"
-        description="Move money between your accounts and review everything that has settled."
+        description="Everything that has settled across your accounts."
+        action={
+          <Link
+            href="/move-money"
+            className="inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-primary px-4 text-sm font-medium text-white hover:bg-primary-strong"
+          >
+            Move money
+          </Link>
+        }
       />
-
-      {/*
-       * The forms are untouched: their idempotency keys, their unknown-outcome
-       * handling and the semantics of each request are the money-movement
-       * contract, and this pass is about how the page reads, not what it does.
-       *
-       * They are handed a narrowed view of each account rather than the account
-       * itself: everything a Client Component receives is serialised into the
-       * page, so passing `Account` published the raw account number alongside
-       * the masked label the customer actually sees.
-       */}
-      <MoneyForms accounts={toMoneyAccountOptions(accounts)} />
 
       <Card>
         <CardHeader

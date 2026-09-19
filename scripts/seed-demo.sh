@@ -158,6 +158,26 @@ if [[ -n "$LOAN" ]]; then
   ok "first instalment repaid"
 fi
 
+# ------------------------------------------------------------------ credit card
+
+# A card with a little history on it. The console's cards page is a real page
+# with a real empty state, and an empty state is what a demo customer saw here
+# before: nothing in the seed ever issued a card.
+say "Issuing a credit card"
+CARD=$(api POST /api/credit-cards   "{\"userId\":${USER_ID},\"cardType\":\"GOLD\",\"creditLimit\":3000.00,\"apr\":18.99,\"linkedAccountId\":${CHECKING}}"   "$TOKEN" | json id)
+if [[ -n "$CARD" ]]; then
+  ok "gold card — 3,000.00 limit at 18.99% APR"
+  card_purchase() {
+    api POST "/api/credit-cards/${CARD}/purchase"       "{\"amount\":$1,\"description\":\"$2\",\"merchantName\":\"$2\",\"merchantCategory\":\"$3\"}"       "$TOKEN" > /dev/null
+    ok "$2"
+  }
+  card_purchase 186.40 "Harborline Groceries" "GROCERIES"
+  card_purchase  64.99 "Meridian Books"       "RETAIL"
+  card_purchase 214.16 "Seaboard Airlines"    "TRAVEL"
+  api POST "/api/credit-cards/${CARD}/payment"     "{\"amount\":200.00,\"sourceAccountId\":${CHECKING}}" "$TOKEN" > /dev/null
+  ok "200.00 paid off the balance"
+fi
+
 # ------------------------------------------------------------------------- kyc
 
 say "Submitting KYC documents"
@@ -178,22 +198,65 @@ if [[ "${SEED_BACKDATE:-0}" == "1" ]]; then
        psql -U "${POSTGRES_USER:-bankingadmin}" -d transaction_db \
             -v ON_ERROR_STOP=1 -q \
             -v checking="${CHECKING}" -v savings="${SAVINGS}" <<'SQL'
-WITH ordered AS (
-  SELECT id, row_number() OVER (ORDER BY id) AS rn, count(*) OVER () AS total
+-- A transfer is two rows, and they happened at the same moment. Spacing by
+-- row id alone pushed the debit and the credit days apart, which is visible in
+-- the history and is not something any real ledger would show. Rows are grouped
+-- by the reference pair first, and each group is dated once.
+WITH grouped AS (
+  SELECT id, LEAST(transaction_ref, related_transaction_ref) AS grp
   FROM transactions
   WHERE account_id IN (:checking, :savings)
+),
+ordered AS (
+  SELECT grp,
+         row_number() OVER (ORDER BY first_id) AS rn,
+         count(*) OVER () AS total
+  FROM (SELECT grp, MIN(id) AS first_id FROM grouped GROUP BY grp) g
 )
 UPDATE transactions t
 SET created_at = NOW()
     - INTERVAL '2 days'
     - (INTERVAL '1 day' * ((o.total - o.rn) * (54.0 / GREATEST(o.total - 1, 1))))
-FROM ordered o
-WHERE t.id = o.id;
+FROM grouped p
+JOIN ordered o ON o.grp = p.grp
+WHERE t.id = p.id;
 SQL
   then
     ok "transaction dates spread over the last 8 weeks"
   else
     printf '  [!!] backdating failed (is the Compose stack up?) — dates left as-is\n'
+  fi
+
+  # The accounts have to predate their own history. Without this the detail
+  # page reads "Opened today" above a deposit from August.
+  if docker compose exec -T postgres \
+       psql -U "${POSTGRES_USER:-bankingadmin}" -d account_db \
+            -v ON_ERROR_STOP=1 -q \
+            -v checking="${CHECKING}" -v savings="${SAVINGS}" <<'SQL'
+UPDATE accounts
+SET created_at = NOW() - INTERVAL '10 weeks'
+WHERE id IN (:checking, :savings);
+SQL
+  then
+    ok "accounts opened before their first transaction"
+  else
+    printf '  [!!] account opening dates left as-is\n'
+  fi
+
+  # And the customer has to predate their own accounts, or the profile says
+  # "customer since" a date after the account it is attached to was opened.
+  if docker compose exec -T postgres \
+       psql -U "${POSTGRES_USER:-bankingadmin}" -d user_db \
+            -v ON_ERROR_STOP=1 -q \
+            -v username="'${USERNAME}'" <<'SQL'
+UPDATE users
+SET created_at = NOW() - INTERVAL '11 weeks'
+WHERE username = :username;
+SQL
+  then
+    ok "customer registered before their accounts were opened"
+  else
+    printf '  [!!] customer registration date left as-is\n'
   fi
 fi
 
@@ -209,7 +272,8 @@ Demo customer ready.
   Password   ${PASSWORD}
 
 Seeded: 2 accounts, 12 transactions, 1 beneficiary, 1 loan with
-schedule and one repayment, 2 KYC documents pending review.
+schedule and one repayment, 1 credit card with three purchases and
+a payment, and 2 KYC documents pending review.
 
 Credit cards and notifications populate from Kafka events, so they
 may take a few seconds to appear.

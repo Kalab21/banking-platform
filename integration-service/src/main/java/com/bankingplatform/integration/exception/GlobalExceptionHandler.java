@@ -1,6 +1,8 @@
 package com.bankingplatform.integration.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -29,6 +31,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorBody(ex.getMessage(), 400));
+    }
+
+    /**
+     * A path with no handler is 404.
+     *
+     * <p>Spring Boot 3.2 raises {@code NoResourceFoundException} for an unmatched
+     * route, which the catch-all below would otherwise report as 500. A caller who
+     * mistypes a path should be told the path is wrong, not handed a server error
+     * that reads like a fault worth probing.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<Map<String, Object>> handleNoResource() {
+        return error(HttpStatus.NOT_FOUND, "No such endpoint");
     }
 
     @ExceptionHandler(Exception.class)

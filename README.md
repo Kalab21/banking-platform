@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 432 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 9 live-stack Playwright scenarios on demand |
+| **Testing** | 722 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -52,7 +52,15 @@ gateway from the services that own it.
 
 | Sign in | Transactions |
 |---|---|
-| ![Sign-in page](docs/screenshots/01-login-desktop.png) | ![Transactions page with deposit, withdraw and transfer forms above the combined activity list](docs/screenshots/17-transactions.png) |
+| ![Sign-in page](docs/screenshots/01-login-desktop.png) | ![Transactions page listing settled activity across every account, most recent first](docs/screenshots/17-transactions.png) |
+
+| Move money — review | Move money — receipt |
+|---|---|
+| ![Review step naming the amount, the accounts by their last four digits and the description, above a single confirm button](docs/screenshots/23-move-money-review.png) | ![Receipt confirming a completed transfer with the reference the backend issued](docs/screenshots/24-move-money-receipt.png) |
+
+| Payments | Second factor |
+|---|---|
+| ![Payments page with the add-payee form open above the saved payees, each shown with a masked account number](docs/screenshots/25-payments.png) | ![Second-factor challenge asking for the six-digit code from an authenticator app](docs/screenshots/06-two-factor.png) |
 
 | Onboarding — personal details | Onboarding — review |
 |---|---|
@@ -202,10 +210,27 @@ markable-as-read alerts.
 conversion. These are simulated stubs; no real banking network is contacted.
 
 **Console** (`frontend`) — two-step sign-in challenging for a TOTP code before any
-session cookie is written; customer views for dashboard, accounts, transactions,
-payments, loans, cards, notifications and profile; staff views for KYC review, the
-application queue and fraud alerts. Pages fetch through React Server Components and
-mutate through Server Actions, so the browser never holds a bearer token.
+session cookie is written; customer views for dashboard, accounts, move money,
+transactions, payments, loans, cards, notifications and profile; staff views for
+KYC review, the application queue and fraud alerts. Pages fetch through React
+Server Components and mutate through Server Actions, so the browser never holds
+a bearer token.
+
+Moving money is its own route and its own journey: choose transfer, deposit or
+withdrawal, fill in the details, review exactly what is about to happen against
+masked accounts, and confirm once. The id sent as the `Idempotency-Key` is
+minted when the customer reaches the review step and reused for every attempt at
+that same payment, so retrying a refused request is the same operation rather
+than a second one. A request whose outcome the platform cannot establish — the
+backend answers 504, or 500 for a transfer that debited and failed to credit —
+says so, claims neither success nor failure, offers no button that would send it
+again, and points at the transaction history.
+
+What a Client Component receives is narrowed on the server. Anything handed
+across that boundary is serialised into the page, so the money forms get a view
+model carrying an id, a label and a masked number rather than the account
+record, and the full account number never reaches the browser in the HTML, the
+RSC payload or the DOM.
 
 **Edge** (`api-gateway`) — Spring Cloud Gateway with Eureka-backed load-balanced
 routing to 11 downstream services; JWT validation filter injecting `X-User-Id` /
@@ -227,7 +252,7 @@ routing to 11 downstream services; JWT validation filter injecting `X-User-Id` /
 | Network boundary | Only the console and the gateway are published; the business services are reachable only on the Compose network, so the gateway cannot be bypassed |
 | Session model | Stateless (`SessionCreationPolicy.STATELESS`); CSRF disabled, appropriate for a token-authenticated API |
 | Input validation | Jakarta Bean Validation on request DTOs |
-| Error hygiene | `@RestControllerAdvice` in all 11 services with controllers; malformed bodies and bad parameter types return 400, unsupported methods 405; the catch-all logs server-side and returns a generic message |
+| Error hygiene | `@RestControllerAdvice` in all 11 services with controllers; malformed bodies and bad parameter types return 400, unsupported methods 405, an unmatched path 404; the catch-all logs server-side and returns a generic message |
 | Card data | The full card number never crosses the API boundary — responses carry a masked value and `last4` |
 | Rate limiting | Redis token bucket at the gateway, keyed per IP |
 | Abuse detection | Fraud velocity rules with automatic account freeze |
@@ -336,14 +361,18 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**432 automated tests run in CI** — 330 backend, 83 frontend unit/component and 19
-offline end-to-end. A further **9 live-stack Playwright scenarios run on demand**;
-they need all 13 services up and are not counted in the CI total.
+**722 automated tests run in CI** — 440 backend (415 unit and web-slice, 25
+integration against a real PostgreSQL), 213 frontend unit/component and 69
+offline end-to-end. A further **34 live-stack Playwright scenarios** and a
+PowerShell full-stack suite run on demand; they need all 13 services up and are
+not counted in the CI total.
+
+Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 312 unit + 18 integration
-cd frontend && npm run test                  # frontend: 83 unit/component
-cd frontend && npm run test:e2e              # frontend: 19 offline end-to-end
+mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
+cd frontend && npm run test                  # frontend: 213 unit/component
+cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 
 Coverage is deep on balances and loan arithmetic, plus card masking, the 2FA gate,
@@ -420,11 +449,19 @@ These are the gaps between this project and a production ledger.
   customer rather than a queue. Application and fraud views are read-only.
 - **The live Playwright suite does not run on every CI push.** Starting 13 services
   per push is not a sensible trade, so only the offline suite is wired into CI. The
-  9 live scenarios are automated but triggered on demand.
+  34 live scenarios and the PowerShell suite are automated but triggered on demand.
 - **Test coverage is uneven.** Accounts, loans, cards, 2FA, transactions,
   statistics and the authorization rules are covered; `payment`, `notification`,
-  `integration` and `application` services have no service-layer tests, and only
-  `account-service` has an integration test against a real database.
+  `integration` and `application` services have authorization suites but no
+  service-layer tests. Three services run against a real PostgreSQL through
+  Testcontainers — `account-service`, `transaction-service` and `user-service` —
+  and the rest are tested against mocks.
+- **Money-moving writes beyond deposit, withdrawal and transfer are not in the
+  console.** Payment creation, scheduled payments, loan repayment and card
+  payment all exist in the backend, but none of those endpoints requires an
+  `Idempotency-Key` the way `/api/transactions/*` does. A UI for them would be
+  the one money path where a lost response could not be retried safely, so they
+  are deliberately absent rather than half-built.
 - **Authorization is enforced per request, not per field.** A staff role grants
   access to a customer's whole record rather than to specific fields, and there
   is no audit of which staff member viewed which customer.

@@ -87,13 +87,23 @@ export function maskAccountNumber(accountNumber: string | null | undefined): str
   return `••••${accountNumber.slice(-4)}`;
 }
 
+/**
+ * Words that are abbreviations, not words.
+ *
+ * Title-casing every part of an enum turns EXTERNAL_ACH into "External Ach",
+ * which is not how anyone writes it and reads like a typo on a payments page.
+ */
+const ACRONYMS = new Set(["ach", "iban", "swift", "atm", "apr", "kyc", "usd", "eur", "gbp"]);
+
 /** Turns SCREAMING_SNAKE enum values into readable labels. */
 export function humanise(value: string | null | undefined): string {
   if (!value) return "—";
   return value
     .toLowerCase()
     .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) =>
+      ACRONYMS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1),
+    )
     .join(" ");
 }
 
