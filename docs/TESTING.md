@@ -1,6 +1,6 @@
 # Testing
 
-722 automated tests run in CI: 440 backend (415 unit and
+752 automated tests run in CI: 470 backend (445 unit and
 web-slice, 25 integration against a real PostgreSQL), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
@@ -40,8 +40,10 @@ assertion counts, which are larger and less comparable.
 | Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 12 |
 | Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 15 |
 | Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 13 |
+| Authorization | JUnit 5, MockMvc | `IntegrationAuthorization` — external transfers may only be sent from an owned account, staff included; reads are owner-or-staff | 17 |
+| Authorization | JUnit 5, MockMvc | `TwoFactorAuthorization` — second-factor setup, verify and disable are self-only, and staff cannot bypass it | 10 |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 |
-| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 |
+| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off, actuator publishes only health/info/prometheus | 6 |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 |
 | Copy | JUnit 5, Mockito | `TransferDescription` — each leg names the other account masked, never by internal id | 4 |
@@ -56,12 +58,12 @@ assertion counts, which are larger and less comparable.
 | Component | Vitest, React Testing Library | `LoginForm` and `loginAction` — the second-factor challenge, and no session cookie before the code succeeds (counted in the 213 above) | 8 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
 | End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport | 34, on demand |
-| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals | On demand |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals and cross-customer ownership refusals | 69, on demand |
 
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
+mvn -B --no-transfer-progress clean verify   # backend: 445 unit + 25 integration = 470
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
@@ -230,7 +232,14 @@ those values replaced with the ones derived from the token.
 `e2e-tests.ps1` drives the whole platform through the gateway: registration,
 account opening, money movement, a credit-card application through Kafka to an
 issued card, a loan through disbursement and repayment, KYC submission,
-notifications, external rails and TOTP enrolment.
+notifications, external rails and TOTP enrolment. 69 assertions.
+
+It also proves the ownership rules that only a real gateway can prove. A second
+customer is registered purely to be refused: they may not wire or ACH from the
+first customer's account, may not read that customer's transfer by its
+reference, and may not start or remove that customer's second factor. Each is a
+403 through the live gateway, with a real JWT, so the check is exercised
+end-to-end rather than against a mocked caller identity.
 
 Three things about how it is written are worth stating, because each was wrong
 before.

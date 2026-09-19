@@ -11,7 +11,7 @@ boundaries.
 It uses synthetic data and makes no production or regulatory claim.
 
 **At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
-services), 722 automated tests in CI, 34 live-stack scenarios on demand, and a
+services), 752 automated tests in CI, 34 live-stack scenarios on demand, and a
 customer console that never holds a bearer token or a full account number.
 
 ## Problem / Context
@@ -238,11 +238,11 @@ something false about their money.
 
 ## Verification
 
-722 automated tests run in CI:
+752 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
-| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 415 |
+| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 445 |
 | Backend integration against real PostgreSQL (Testcontainers) | 25 |
 | Frontend unit and component (Vitest, React Testing Library) | 213 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
@@ -268,6 +268,8 @@ none of the three surfaces a browser can read.
 - BCrypt passwords; minimum eight characters with upper, lower and a digit
 - TOTP two-factor (RFC 6238); with it enabled, a correct password alone issues no token
 - Full PAN never leaves the service boundary; responses carry a mask and `last4`
+- Second-factor enrolment, confirmation and removal are self-only; no role manages another account's
+- External wire / ACH / SWIFT transfers may only be sent from an account the caller owns
 - Session in an httpOnly cookie, unreadable by page JavaScript
 - Signing key required from the environment; services refuse to start without it
 - CodeQL on Java and TypeScript, Trivy over dependencies, Dockerfiles and base image

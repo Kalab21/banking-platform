@@ -19,6 +19,15 @@
             <artifactId>common-observability</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- The shared authorization model: CallerIdentity resolution, the
+             AccessGuard rules, the 401/403 advice and identity propagation
+             across a Feign hop. Added rather than reimplemented so this
+             service enforces the same rule as every other one. -->
+        <dependency>
+            <groupId>com.bankingplatform</groupId>
+            <artifactId>common-security</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

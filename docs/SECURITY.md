@@ -28,6 +28,17 @@ Public routes — `/api/auth/register`, `/api/auth/login`, actuator and the API 
 — skip the filter and establish no identity. Protected routes in the services
 reject identity-less requests, so a public path is not a way in.
 
+Because `/actuator` is one of those public paths, and because the gateway is the
+only service whose actuator sits on the public port, whatever the gateway
+publishes there it publishes to unauthenticated callers. It exposes `health`,
+`info` and `prometheus` and nothing else. The `gateway` endpoint used to be
+exposed alongside them: `/actuator/gateway/routes` answered anyone with every
+route id, predicate and `lb://` target in the platform — a map of the internal
+topology, and a surface whose `POST` sub-paths can refresh routes. It is gone,
+and `GatewayRouteExposureTest` fails the build if it returns or if `health` and
+`prometheus` stop being published, since the Compose readiness probe and the
+Prometheus scrape depend on them.
+
 ## Authorization
 
 Services consume the identity the gateway established; they do not re-verify the
@@ -57,6 +68,9 @@ boolean fails open.
 | Cards: purchase, cash advance, payment, freeze | own only | **no** | yes | yes |
 | Open an account, submit an application | for self | **no** | for anyone | for anyone |
 | Move money, pay from an account | from own accounts | **no** | — | — |
+| External transfer (wire / ACH / SWIFT): initiate | from own accounts | **no** | **no** | **no** |
+| External transfer: read by reference | yes | **no** | yes | yes |
+| Second factor: enrol, confirm, remove | own only | **no** | **no** | **no** |
 | Cancel an application, remove a payee | own only | **no** | yes | yes |
 | Freeze account, overdraft limit | **no** | **no** | yes | yes |
 | Platform and daily statistics | **no** | **no** | yes | yes |
@@ -67,7 +81,7 @@ boolean fails open.
 An id in a path or a `userId` in a request body is caller input. It is checked
 against the identity the gateway established, never trusted as proof of ownership.
 
-That rule was applied unevenly at first, and it took two passes to finish.
+That rule was applied unevenly at first, and it took three passes to finish.
 
 The first pass covered `fraud-detection-service`, `payment-service`,
 `notification-service` and `application-service`. Each read the `userId` from
@@ -89,6 +103,38 @@ Running the full stack is what surfaced both rounds; the unit suites at the time
 asserted nothing about those services. All six now resolve the owner from stored
 state and authorise against it, the same way the account and transaction
 services do, and each has a regression suite that fails if the guard is removed.
+
+A third pass covered `integration-service`, the last service without
+`common-security` on its classpath, and the two-factor endpoints in
+`user-service`.
+
+`integration-service` exposes the outward rails. Nothing checked that the
+`fromAccountId` on a wire, ACH or SWIFT request belonged to the caller, so any
+signed-in customer could send money out of an account that was not theirs by
+changing one number in a request body; and nothing checked who read a transfer
+back, so a guessed reference returned another customer's beneficiary name,
+IBAN, routing number and amount. It now resolves the owning user from
+`account-service` and authorises against it before the transfer is persisted,
+so a refused request writes no row and publishes no event.
+
+Sending and reading use **different** rules there, which is the one place this
+platform deliberately departs from `requireOwnerOrStaff` for an account
+operation. Reading a transfer is owner-or-staff, matching transaction history.
+Initiating one is owner-only, including for employees and admins: an external
+transfer is the single action that moves money out of the bank along a rail
+with no in-product reversal, and nothing in this project establishes that staff
+may start one for a customer. Where the policy was silent about an irreversible
+outward payment, the narrow reading was taken rather than inherited by accident
+from a shared helper. Widening it is a product decision, and would want a
+staff-initiated-transfer audit trail first.
+
+The two-factor endpoints — enrol, confirm, remove — took a `userId` request
+parameter and used it unchecked, so any customer could enrol an authenticator
+against another account or strip one off. These manage a credential, so the
+rule is `requireSelf` rather than `requireOwnerOrStaff`: an employee may review
+a customer's KYC documents because a workflow needs it, but no role needs to
+manage someone else's second factor, and a staff account that could remove one
+could take it off before signing in as that customer.
 
 Fraud alerts are staff-only in every direction. An alert is a control applied to
 a customer, so the customer it names is not among the principals who may read or
@@ -129,6 +175,9 @@ developing rather than by default.
 | Browser session | JWT in an httpOnly, SameSite=Lax cookie, never readable by page JavaScript |
 | What reaches the browser | A Server Component hands Client Components a narrowed view, not the API record. See below |
 | Rate limiting | Redis token bucket at the gateway, per client IP |
+| Second-factor management | Enrolling, confirming and removing an authenticator are self-only — `AccessGuard.requireSelf`, not owner-or-staff. No role can take another account's second factor off |
+| Outward transfer rails | A wire, ACH or SWIFT transfer may only be initiated from an account the caller owns, resolved from `account-service` rather than read from the request. Staff are not exempt |
+| Management endpoints | `health`, `info` and `prometheus` only, on every service including the gateway, whose actuator is the one reachable without a token |
 | Error hygiene | Denials expose no resource detail; the catch-all logs server-side and returns a generic message |
 | Log injection | The request path is reduced to the RFC 3986 path alphabet before being logged |
 | Static analysis | CodeQL on Java and TypeScript; Trivy over dependencies, Dockerfiles and the base image |
@@ -231,4 +280,9 @@ check against a known-breached password list at registration.
 account has it on by default, so the protection is advisory.
 
 **Smallest safe fix.** Require 2FA for `EMPLOYEE` and `ADMIN` roles, where the
-blast radius of a compromised account is largest.
+blast radius of a compromised account is largest. Not done here because
+enrolment requires an authenticated caller and is self-only: demanding a second
+factor before any staff token is issued would leave a staff account that has
+never enrolled with no way to enrol. Solving it properly means a scoped
+enrolment token and a separate first-sign-in flow, which is an authentication
+design of its own rather than a check to add.

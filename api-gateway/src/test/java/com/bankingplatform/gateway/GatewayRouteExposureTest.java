@@ -6,8 +6,11 @@ import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,6 +23,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * auto-creates a {@code /{service-id}/**} route for every registered service
  * and would expose {@code /account-service/internal/accounts/{id}/balance}.
  *
+ * <p>The actuator exposure is asserted here for the same reason. This is the
+ * only service whose management endpoints sit on the public port, and the JWT
+ * filter treats {@code /actuator} as a public path, so whatever is published
+ * there is published to unauthenticated callers.
+ *
  * <p>Asserted against the configuration rather than a running gateway, so the
  * check costs nothing and runs on every build.
  */
@@ -27,14 +35,47 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GatewayRouteExposureTest {
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> gatewayConfig() throws Exception {
+    private Map<String, Object> config() throws Exception {
         try (InputStream in = getClass().getClassLoader().getResourceAsStream("application.yml")) {
             assertThat(in).as("gateway application.yml on the test classpath").isNotNull();
-            Map<String, Object> root = new Yaml().load(in);
-            Map<String, Object> spring = (Map<String, Object>) root.get("spring");
-            Map<String, Object> cloud = (Map<String, Object>) spring.get("cloud");
-            return (Map<String, Object>) cloud.get("gateway");
+            return (Map<String, Object>) new Yaml().load(in);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> gatewayConfig() throws Exception {
+        Map<String, Object> spring = (Map<String, Object>) config().get("spring");
+        Map<String, Object> cloud = (Map<String, Object>) spring.get("cloud");
+        return (Map<String, Object>) cloud.get("gateway");
+    }
+
+    /**
+     * The actuator endpoints this service publishes, as a list.
+     *
+     * <p>Spring accepts {@code include} either as a comma-separated string or
+     * as a YAML sequence, and both are read here. Reading only the string form
+     * would leave this guard passing vacuously if someone reformatted the
+     * config: SnakeYAML would hand back a {@code List}, {@code String.valueOf}
+     * would make it {@code "[health, gateway]"}, and the split would produce
+     * {@code "[health"} and {@code "gateway]"} — so a re-exposed {@code
+     * gateway} endpoint would no longer match. A test that stops testing when
+     * the file is reformatted is worse than no test.
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> exposedManagementEndpoints() throws Exception {
+        Map<String, Object> management = (Map<String, Object>) config().get("management");
+        Map<String, Object> endpoints = (Map<String, Object>) management.get("endpoints");
+        Map<String, Object> web = (Map<String, Object>) endpoints.get("web");
+        Map<String, Object> exposure = (Map<String, Object>) web.get("exposure");
+        Object include = exposure.get("include");
+
+        assertThat(include).as("management.endpoints.web.exposure.include").isNotNull();
+
+        Stream<String> tokens = include instanceof Collection<?> values
+                ? values.stream().map(String::valueOf)
+                : Arrays.stream(String.valueOf(include).split(","));
+
+        return tokens.map(String::trim).filter(value -> !value.isEmpty()).toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -74,5 +115,36 @@ class GatewayRouteExposureTest {
         // Enabling this would route /{service-id}/** to every service and
         // reopen the internal surface, regardless of the explicit routes above.
         assertThat(locator.get("enabled")).isEqualTo(false);
+    }
+
+    /**
+     * The gateway actuator is the one that sits on the public port, and
+     * {@code JwtAuthenticationFilter} treats {@code /actuator} as a public
+     * path. Anything exposed here answers an unauthenticated caller.
+     */
+    @Test
+    @DisplayName("the gateway actuator publishes nothing beyond health, info and prometheus")
+    void managementExposureIsMinimal() throws Exception {
+        assertThat(exposedManagementEndpoints())
+                .as("management.endpoints.web.exposure.include")
+                .containsExactlyInAnyOrder("health", "info", "prometheus");
+    }
+
+    @Test
+    @DisplayName("the gateway's own route table is not published")
+    void gatewayEndpointNotExposed() throws Exception {
+        // /actuator/gateway/routes lists every route id, predicate and lb://
+        // target — a map of the internal topology, served to anyone who asks.
+        assertThat(exposedManagementEndpoints())
+                .as("management.endpoints.web.exposure.include")
+                .doesNotContain("gateway");
+    }
+
+    @Test
+    @DisplayName("the endpoints Compose and Prometheus depend on are still published")
+    void operationalEndpointsKept() throws Exception {
+        // Removing exposure must not break the readiness probe in
+        // docker-compose.yml or the Prometheus scrape of /actuator/prometheus.
+        assertThat(exposedManagementEndpoints()).contains("health", "prometheus");
     }
 }
