@@ -65,21 +65,27 @@ async function accountsOf(
 }
 
 test.describe("account numbers do not cross into the browser", () => {
-  test("the money-movement HTML carries no full account number", async ({ page, request }) => {
-    const { userId, headers } = await signIn(page, request);
-    const accounts = await accountsOf(request, userId, headers);
+  // Both pages that render a customer's accounts: the money forms, which take
+  // a narrowed view model, and the history, which renders server-side.
+  for (const route of ["/move-money", "/transactions"]) {
+    test(`the HTML of ${route} carries no full account number`, async ({ page, request }) => {
+      const { userId, headers } = await signIn(page, request);
+      const accounts = await accountsOf(request, userId, headers);
 
-    await page.goto("/transactions");
-    await settle(page);
+      await page.goto(route);
+      await settle(page);
 
-    const html = await page.content();
-    for (const account of accounts) {
-      expectAbsent(html, account.accountNumber, "the delivered HTML of /transactions");
-      // The masked form must still be present, or the assertion above would
-      // pass on a page that simply failed to render.
-      expect(html).toContain(`••••${account.accountNumber.slice(-4)}`);
-    }
-  });
+      const html = await page.content();
+      for (const account of accounts) {
+        expectAbsent(html, account.accountNumber, `the delivered HTML of ${route}`);
+      }
+
+      // At least one masked number must be present, or the assertions above
+      // would pass on a page that simply failed to render.
+      const masked = accounts.map((a) => `••••${a.accountNumber.slice(-4)}`);
+      expect(masked.some((m) => html.includes(m)), `${route} rendered no masked account`).toBe(true);
+    });
+  }
 
   test("the RSC payload for a client navigation carries no full account number", async ({
     page,
@@ -105,13 +111,14 @@ test.describe("account numbers do not cross into the browser", () => {
     await settle(page);
 
     // Navigate the way a customer does, so the router fetches a Flight response
-    // rather than the server re-rendering a whole document.
+    // rather than the server re-rendering a whole document. Move Money is the
+    // page whose forms take account data across the boundary.
     await page
       .getByRole("navigation", { name: "Primary" })
-      .getByRole("link", { name: "Transactions", exact: true })
+      .getByRole("link", { name: "Move Money", exact: true })
       .first()
       .click();
-    await page.waitForURL(/\/transactions$/, { timeout: 90_000 });
+    await page.waitForURL(/\/move-money$/, { timeout: 90_000 });
     await settle(page);
 
     expect(
@@ -132,7 +139,7 @@ test.describe("account numbers do not cross into the browser", () => {
     const { userId, headers } = await signIn(page, request);
     const accounts = await accountsOf(request, userId, headers);
 
-    await page.goto("/transactions");
+    await page.goto("/move-money");
     await settle(page);
 
     // Hidden elements and metadata count: masking on screen while the value

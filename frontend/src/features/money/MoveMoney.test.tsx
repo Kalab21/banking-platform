@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MoveMoney } from "@/features/money/MoveMoney";
-import type { MoneyFormState } from "@/features/money/actions";
+import type { MoneyFormState } from "@/features/money/state";
 import type { MoneyAccountOption } from "@/features/transactions/money-account";
 
 /**
@@ -41,9 +41,9 @@ let release: (() => void) | null = null;
 
 /*
  * The real module is `"use server"` and reaches `server-only` through the API
- * client, so it cannot be imported into a jsdom render at all. It is replaced
- * wholesale rather than partially: the component only needs the three actions
- * and the idle state.
+ * client, so it cannot be imported into a jsdom render at all. Only the three
+ * actions are replaced; the idle state lives in its own module, because a
+ * `"use server"` file may export async functions and nothing else.
  */
 vi.mock("@/features/money/actions", () => {
   const action = async (_prev: MoneyFormState, formData: FormData): Promise<MoneyFormState> => {
@@ -52,7 +52,6 @@ vi.mock("@/features/money/actions", () => {
     return nextState;
   };
   return {
-    IDLE: { status: "idle" } as MoneyFormState,
     depositAction: action,
     withdrawAction: action,
     transferAction: action,

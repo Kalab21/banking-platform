@@ -13,13 +13,8 @@ import {
 import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { formatCurrency } from "@/lib/format";
 import type { MoneyAccountOption } from "@/features/transactions/money-account";
-import {
-  IDLE,
-  depositAction,
-  transferAction,
-  withdrawAction,
-  type MoneyFormState,
-} from "@/features/money/actions";
+import { depositAction, transferAction, withdrawAction } from "@/features/money/actions";
+import { IDLE, type MoneyFormState } from "@/features/money/state";
 
 /**
  * Moving money, as a journey rather than three forms at once.

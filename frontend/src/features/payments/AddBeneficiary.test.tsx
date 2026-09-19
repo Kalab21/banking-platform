@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AddBeneficiary } from "@/features/payments/AddBeneficiary";
-import type { BeneficiaryFormState } from "@/features/payments/actions";
+import type { BeneficiaryFormState } from "@/features/payments/state";
 
 /**
  * Saving a payee.
@@ -18,7 +18,6 @@ const submissions: FormData[] = [];
 let nextState: BeneficiaryFormState = { status: "idle" };
 
 vi.mock("@/features/payments/actions", () => ({
-  BENEFICIARY_IDLE: { status: "idle" } as BeneficiaryFormState,
   addBeneficiaryAction: async (
     _prev: BeneficiaryFormState,
     formData: FormData,

@@ -10,11 +10,8 @@ import {
   TextField,
 } from "@/components/ui/form";
 import { Card, CardBody, CardHeader } from "@/components/ui/primitives";
-import {
-  BENEFICIARY_IDLE,
-  addBeneficiaryAction,
-  type BeneficiaryFormState,
-} from "@/features/payments/actions";
+import { addBeneficiaryAction } from "@/features/payments/actions";
+import { BENEFICIARY_IDLE, type BeneficiaryFormState } from "@/features/payments/state";
 
 /**
  * Saving a payee, from the browser.

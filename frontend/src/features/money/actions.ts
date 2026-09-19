@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { deposit, transfer, withdraw } from "@/lib/api/banking";
 import { requireSession } from "@/lib/session";
 import { depositSchema, fieldErrors, transferSchema, withdrawSchema } from "@/lib/validation";
-import { classifyMoneyFailure, type MoneyOutcome } from "@/features/money/outcome";
+import { classifyMoneyFailure } from "@/features/money/outcome";
+import type { MoneyFormState } from "@/features/money/state";
 
 /**
  * Money movement, one logical operation at a time.
@@ -25,13 +26,6 @@ import { classifyMoneyFailure, type MoneyOutcome } from "@/features/money/outcom
  * Two identical transfers a minute apart must both be able to succeed, so it
  * must not be derived from the request.
  */
-
-export type MoneyFormState =
-  | { status: "idle" }
-  | { status: "invalid"; fields: Record<string, string> }
-  | { status: "settled"; outcome: MoneyOutcome };
-
-export const IDLE: MoneyFormState = { status: "idle" };
 
 /** Matches the opaque ids the browser mints — a UUID, and nothing else. */
 const OPERATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

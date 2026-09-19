@@ -6,6 +6,7 @@ import { ApiError, NetworkError } from "@/lib/api/client";
 import { requireSession } from "@/lib/session";
 import { beneficiarySchema, fieldErrors } from "@/lib/validation";
 import { maskAccountNumber } from "@/lib/format";
+import type { BeneficiaryFormState } from "@/features/payments/state";
 
 /**
  * Saving a payee.
@@ -21,14 +22,6 @@ import { maskAccountNumber } from "@/lib/format";
  * into a success message would put it back on a screen it no longer needs to
  * be on.
  */
-
-export type BeneficiaryFormState =
-  | { status: "idle" }
-  | { status: "invalid"; fields: Record<string, string> }
-  | { status: "failed"; error: string }
-  | { status: "saved"; name: string; maskedNumber: string };
-
-export const BENEFICIARY_IDLE: BeneficiaryFormState = { status: "idle" };
 
 export async function addBeneficiaryAction(
   _prev: BeneficiaryFormState,
