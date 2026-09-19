@@ -52,6 +52,7 @@ class IntegrationAuthorizationTest {
     private static final long CUSTOMER_A = 10L;
     private static final long CUSTOMER_B = 20L;
     private static final long EMPLOYEE = 98L;
+    private static final long ADMIN = 99L;
 
     private static final long ACCOUNT_OF_A = 5L;
     private static final String REF = "1f0b6c2a-0000-4000-8000-000000000001";
@@ -199,11 +200,46 @@ class IntegrationAuthorizationTest {
             verify(integrationService).initiateSwiftTransfer(any());
         }
 
+        /**
+         * Sending is owner-only, so staff do not inherit it.
+         *
+         * <p>An external transfer is the one action that moves money out of
+         * the bank along a rail with no in-product reversal, and nothing in
+         * this repository establishes that an employee may start one for a
+         * customer. Where policy is silent about an irreversible outward
+         * payment, the narrow reading is the safe one.
+         */
         @Test
-        @DisplayName("staff may act on a customer's account, as they may for an internal transfer")
-        void staffAllowed() throws Exception {
+        @DisplayName("an employee may not send from a customer's account")
+        void employeeRefused() throws Exception {
             accountBelongsTo(CUSTOMER_A);
 
+            mvc.perform(as(post("/api/integrations/wire-transfer"), EMPLOYEE, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON).content(wireBody()))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(integrationService);
+        }
+
+        @Test
+        @DisplayName("an admin may not send from a customer's account either")
+        void adminRefused() throws Exception {
+            accountBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/integrations/wire-transfer"), ADMIN, "ADMIN")
+                            .contentType(MediaType.APPLICATION_JSON).content(wireBody()))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(integrationService);
+        }
+
+        @Test
+        @DisplayName("an employee may send from an account they own themselves")
+        void employeeOwnAccountAllowed() throws Exception {
+            accountBelongsTo(EMPLOYEE);
+
+            // The rule is ownership, not role: holding a staff role does not
+            // cost someone the use of their own account.
             mvc.perform(as(post("/api/integrations/wire-transfer"), EMPLOYEE, "EMPLOYEE")
                             .contentType(MediaType.APPLICATION_JSON).content(wireBody()))
                     .andExpect(status().isCreated());
@@ -236,6 +272,21 @@ class IntegrationAuthorizationTest {
             // enough to read a beneficiary, an IBAN or an amount.
             mvc.perform(as(get("/api/integrations/transfer/" + REF), CUSTOMER_A, "CUSTOMER"))
                     .andExpect(status().isForbidden());
+        }
+
+        /**
+         * Reading is owner-or-staff, unlike sending. Staff reading a
+         * customer's records is established policy — the authorization table
+         * grants it, and the equivalent is asserted for transaction history.
+         */
+        @Test
+        @DisplayName("an employee may read a customer's transfer, which they may not initiate")
+        void staffMayRead() throws Exception {
+            transferWasSentFrom(ACCOUNT_OF_A);
+            accountBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(get("/api/integrations/transfer/" + REF), EMPLOYEE, "EMPLOYEE"))
+                    .andExpect(status().isOk());
         }
     }
 

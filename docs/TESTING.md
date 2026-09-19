@@ -1,6 +1,6 @@
 # Testing
 
-722 automated tests run in CI: 440 backend (415 unit and
+752 automated tests run in CI: 470 backend (445 unit and
 web-slice, 25 integration against a real PostgreSQL), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
@@ -40,8 +40,10 @@ assertion counts, which are larger and less comparable.
 | Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 12 |
 | Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 15 |
 | Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 13 |
+| Authorization | JUnit 5, MockMvc | `IntegrationAuthorization` — external transfers may only be sent from an owned account, staff included; reads are owner-or-staff | 17 |
+| Authorization | JUnit 5, MockMvc | `TwoFactorAuthorization` — second-factor setup, verify and disable are self-only, and staff cannot bypass it | 10 |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 |
-| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 |
+| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off, actuator publishes only health/info/prometheus | 6 |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 |
 | Copy | JUnit 5, Mockito | `TransferDescription` — each leg names the other account masked, never by internal id | 4 |
@@ -61,7 +63,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
+mvn -B --no-transfer-progress clean verify   # backend: 445 unit + 25 integration = 470
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```

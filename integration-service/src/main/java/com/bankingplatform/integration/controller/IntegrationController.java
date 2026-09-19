@@ -28,7 +28,9 @@ import java.math.BigDecimal;
  *       who may act on them. The check is delegated to
  *       {@link AccountOwnershipVerifier}, which resolves the owner from
  *       account-service — the service that actually holds the account — rather
- *       than trusting the request.</li>
+ *       than trusting the request. Sending is owner-only and reading is
+ *       owner-or-staff; the verifier documents why the outward rail is the
+ *       stricter of the two.</li>
  *   <li><b>Exchange rate, conversion and account-number format validation</b>
  *       touch no customer-owned resource. The rate from USD to GBP is the same
  *       for everyone and is derived from a static table. Inventing an ownership
@@ -49,21 +51,21 @@ public class IntegrationController {
                                                          CallerIdentity caller) {
         // Before the transfer is persisted and its event published: a refused
         // request must leave no record and no event behind it.
-        ownership.requireCanAccess(caller, req.getFromAccountId());
+        ownership.requireCanSendFrom(caller, req.getFromAccountId());
         return ResponseEntity.status(HttpStatus.CREATED).body(integrationService.initiateWireTransfer(req));
     }
 
     @PostMapping("/ach-transfer")
     public ResponseEntity<TransferResponse> achTransfer(@RequestBody AchTransferRequest req,
                                                         CallerIdentity caller) {
-        ownership.requireCanAccess(caller, req.getFromAccountId());
+        ownership.requireCanSendFrom(caller, req.getFromAccountId());
         return ResponseEntity.status(HttpStatus.CREATED).body(integrationService.initiateAchTransfer(req));
     }
 
     @PostMapping("/swift-transfer")
     public ResponseEntity<TransferResponse> swiftTransfer(@RequestBody SwiftTransferRequest req,
                                                           CallerIdentity caller) {
-        ownership.requireCanAccess(caller, req.getFromAccountId());
+        ownership.requireCanSendFrom(caller, req.getFromAccountId());
         return ResponseEntity.status(HttpStatus.CREATED).body(integrationService.initiateSwiftTransfer(req));
     }
 
@@ -73,7 +75,7 @@ public class IntegrationController {
         // A reference is a guessable handle to someone's transfer, so the
         // account it was sent from decides who may read it. The persisted
         // source account is the authority, not anything in the request.
-        ownership.requireCanAccess(caller, transfer.getFromAccountId());
+        ownership.requireCanRead(caller, transfer.getFromAccountId());
         return ResponseEntity.ok(transfer);
     }
 
