@@ -391,6 +391,50 @@ if ($wire -and $wire.transferRef) {
     Assert "GET transfer by ref" $false "skipped - wire transfer failed"
 }
 
+# A second customer, registered only to be refused. The outward rails move
+# money out of the bank, so the source account decides who may use them, and a
+# transfer reference is a guessable handle to someone else's beneficiary and
+# amount. Both are asserted through the real gateway rather than a mock.
+$otherReg = @{
+    username      = "e2eother$ts"
+    email         = "e2eother$ts@example.com"
+    password      = "Test1234!"
+    firstName     = "E2E"
+    lastName      = "Other"
+    dateOfBirth   = "1991-02-20"
+    phone         = "2405550149"
+    streetAddress = "456 Example Street"
+    city          = "Silver Spring"
+    state         = "MD"
+    postalCode    = "20910"
+    ssn           = "123-45-6780"
+}
+$otherAuth = Post "$GW/api/auth/register" $otherReg
+Assert "Register a second customer" ($otherAuth -and $otherAuth.token)
+$OTHER_TOKEN = $otherAuth.token
+$OTHER_USER_ID = $otherAuth.userId
+
+Assert-Refused "Another customer cannot wire from an account they do not own" "POST" `
+    "$GW/api/integrations/wire-transfer" $OTHER_TOKEN 403 `
+    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="GB29NWBK60161331926819"; swiftCode="NWBKGB2L"; bankName="NatWest"; bankCountry="GB"; amount=100.00; currency="USD"; purpose="Not theirs" }
+
+Assert-Refused "Another customer cannot ACH from an account they do not own" "POST" `
+    "$GW/api/integrations/ach-transfer" $OTHER_TOKEN 403 `
+    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="12345678"; routingNumber="026009593"; bankName="Acme Bank"; amount=100.00; currency="USD"; purpose="Not theirs" }
+
+if ($wire -and $wire.transferRef) {
+    Assert-Refused "Another customer cannot read someone else's transfer by reference" "GET" `
+        "$GW/api/integrations/transfer/$($wire.transferRef)" $OTHER_TOKEN 403
+}
+
+# Second-factor management is self-only: no customer, and no role, manages
+# another account's authenticator.
+Assert-Refused "Another customer cannot start 2FA enrolment on someone else's account" "POST" `
+    "$GW/api/auth/2fa/setup?userId=$USER_ID" $OTHER_TOKEN 403
+
+Assert-Refused "Another customer cannot disable someone else's 2FA" "DELETE" `
+    "$GW/api/auth/2fa?userId=$USER_ID" $OTHER_TOKEN 403 @{ code="123456" }
+
 $fxRate = Get "$GW/api/integrations/exchange-rate?from=USD&to=GBP" $TOKEN
 Assert "FX rate USD->GBP returned" ($fxRate -and $fxRate.rate -gt 0)
 Write-Host "  USD->GBP rate=$($fxRate.rate)"
