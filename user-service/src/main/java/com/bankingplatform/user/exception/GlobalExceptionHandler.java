@@ -75,7 +75,7 @@ public class GlobalExceptionHandler {
      * way; the status was simply wrong.
      */
     @ExceptionHandler({AuthorizationDeniedException.class, AccessDeniedException.class})
-    public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex, HttpServletRequest req) {
+    public ResponseEntity<ErrorResponse> handleAccessDenied(HttpServletRequest req) {
         return build(HttpStatus.FORBIDDEN, "Not permitted to access this resource", req.getRequestURI());
     }
 
