@@ -35,8 +35,17 @@ The backend runs in Docker while the console reloads locally.
 Drives the public API through the gateway — no direct database writes, no
 production configuration — and prints the generated credentials. Seeds two
 accounts, twelve transactions, a beneficiary, a loan with its amortization
-schedule and first repayment, and two KYC documents awaiting review. Names and
-numbers are synthetic, and re-running creates a fresh customer.
+schedule and first repayment, a credit card with three purchases and a payment,
+and two KYC documents awaiting review. Names and numbers are synthetic, and
+re-running creates a fresh customer.
+
+`SEED_BACKDATE=1` additionally spreads the dates, which is the one step that
+writes to the databases directly: `created_at` is a `@CreationTimestamp` and is
+deliberately not settable through the API. Transactions are spread over the
+preceding eight weeks with the two legs of a transfer kept on the same
+timestamp, the accounts are opened before their first transaction, and the
+customer is registered before their accounts. It exists so screenshots have a
+real date range, it is off by default, and it needs the Compose stack.
 
 `SEED_BACKDATE=1` additionally spreads the seeded transaction timestamps over the
 preceding weeks so the dashboard balance chart has a date range. That step writes

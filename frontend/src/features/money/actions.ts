@@ -36,6 +36,19 @@ function operationIdOf(formData: FormData): string | null {
 }
 
 /**
+ * Display currency only.
+ *
+ * Carried so a refusal can name figures the way the rest of the screen does.
+ * It never reaches the backend and never decides anything — the account's real
+ * currency is the account's, not the browser's — so an absent or odd value
+ * simply falls back rather than failing the request.
+ */
+function currencyOf(formData: FormData): string | undefined {
+  const value = formData.get("currency");
+  return typeof value === "string" && /^[A-Za-z]{3}$/.test(value) ? value.toUpperCase() : undefined;
+}
+
+/**
  * A missing or malformed operation id is refused rather than replaced.
  *
  * Generating one here would defeat the point: the whole value of the id is
@@ -90,7 +103,7 @@ export async function depositAction(
       },
     };
   } catch (error) {
-    return { status: "settled", outcome: classifyMoneyFailure(error) };
+    return { status: "settled", outcome: classifyMoneyFailure(error, currencyOf(formData)) };
   }
 }
 
@@ -127,7 +140,7 @@ export async function withdrawAction(
       },
     };
   } catch (error) {
-    return { status: "settled", outcome: classifyMoneyFailure(error) };
+    return { status: "settled", outcome: classifyMoneyFailure(error, currencyOf(formData)) };
   }
 }
 
@@ -168,6 +181,6 @@ export async function transferAction(
       },
     };
   } catch (error) {
-    return { status: "settled", outcome: classifyMoneyFailure(error) };
+    return { status: "settled", outcome: classifyMoneyFailure(error, currencyOf(formData)) };
   }
 }

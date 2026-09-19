@@ -58,6 +58,12 @@ describe("humanise", () => {
     expect(humanise("OVERDRAWN")).toBe("Overdrawn");
   });
 
+  it("leaves abbreviations as abbreviations", () => {
+    // "External Ach" reads like a misspelling on a page about paying someone.
+    expect(humanise("EXTERNAL_ACH")).toBe("External ACH");
+    expect(humanise("SWIFT")).toBe("SWIFT");
+  });
+
   it("falls back to a dash for missing values", () => {
     expect(humanise(null)).toBe("—");
   });

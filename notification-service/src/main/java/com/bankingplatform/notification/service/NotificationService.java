@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -69,6 +71,19 @@ public class NotificationService {
 
     // ---- event handlers ----
 
+    /**
+     * Money as a customer reads it.
+     *
+     * `$%.2f` gives "$10000.00", which is a figure nobody writes down. These
+     * lines are alerts about someone's own money, so the amount is formatted
+     * the way the rest of the product formats it: grouped, two decimals, US
+     * locale to match the console.
+     */
+    private static String money(BigDecimal amount) {
+        return NumberFormat.getCurrencyInstance(Locale.US).format(amount);
+    }
+
+
     public void onAccountCreated(Long userId) {
         create(userId, NotificationType.ACCOUNT_CREATED,
                 "Account Created",
@@ -80,7 +95,7 @@ public class NotificationService {
         if (amount.compareTo(LARGE_TRANSACTION_THRESHOLD) > 0) {
             create(userId, NotificationType.LARGE_TRANSACTION_ALERT,
                     "Large Transaction Alert",
-                    String.format("A transaction of $%.2f was made on your account. If you did not initiate this, contact support immediately.", amount),
+                    String.format("A transaction of %s was made on your account. If you did not initiate this, contact support immediately.", money(amount)),
                     txRef, "TRANSACTION");
         }
     }
@@ -88,14 +103,14 @@ public class NotificationService {
     public void onOverdraft(Long userId, BigDecimal amount) {
         create(userId, NotificationType.OVERDRAFT_ALERT,
                 "Overdraft Alert",
-                String.format("Your account balance has gone below zero after a transaction of $%.2f.", amount),
+                String.format("Your account balance has gone below zero after a transaction of %s.", money(amount)),
                 null, null);
     }
 
     public void onPaymentCompleted(Long userId, BigDecimal amount, String paymentRef) {
         create(userId, NotificationType.PAYMENT_RECEIPT,
                 "Payment Receipt",
-                String.format("Payment of $%.2f was completed successfully.", amount),
+                String.format("Payment of %s was completed successfully.", money(amount)),
                 paymentRef, "PAYMENT");
     }
 
@@ -138,7 +153,7 @@ public class NotificationService {
     public void onLoanDisbursed(Long userId, BigDecimal amount, Long loanId) {
         create(userId, NotificationType.LOAN_DISBURSED,
                 "Loan Disbursed",
-                String.format("Your loan of $%.2f has been disbursed to your account.", amount),
+                String.format("Your loan of %s has been disbursed to your account.", money(amount)),
                 loanId != null ? loanId.toString() : null, "LOAN");
     }
 

@@ -32,9 +32,10 @@ async function signIn(page: Page, request: import("@playwright/test").APIRequest
   const auth = await request.post(`${GATEWAY}/api/auth/login`, {
     data: { username: USERNAME, password: PASSWORD },
   });
-  const { token } = await auth.json();
+  const { token, userId } = await auth.json();
   await page.goto("/login");
   await setSessionCookie(page, token);
+  return { token, userId, headers: { Authorization: `Bearer ${token}` } };
 }
 
 /** Waits for content, then for the chart and fonts to stop moving. */
@@ -121,6 +122,68 @@ test.describe("authenticated product screenshots", () => {
 
     await assertNothingSensitive(page);
     await page.screenshot({ path: `${OUT}/17-transactions.png`, fullPage: false });
+  });
+
+  /*
+   * Move Money, at each step of the journey. The deposit is a real one: the
+   * receipt has to carry a reference the backend actually issued, and an
+   * invented one would be the very thing this project refuses to draw.
+   */
+  test("move money — details, review and receipt", async ({ page, request }) => {
+    await page.setViewportSize(DESKTOP);
+    const { userId, headers } = await signIn(page, request);
+    const accounts = await (
+      await request.get(`${GATEWAY}/api/accounts/user/${userId}`, { headers })
+    ).json();
+
+    /*
+     * The money has to be there. Picking the first account regardless of its
+     * balance is how this capture first ran, and the screenshot it produced was
+     * a refusal — correct behaviour, and not what this file is for.
+     */
+    const amount = 250;
+    const funded = [...accounts]
+      .filter((a: { balance: number }) => a.balance > amount)
+      .sort((a: { balance: number }, b: { balance: number }) => b.balance - a.balance);
+    test.skip(funded.length === 0 || accounts.length < 2, "needs a funded account and somewhere to send it");
+
+    const source = funded[0];
+    const destination = accounts.find((a: { id: number }) => a.id !== source.id);
+
+    await page.goto("/move-money");
+    await settle(page);
+
+    await page.getByLabel("From").selectOption(String(source.id));
+    await page.getByLabel("To").selectOption(String(destination.id));
+    await page.getByLabel("Amount").fill(amount.toFixed(2));
+    await page.getByLabel("Description").fill("Monthly saving");
+    await assertNothingSensitive(page);
+    await page.screenshot({ path: `${OUT}/22-move-money-details.png`, fullPage: false });
+
+    await page.getByRole("button", { name: /review transfer/i }).click();
+    await page.getByTestId("review-panel").waitFor();
+    await assertNothingSensitive(page);
+    await page.screenshot({ path: `${OUT}/23-move-money-review.png`, fullPage: false });
+
+    await page.getByRole("button", { name: /confirm transfer/i }).click();
+    await page.getByTestId("receipt").waitFor({ timeout: 120_000 });
+    await settle(page);
+    await assertNothingSensitive(page);
+    await page.screenshot({ path: `${OUT}/24-move-money-receipt.png`, fullPage: false });
+  });
+
+  test("payments", async ({ page, request }) => {
+    await page.setViewportSize(DESKTOP);
+    await signIn(page, request);
+    await page.goto("/payments");
+    await settle(page);
+
+    // Open the payee form, so the capture shows what the page can do.
+    await page.getByRole("button", { name: /add payee/i }).click();
+    await page.waitForTimeout(300);
+
+    await assertNothingSensitive(page);
+    await page.screenshot({ path: `${OUT}/25-payments.png`, fullPage: false });
   });
 
   test("credit cards", async ({ page, request }) => {

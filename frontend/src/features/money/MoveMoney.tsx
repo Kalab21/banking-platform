@@ -265,6 +265,8 @@ function MoneyFlow({
               {!single ? <input type="hidden" name="toAccountId" value={details.toAccountId} /> : null}
               <input type="hidden" name="amount" value={details.amount} />
               <input type="hidden" name="description" value={details.description} />
+              {/* Display only: it lets a refusal quote figures in the same currency. */}
+              <input type="hidden" name="currency" value={currency} />
 
               <ReviewPanel
                 kind={kind}

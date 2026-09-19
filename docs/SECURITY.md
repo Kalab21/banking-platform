@@ -157,6 +157,15 @@ The same rule decides what the payee form gets, which is nothing. It is handed
 no beneficiary data at all; the account number is typed, submitted, and the
 fields are cleared, and what comes back to confirm the save is already masked.
 
+The same question applies to text the backend writes and the customer reads
+later. A transfer stores a description on each leg, and that description used to
+name the other side by its internal account id — `Monthly saving → account 71`.
+A primary key is not a customer-facing identifier, and on the credit leg it is a
+primary key belonging to whichever account sent the money. Both legs now carry
+the last four digits, the same way every screen in the console names an account,
+and a unit test asserts that neither the internal id nor the full number can
+reach the description.
+
 Three tests guard it, against the three surfaces a browser actually sees: the
 delivered HTML, the RSC/Flight response captured during a real client-side
 navigation, and the rendered DOM including `aria-label`, `title` and `data-*`

@@ -150,7 +150,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .amount(request.getAmount())
                 .currency(currency)
                 .balanceAfter(fromAccount.getBalance())
-                .description(desc + " → account " + request.getToAccountId())
+                .description(desc + " → " + masked(toAccount))
                 .relatedTransactionRef(creditRef)
                 .build());
 
@@ -161,7 +161,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .amount(request.getAmount())
                 .currency(currency)
                 .balanceAfter(toAccount.getBalance())
-                .description(desc + " ← account " + request.getFromAccountId())
+                .description(desc + " ← " + masked(fromAccount))
                 .relatedTransactionRef(debitRef)
                 .build());
 
@@ -189,6 +189,22 @@ public class TransactionServiceImpl implements TransactionService {
     public Page<TransactionResponse> getByAccountId(Long accountId, Pageable pageable) {
         return transactionRepository.findByAccountIdOrderByCreatedAtDesc(accountId, pageable)
                 .map(transactionMapper::toResponse);
+    }
+
+
+    /**
+     * How the other side of a transfer is named in text a customer reads.
+     *
+     * It used to be the internal account id, which is a primary key: it means
+     * nothing to the person reading their history, and it is not ours to put in
+     * front of them. The last four digits are what the console shows everywhere
+     * else, so the history now agrees with the rest of the product.
+     */
+    private static String masked(AccountResponse account) {
+        String number = account != null ? account.getAccountNumber() : null;
+        return number != null && number.length() >= 4
+                ? "••••" + number.substring(number.length() - 4)
+                : "another account";
     }
 
     private String generateRef() {

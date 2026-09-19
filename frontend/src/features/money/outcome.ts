@@ -35,12 +35,12 @@ export type MoneyOutcome =
  * balance was touched. A bare 500 carries no such promise, and a transfer that
  * debited and failed to credit arrives as exactly that.
  */
-export function classifyMoneyFailure(error: unknown): MoneyOutcome {
+export function classifyMoneyFailure(error: unknown, currency?: string): MoneyOutcome {
   if (error instanceof ApiError) {
     if (error.status === 504 || (error.status >= 500 && error.status !== 503)) {
       return { kind: "unknown", message: unknownMessage };
     }
-    return { kind: "rejected", message: error.userMessage };
+    return { kind: "rejected", message: customerCopy(error.userMessage, currency) };
   }
 
   /*
@@ -54,6 +54,58 @@ export function classifyMoneyFailure(error: unknown): MoneyOutcome {
   }
 
   return { kind: "rejected", message: "That request could not be completed." };
+}
+
+/**
+ * The two refusals a customer actually meets, in their language rather than
+ * the service's.
+ *
+ * `ApiError.userMessage` prefers the backend's own wording, which is right
+ * almost everywhere: the service knows why it said no. Money movement is the
+ * exception, because these two sentences are written for a log line. A
+ * customer who is told "Insufficient funds. Available: 164.01, Requested: 250"
+ * has to work out which figure is theirs and what currency either is in, and
+ * "Cannot transact on a FROZEN account" is a Java enum in the middle of a
+ * sentence. Anything this does not recognise is passed through untouched — a
+ * refusal the console does not understand is still the backend's to explain.
+ */
+const INSUFFICIENT_FUNDS = /^insufficient funds\.\s*available:\s*(-?[\d.]+),\s*requested:\s*(-?[\d.]+)/i;
+const ACCOUNT_STATUS = /^cannot transact on an? ([A-Z_]+) account/i;
+const CURRENCY_CODE = /^[A-Z]{3}$/;
+
+function asMoney(value: number, currency: string): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: CURRENCY_CODE.test(currency) ? currency : "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function customerCopy(message: string, currency = "USD"): string {
+  const funds = INSUFFICIENT_FUNDS.exec(message);
+  if (funds) {
+    const available = Number(funds[1]);
+    const requested = Number(funds[2]);
+    if (!Number.isFinite(available) || !Number.isFinite(requested)) {
+      return "That account does not have enough available money for this payment.";
+    }
+    return (
+      `That account has ${asMoney(available, currency)} available and this payment is ` +
+      `${asMoney(requested, currency)}. Enter a smaller amount, or move money into the ` +
+      "account first."
+    );
+  }
+
+  const status = ACCOUNT_STATUS.exec(message);
+  if (status) {
+    return (
+      `That account is ${status[1].toLowerCase().replace(/_/g, " ")}, so money cannot move ` +
+      "in or out of it. Contact us if you think that is wrong."
+    );
+  }
+
+  return message;
 }
 
 /**

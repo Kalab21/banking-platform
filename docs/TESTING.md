@@ -1,8 +1,8 @@
 # Testing
 
-691 automated tests run in CI: 430 backend (405 unit and
-web-slice, 25 integration against a real PostgreSQL), 192 frontend
-unit/component and 69 offline end-to-end. A further 42 live-stack
+713 automated tests run in CI: 439 backend (414 unit and
+web-slice, 25 integration against a real PostgreSQL), 205 frontend
+unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
 counted in the CI total.
 
@@ -44,22 +44,24 @@ assertion counts, which are larger and less comparable.
 | Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 |
+| Copy | JUnit 5, Mockito | `TransferDescription` — each leg names the other account masked, never by internal id | 4 |
+| Copy | JUnit 5, Mockito | `NotificationCopy` — amounts in alerts are grouped dollars, card named by last four | 5 |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountRepositoryIT` — migrations and persistence | 6 |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovementIT` — concurrent duplicates, replay, key release | 8 |
 | Integration | Testcontainers, PostgreSQL 16 | `CustomerProfileMigrationIT` — the customer-profile migration | 7 |
-| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification | 192 |
-| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 192 above) | 23 |
-| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 192 above) | 9 |
+| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment | 205 |
+| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 205 above) | 23 |
+| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 205 above) | 9 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
-| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport | 42, on demand |
+| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport | 34, on demand |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals | On demand |
 
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 405 unit + 25 integration = 430
-cd frontend && npm run test                  # frontend: 192 unit/component
+mvn -B --no-transfer-progress clean verify   # backend: 414 unit + 25 integration = 439
+cd frontend && npm run test                  # frontend: 205 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 

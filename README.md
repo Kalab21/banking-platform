@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 691 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 42 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
+| **Testing** | 713 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -52,7 +52,15 @@ gateway from the services that own it.
 
 | Sign in | Transactions |
 |---|---|
-| ![Sign-in page](docs/screenshots/01-login-desktop.png) | ![Transactions page with deposit, withdraw and transfer forms above the combined activity list](docs/screenshots/17-transactions.png) |
+| ![Sign-in page](docs/screenshots/01-login-desktop.png) | ![Transactions page listing settled activity across every account, most recent first](docs/screenshots/17-transactions.png) |
+
+| Move money — review | Move money — receipt |
+|---|---|
+| ![Review step naming the amount, the accounts by their last four digits and the description, above a single confirm button](docs/screenshots/23-move-money-review.png) | ![Receipt confirming a completed transfer with the reference the backend issued](docs/screenshots/24-move-money-receipt.png) |
+
+| Payments | Second factor |
+|---|---|
+| ![Payments page with the add-payee form open above the saved payees, each shown with a masked account number](docs/screenshots/25-payments.png) | ![Second-factor challenge asking for the six-digit code from an authenticator app](docs/screenshots/06-two-factor.png) |
 
 | Onboarding — personal details | Onboarding — review |
 |---|---|
@@ -353,17 +361,17 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**691 automated tests run in CI** — 430 backend (405 unit and web-slice, 25
-integration against a real PostgreSQL), 192 frontend unit/component and 69
-offline end-to-end. A further **42 live-stack Playwright scenarios** and a
+**713 automated tests run in CI** — 439 backend (414 unit and web-slice, 25
+integration against a real PostgreSQL), 205 frontend unit/component and 69
+offline end-to-end. A further **34 live-stack Playwright scenarios** and a
 PowerShell full-stack suite run on demand; they need all 13 services up and are
 not counted in the CI total.
 
 Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 405 unit + 25 integration = 430
-cd frontend && npm run test                  # frontend: 192 unit/component
+mvn -B --no-transfer-progress clean verify   # backend: 414 unit + 25 integration = 439
+cd frontend && npm run test                  # frontend: 205 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 

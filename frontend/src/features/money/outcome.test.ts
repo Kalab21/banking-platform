@@ -53,10 +53,10 @@ describe("classifying a money-movement failure", () => {
     expect(classifyMoneyFailure(new ApiError(status, "", path)).kind).toBe("rejected");
   });
 
-  it("prefers the backend's own wording when it rejects", () => {
+  it("keeps the backend's own wording for a refusal it has no better words for", () => {
     const outcome = classifyMoneyFailure(
       new ApiError(422, "", path, {
-        message: "Insufficient funds. Available: 100.00, Requested: 700.00",
+        message: "Cannot transfer to the same account",
         status: 422,
         error: "Unprocessable Entity",
         path,
@@ -64,7 +64,64 @@ describe("classifying a money-movement failure", () => {
       }),
     );
 
-    expect(outcome.message).toContain("Insufficient funds");
+    expect(outcome.message).toBe("Cannot transfer to the same account");
+  });
+});
+
+/**
+ * The two refusals that arrive written for a log file.
+ *
+ * Both are shown to a customer who is in the middle of moving money, which is
+ * the worst moment to hand someone a bare decimal and a Java enum.
+ */
+function rejection(message: string, currency?: string) {
+  return classifyMoneyFailure(
+    new ApiError(422, "", path, {
+      message,
+      status: 422,
+      error: "Unprocessable Entity",
+      path,
+      timestamp: "",
+    }),
+    currency,
+  );
+}
+
+describe("putting a refusal in the customer's language", () => {
+  it("states both figures as money rather than as bare decimals", () => {
+    const outcome = rejection("Insufficient funds. Available: 164.01, Requested: 250");
+
+    expect(outcome.kind).toBe("rejected");
+    expect(outcome.message).toContain("$164.01");
+    expect(outcome.message).toContain("$250.00");
+    expect(outcome.message).not.toContain("Requested:");
+    expect(outcome.message).not.toContain("Insufficient funds.");
+  });
+
+  it("says what the customer can do about it", () => {
+    expect(rejection("Insufficient funds. Available: 10.00, Requested: 20.00").message).toMatch(
+      /smaller amount/i,
+    );
+  });
+
+  it("quotes the figures in the currency of the account being debited", () => {
+    const outcome = rejection("Insufficient funds. Available: 164.01, Requested: 250", "EUR");
+
+    expect(outcome.message).toContain("€164.01");
+  });
+
+  it("falls back to dollars rather than throwing on a currency it does not recognise", () => {
+    // `Intl.NumberFormat` throws on a bad currency code, and a refusal is the
+    // wrong place to turn a display detail into a crash.
+    expect(rejection("Insufficient funds. Available: 1.00, Requested: 2.00", "money!").message)
+      .toContain("$1.00");
+  });
+
+  it("does not leave a status enum in the middle of a sentence", () => {
+    const outcome = rejection("Cannot transact on a FROZEN account");
+
+    expect(outcome.message).toContain("frozen");
+    expect(outcome.message).not.toContain("FROZEN");
   });
 
   it("never tells the customer to try again when the outcome is unknown", () => {
