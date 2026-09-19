@@ -1,5 +1,6 @@
 package com.bankingplatform.integration.exception;
 
+import feign.FeignException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -44,6 +45,53 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     public ResponseEntity<Map<String, Object>> handleNoResource() {
         return error(HttpStatus.NOT_FOUND, "No such endpoint");
+    }
+
+    /**
+     * account-service refused the ownership lookup, so the caller is refused here.
+     *
+     * <p>Without this the denial falls through to the catch-all and is reported
+     * as 500, which reads as a broken server rather than a correct refusal and
+     * hides an enforced security control behind what looks like a bug.
+     */
+    @ExceptionHandler(FeignException.Forbidden.class)
+    public ResponseEntity<Map<String, Object>> handleFeignForbidden() {
+        return error(HttpStatus.FORBIDDEN, "Not permitted to access this resource");
+    }
+
+    @ExceptionHandler(FeignException.Unauthorized.class)
+    public ResponseEntity<Map<String, Object>> handleFeignUnauthorized() {
+        return error(HttpStatus.UNAUTHORIZED, "Authentication required");
+    }
+
+    /**
+     * The named source account does not exist.
+     *
+     * <p>Reported as 404 rather than 500. It says nothing a caller could not
+     * already determine: an account they do not own answers 403 whether or not
+     * it exists, so this distinguishes only their own missing account from
+     * their own real one.
+     */
+    @ExceptionHandler(FeignException.NotFound.class)
+    public ResponseEntity<Map<String, Object>> handleFeignNotFound() {
+        return error(HttpStatus.NOT_FOUND, "Account not found");
+    }
+
+    /**
+     * account-service could not be asked.
+     *
+     * <p>The ownership check is the only reason this service calls out, so a
+     * call that cannot be made is a check that cannot be made. It fails closed
+     * with 502 — never by allowing the transfer through unauthorised.
+     */
+    @ExceptionHandler(FeignException.class)
+    public ResponseEntity<Map<String, Object>> handleFeign(FeignException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.status());
+        if (status != null && status.is4xxClientError()) {
+            return error(status, "The request was refused");
+        }
+        log.error("Account service returned {} while authorising a transfer", ex.status(), ex);
+        return error(HttpStatus.BAD_GATEWAY, "The account service did not respond successfully");
     }
 
     @ExceptionHandler(Exception.class)

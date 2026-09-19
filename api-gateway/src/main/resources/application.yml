@@ -96,7 +96,16 @@ management:
       exposure:
         # Only these three. Metrics and tracing add no new public surface:
         # everything else (env, beans, heapdump, loggers...) stays closed.
-        include: health,info,prometheus,gateway
+        #
+        # `gateway` was here and is deliberately gone. Unlike every other
+        # service, this one's actuator is on the public port, and
+        # JwtAuthenticationFilter treats /actuator as a public path — so
+        # /actuator/gateway/routes answered anyone, with no token, listing every
+        # route id, predicate and `lb://` target the platform has. That is a map
+        # of the internal topology handed to an unauthenticated caller, and its
+        # POST sub-paths can refresh routes. Nothing needs it: Compose probes
+        # /actuator/health and Prometheus scrapes /actuator/prometheus.
+        include: health,info,prometheus
   endpoint:
     health:
       # Liveness/readiness are derived from Spring's own application state and
