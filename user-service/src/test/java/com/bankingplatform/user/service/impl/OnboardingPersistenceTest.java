@@ -10,6 +10,7 @@ import com.bankingplatform.user.model.IdentityStatus;
 import com.bankingplatform.user.model.User;
 import com.bankingplatform.user.repository.CustomerIdentityRepository;
 import com.bankingplatform.user.repository.UserRepository;
+import com.bankingplatform.user.security.LoginAttemptService;
 import com.bankingplatform.user.service.TwoFactorService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -94,7 +95,8 @@ class OnboardingPersistenceTest {
                 passwordEncoder,
                 jwtUtil,
                 mock(AuthenticationManager.class),
-                mock(TwoFactorService.class));
+                mock(TwoFactorService.class),
+                mock(LoginAttemptService.class));
     }
 
     /** A completed wizard, with the two fields that arrive un-normalised. */

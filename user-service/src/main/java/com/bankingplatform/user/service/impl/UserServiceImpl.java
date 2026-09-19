@@ -11,10 +11,12 @@ import com.bankingplatform.user.mapper.UserMapper;
 import com.bankingplatform.user.model.User;
 import com.bankingplatform.user.repository.UserRepository;
 import com.bankingplatform.user.service.TwoFactorService;
+import com.bankingplatform.user.security.LoginAttemptService;
 import com.bankingplatform.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -36,6 +38,7 @@ public class UserServiceImpl implements UserService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final TwoFactorService twoFactorService;
+    private final LoginAttemptService loginAttemptService;
 
     @Override
     @Transactional
@@ -81,14 +84,42 @@ public class UserServiceImpl implements UserService {
                 .build();
     }
 
+    /**
+     * Sign-in, with both halves of the credential counted against the account.
+     *
+     * <p>The gateway's per-IP limit does not see a distributed attempt on one
+     * username, so failures are also counted per account here. Two details in
+     * the order below matter:
+     *
+     * <ul>
+     *   <li>The block is checked <em>before</em> authenticating, so a blocked
+     *       account costs nothing to refuse and the refusal never adds to the
+     *       count that caused it.</li>
+     *   <li>A correct password with the second factor still outstanding is not
+     *       a failure and not yet a success. It is not counted, and the counter
+     *       is not cleared — that only happens once the whole credential has
+     *       been presented. Counting it would lock a 2FA user out of their own
+     *       account for doing exactly what the form asks.</li>
+     * </ul>
+     *
+     * <p>A wrong code <em>is</em> counted: it is the second half of a guess.
+     */
     @Override
     public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
-        );
+        String username = request.getUsername();
+        loginAttemptService.assertNotThrottled(username);
 
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.getUsername()));
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, request.getPassword())
+            );
+        } catch (AuthenticationException wrongPassword) {
+            loginAttemptService.recordFailure(username);
+            throw wrongPassword;
+        }
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
 
         // Password accepted. If the account carries a second factor, no session is
         // issued until a valid TOTP code is presented.
@@ -102,12 +133,14 @@ public class UserServiceImpl implements UserService {
                         .build();
             }
             if (!twoFactorService.verifyCode(user.getId(), code)) {
+                loginAttemptService.recordFailure(username);
                 throw new BadCredentialsException("Invalid authentication code");
             }
         }
 
         UserDetails userDetails = buildUserDetails(user);
         String token = jwtUtil.generateToken(userDetails, user.getId());
+        loginAttemptService.clear(username);
 
         return AuthResponse.builder()
                 .token(token)

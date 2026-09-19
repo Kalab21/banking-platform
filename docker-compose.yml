@@ -172,8 +172,14 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Failed sign-in attempts are counted per account here, so this service
+      # needs the same Redis the gateway already uses for its per-IP limit.
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       eureka-server:
         condition: service_healthy

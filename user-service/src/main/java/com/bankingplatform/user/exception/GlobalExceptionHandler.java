@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -38,6 +39,35 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex, HttpServletRequest req) {
         return build(HttpStatus.UNAUTHORIZED, "Invalid username or password", req.getRequestURI());
+    }
+
+    /**
+     * Too many failed sign-in attempts against one account.
+     *
+     * <p>{@code 429} with {@code Retry-After}, and wording that describes the
+     * attempts rather than the account: a message that said "this account is
+     * locked" would confirm the username exists to anyone guessing names.
+     */
+    @ExceptionHandler(LoginThrottledException.class)
+    public ResponseEntity<ErrorResponse> handleThrottled(LoginThrottledException ex, HttpServletRequest req) {
+        ResponseEntity<ErrorResponse> refusal = build(HttpStatus.TOO_MANY_REQUESTS,
+                "Too many sign-in attempts. Try again later.", req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(refusal.getBody());
+    }
+
+    /**
+     * The sign-in attempt store could not be evaluated.
+     *
+     * <p>Sign-in fails closed rather than skipping the check, and the response
+     * names nothing about the store itself.
+     */
+    @ExceptionHandler(ThrottleStoreUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleThrottleStore(HttpServletRequest req) {
+        log.error("Sign-in refused: the attempt store could not be evaluated");
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "Sign-in is temporarily unavailable. Please try again shortly.", req.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

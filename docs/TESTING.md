@@ -1,7 +1,7 @@
 # Testing
 
-722 automated tests run in CI: 440 backend (415 unit and
-web-slice, 25 integration against a real PostgreSQL), 213 frontend
+755 automated tests run in CI: 473 backend (440 unit and
+web-slice, 33 integration against a real PostgreSQL and a real Redis), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
 counted in the CI total.
@@ -40,6 +40,9 @@ assertion counts, which are larger and less comparable.
 | Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 12 |
 | Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 15 |
 | Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 13 |
+| Authorization | JUnit 5, MockMvc | `TwoFactorAuthorization` — second-factor setup, verify and disable are self-only, and staff cannot bypass it | 11 |
+| Authentication | JUnit 5, Mockito | `LoginThrottleSemantics` — what counts as a failed sign-in and what does not | 11 |
+| Authentication | JUnit 5, MockMvc | `LoginThrottleResponse` — 429 with `Retry-After`, no account enumeration, 503 when the store is unreadable | 4 |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 |
 | Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off | 3 |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
@@ -50,6 +53,7 @@ assertion counts, which are larger and less comparable.
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovementIT` — concurrent duplicates, replay, key release | 8 |
 | Integration | Testcontainers, PostgreSQL 16 | `CustomerProfileMigrationIT` — the customer-profile migration | 7 |
+| Integration | Testcontainers, Redis 7 | `RedisLoginAttemptServiceIT` — atomic increment and TTL, per-account isolation, digest keys, nothing but a count stored | 8 |
 | Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment | 213 |
 | Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 213 above) | 23 |
 | Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 213 above) | 9 |
@@ -61,7 +65,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
+mvn -B --no-transfer-progress clean verify   # backend: 440 unit + 33 integration = 473
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```

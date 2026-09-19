@@ -20,6 +20,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000ms
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
     consumer:
@@ -32,6 +37,14 @@ spring:
     properties:
       max.block.ms: 1000
       request.timeout.ms: 1000
+
+# Failed sign-in attempts counted per account, on top of the gateway's per-IP
+# limit. The gateway stops one noisy source; this stops many quiet ones working
+# through a single username.
+security:
+  login-throttle:
+    max-attempts: ${SECURITY_LOGIN_THROTTLE_MAX_ATTEMPTS:5}
+    window: ${SECURITY_LOGIN_THROTTLE_WINDOW:15m}
 
 eureka:
   client:

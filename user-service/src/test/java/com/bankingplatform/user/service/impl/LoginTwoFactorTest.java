@@ -8,6 +8,7 @@ import com.bankingplatform.user.model.Role;
 import com.bankingplatform.user.model.User;
 import com.bankingplatform.user.repository.CustomerIdentityRepository;
 import com.bankingplatform.user.repository.UserRepository;
+import com.bankingplatform.user.security.LoginAttemptService;
 import com.bankingplatform.user.service.TwoFactorService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -56,6 +57,7 @@ class LoginTwoFactorTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private AuthenticationManager authenticationManager;
     @Mock private TwoFactorService twoFactorService;
+    @Mock private LoginAttemptService loginAttemptService;
 
     @InjectMocks private UserServiceImpl userService;
 

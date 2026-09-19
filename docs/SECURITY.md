@@ -128,7 +128,9 @@ developing rather than by default.
 | Identity number at onboarding | The Social Security number is read from the request, checked for format, reduced to its last four digits and dropped. Those four digits live in `customer_identity` rather than on the user row, so the entity `UserResponse` maps from has nothing sensitive to leak. The field is `@JsonProperty(access = WRITE_ONLY)` and excluded from the request's `toString()`, and validation messages name the rule rather than quoting the value |
 | Browser session | JWT in an httpOnly, SameSite=Lax cookie, never readable by page JavaScript |
 | What reaches the browser | A Server Component hands Client Components a narrowed view, not the API record. See below |
-| Rate limiting | Redis token bucket at the gateway, per client IP |
+| Rate limiting | Two layers, both in Redis: a token bucket at the gateway keyed per client IP, and a failed-attempt counter in `user-service` keyed per account. The first stops one noisy source; the second stops many quiet ones working through a single username |
+| Sign-in attempt policy | Five failures inside fifteen minutes refuses further attempts on that username with `429` and `Retry-After`. The counter is keyed by a SHA-256 digest of the submitted username, never the username itself, and the increment and its expiry are one Redis script so a counter cannot outlive its window. A store that cannot be read fails closed: sign-in returns `503` and issues no token |
+| Second-factor management | Enrolling, confirming and removing an authenticator are self-only — `AccessGuard.requireSelf`, not owner-or-staff. No role can take another account's second factor off |
 | Error hygiene | Denials expose no resource detail; the catch-all logs server-side and returns a generic message |
 | Log injection | The request path is reduced to the RFC 3986 path alphabet before being logged |
 | Static analysis | CodeQL on Java and TypeScript; Trivy over dependencies, Dockerfiles and the base image |
@@ -206,21 +208,20 @@ with nothing to indicate it was missed.
 **Smallest safe fix.** A `DefaultErrorHandler` with a `DeadLetterPublishingRecoverer`
 per consumer factory, plus a dead-letter topic per consumer group.
 
-### 2. No per-account login throttling — medium
+### 2. No breach-corpus check on passwords — low
 
 **Current policy.** `RegisterRequest` requires at least 8 characters with an
 uppercase letter, a lowercase letter and a number (`@Size(min = 8, max = 100)`
 plus a `@Pattern`), and the console shows the same rule as a live checklist.
-Passwords are stored with BCrypt. The earlier six-character minimum, under
-which `Password1` was acceptable, is gone.
+Passwords are stored with BCrypt. Failed sign-in attempts are now counted per
+account as well as per IP, so a distributed attempt against one username is
+refused after five failures in fifteen minutes.
 
-**What is still missing.** There is no breach-corpus check, and no per-account
-lockout or attempt throttling on `/api/auth/login` — the only limit is the
-gateway's per-IP rate limit, which does not stop a distributed attempt against
-one account.
+**What is still missing.** A password that satisfies the rule can still be one
+that appears in a public breach corpus, and nothing checks for that.
 
-**Smallest safe fix.** Per-account attempt throttling with a backoff, and a
-check against a known-breached password list at registration.
+**Smallest safe fix.** A k-anonymity lookup against a breached-password list at
+registration and at password change.
 
 ### 3. Two-factor is opt-in — low
 
@@ -231,4 +232,9 @@ check against a known-breached password list at registration.
 account has it on by default, so the protection is advisory.
 
 **Smallest safe fix.** Require 2FA for `EMPLOYEE` and `ADMIN` roles, where the
-blast radius of a compromised account is largest.
+blast radius of a compromised account is largest. Not done here because
+enrolment currently requires an authenticated caller: demanding a second factor
+before any staff token is issued leaves a staff account that has never enrolled
+with no way to enrol. Solving that properly means a scoped enrolment token and a
+separate first-sign-in flow, which is an authentication design of its own rather
+than a check to add.
