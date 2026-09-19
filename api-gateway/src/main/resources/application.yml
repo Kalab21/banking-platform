@@ -36,6 +36,14 @@ spring:
           uri: lb://user-service
           predicates:
             - Path=/api/users/**
+        # KycController maps the staff review endpoint at /api/kyc/documents/{id}/review
+        # rather than under /api/users, so it needs its own predicate. Without
+        # this the route did not exist at the gateway and the console's KYC
+        # review returned 404 through the only path a browser can take.
+        - id: user-service-kyc
+          uri: lb://user-service
+          predicates:
+            - Path=/api/kyc/**
         - id: application-service
           uri: lb://application-service
           predicates:

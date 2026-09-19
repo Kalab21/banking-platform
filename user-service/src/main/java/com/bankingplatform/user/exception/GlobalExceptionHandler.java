@@ -10,6 +10,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -57,6 +59,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex, HttpServletRequest req) {
         return build(HttpStatus.METHOD_NOT_ALLOWED, "Method " + ex.getMethod() + " is not supported for this endpoint", req.getRequestURI());
+    }
+
+    /**
+     * A method-security denial is a refusal, not a fault.
+     *
+     * <p>{@code AccessGuard} throws its own exception, which the shared
+     * handler in {@code common-security} maps to 403. Spring Security's
+     * {@code @PreAuthorize} throws a different one, and without this it fell
+     * through to the catch-all below and was reported as 500 — the admin-only
+     * user list and the staff KYC review both answered "something went wrong"
+     * when the honest answer was "you may not do that". Nothing leaked either
+     * way; the status was simply wrong.
+     */
+    @ExceptionHandler({AuthorizationDeniedException.class, AccessDeniedException.class})
+    public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex, HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, "Not permitted to access this resource", req.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)
