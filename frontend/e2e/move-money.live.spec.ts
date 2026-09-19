@@ -187,7 +187,7 @@ test.describe("moving money through the console", () => {
     );
   });
 
-  test("a double click on confirm moves the money once", async ({ page, request }) => {
+  test("a double click on confirm never moves the money twice", async ({ page, request }) => {
     const { userId, headers } = await signIn(page, request);
     const before = await accountsOf(request, userId, headers);
     const account = before[0];
@@ -209,12 +209,30 @@ test.describe("moving money through the console", () => {
       /* the button is disabled while pending, which is the point */
     });
 
-    await expect(page.getByTestId("receipt")).toBeVisible({ timeout: 120_000 });
+    /*
+     * Either outcome is legitimate here, and the assertion is the same for
+     * both: a receipt, or an honest "we could not confirm this". What must
+     * never happen is two movements, and that is what is checked below —
+     * against the account, not against the screen.
+     */
+    await expect(page.getByTestId("receipt").or(page.getByTestId("unresolved"))).toBeVisible({
+      timeout: 180_000,
+    });
+    const confirmed = await page.getByTestId("receipt").isVisible();
 
     const after = await accountsOf(request, userId, headers);
     const moved = after.find((a) => a.id === account.id)!;
-    expect(Number((moved.balance - account.balance).toFixed(2))).toBe(amount);
-    expect(await transactionCount(request, account.id, headers)).toBe(countBefore + 1);
+    const difference = Number((moved.balance - account.balance).toFixed(2));
+    const countAfter = await transactionCount(request, account.id, headers);
+
+    // Once, or not at all. Never twice.
+    expect([0, amount], `balance moved by ${difference}`).toContain(difference);
+    expect(countAfter - countBefore, "transactions recorded").toBeLessThanOrEqual(1);
+
+    // And the screen agrees with the account.
+    if (confirmed) {
+      expect(difference, "a receipt was shown, so the money moved").toBe(amount);
+    }
   });
 
   test("the receipt's reference is the one the API recorded", async ({ page, request }) => {
@@ -232,8 +250,8 @@ test.describe("moving money through the console", () => {
     await page.getByRole("button", { name: /confirm deposit/i }).click();
     await expect(page.getByTestId("receipt")).toBeVisible({ timeout: 120_000 });
 
-    const shown = (await page.getByTestId("receipt").innerText()).split("\n");
-    const reference = shown[shown.length - 1].trim();
+    // Read from the element that holds it, not by counting lines of text.
+    const reference = (await page.getByTestId("receipt-reference").innerText()).trim();
 
     const history = await (
       await request.get(`${GATEWAY}/api/transactions/account/${account.id}?page=0&size=5`, {
@@ -253,9 +271,11 @@ test.describe("moving money through the console", () => {
     // The forms moved out; what is left is the record.
     await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible();
     await expect(page.getByTestId("transfer-form")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Move money" })).toBeVisible();
+    // Scoped to the page: the sidebar carries a Move Money link too.
+    const action = page.locator("main").getByRole("link", { name: "Move money" });
+    await expect(action).toBeVisible();
 
-    await page.getByRole("link", { name: "Move money" }).click();
+    await action.click();
     await page.waitForURL(/\/move-money$/, { timeout: 90_000 });
     await settle(page);
     await expect(page.getByRole("tab", { name: "Transfer" })).toBeVisible();

@@ -344,11 +344,13 @@ function ReviewPanel({
   );
 }
 
-function Line({ label, value }: { label: string; value: string }) {
+function Line({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-ink-subtle">{label}</dt>
-      <dd className="tabular min-w-0 truncate text-right font-medium text-ink">{value}</dd>
+      <dd data-testid={testId} className="tabular min-w-0 truncate text-right font-medium text-ink">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -400,7 +402,7 @@ function Receipt({
           <Line label={destination ? "From" : "Account"} value={source?.maskedNumber ?? "—"} />
           {destination ? <Line label="To" value={destination.maskedNumber} /> : null}
           {/* The backend's own reference. Nothing here is invented. */}
-          <Line label="Reference" value={reference} />
+          <Line label="Reference" value={reference} testId="receipt-reference" />
         </dl>
 
         <div className="mt-5 flex flex-wrap gap-2">
