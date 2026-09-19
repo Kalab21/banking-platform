@@ -1,35 +1,46 @@
 # Northbank Banking Platform
 
-## One-line description
+## Overview
 
-A thirteen-service Spring Boot banking platform behind a Next.js customer
-console, built to practise the parts of banking software that are actually hard:
-concurrent balance changes, repeated money movement, resource ownership, and
-telling a customer the truth when the system does not know what happened.
+Northbank is a thirteen-process Spring Boot banking platform behind a Next.js
+customer console, built to demonstrate and validate difficult financial-system
+concerns: concurrent balance updates, idempotent money movement,
+resource-level authorization, failure handling and secure customer-data
+boundaries.
 
-## Problem and context
+It uses synthetic data and makes no production or regulatory claim.
 
-Most portfolio "banking apps" are a CRUD table with a currency symbol. The
-interesting problems in banking are not the entities, they are the failure
-modes — two debits arriving at once, a request whose response is lost after the
-money moved, an id in a URL that belongs to someone else, a page that shows
-`$0.00` because a service was down.
+**At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
+services), 722 automated tests in CI, 34 live-stack scenarios on demand, and a
+customer console that never holds a bearer token or a full account number.
 
-Northbank exists to implement those properly and to be honest about the ones it
-does not solve. It moves no real money, holds no real customer data, and makes
-no compliance claim.
+## Problem / Context
+
+The interesting problems in retail banking software are not the entities, they
+are the failure modes: two debits arriving at once, a request whose response is
+lost after the money moved, an id in a URL that belongs to another customer, a
+page that renders `$0.00` because a service was unreachable.
+
+Northbank was built to implement those cases properly, to prove each one with a
+test that fails when the protection is removed, and to state plainly which ones
+it does not solve. It moves no real money, holds no real customer data, and
+makes no compliance claim.
 
 ## Architecture
 
-Thirteen Spring Boot services plus a Next.js console:
+![Northbank system architecture](architecture/northbank-system-architecture.svg)
+
+Thirteen backend processes — Eureka, the API Gateway and 11 business services —
+plus a Next.js console:
 
 - **Edge** — Spring Cloud Gateway. Validates the JWT, derives identity from it,
   and injects `X-User-Id` / `X-User-Role` downstream, replacing anything the
   client sent under those names. Redis token-bucket rate limiting per client IP.
 - **Service registry** — Eureka; the gateway routes by service name.
-- **Core services** — `user`, `account`, `transaction`, `payment`, `loan`,
-  `credit-card`, `application`, `statistics`, `notification`, `fraud-detection`,
-  `integration`. Each owns its schema in its own PostgreSQL database.
+- **Business services (11)** — `user`, `account`, `transaction`, `payment`,
+  `loan`, `credit-card`, `application`, `statistics`, `notification`,
+  `fraud-detection`, `integration`. Each owns its schema in its own PostgreSQL
+  database.
 - **Messaging** — Kafka for derived state: statistics, notifications, fraud
   scoring, card and loan issuance from approved applications.
 - **Console** — Next.js App Router. React Server Components fetch; Server
@@ -41,25 +52,45 @@ Thirteen Spring Boot services plus a Next.js console:
 Business services publish no host ports. Application traffic has to pass the
 gateway, which is what makes the `/internal` endpoints internal.
 
-## The console as a backend-for-frontend
+### The console as a backend-for-frontend
 
 The session is a JWT in an httpOnly, SameSite=Lax cookie written by a Server
 Action. Page JavaScript cannot read it, which removes the XSS token-theft route
 that `localStorage` would open. The cookie's lifetime comes from the token's own
-expiry, so the browser drops it exactly when the backend stops honouring it.
+expiry, so the browser drops it exactly when the backend stops honoring it.
 
 The role in the token drives navigation only. It is never an authorization
 decision: the backend re-verifies the signature at the gateway and enforces
 ownership in the services. If the two disagree, the backend wins and the
 customer sees a 403.
 
-## Engineering decisions worth defending
+## My Engineering Work
+
+The platform is my own work end to end: the service decomposition, every
+business service, the gateway and its identity filter, the event flows, the
+Next.js console, the test suites and the infrastructure definitions.
+
+The work that took the most judgment, rather than the most typing:
+
+- Designing the money-movement contract — one logical operation, one idempotency
+  key, three possible outcomes — and making the console honor it.
+- Finding and closing two rounds of broken object-level authorization, the
+  second in services that had no authorization code at all, and proving the fix
+  at the HTTP boundary rather than in the service layer.
+- Making concurrent balance changes correct under a real database, then writing
+  the tests that fail if the row lock is removed.
+- Removing raw account numbers from the React Server → Client boundary, a leak
+  that is invisible on screen and plain in view-source.
+- Rewriting an end-to-end suite that had been reporting failures while exiting
+  zero, including two mechanisms that produced false passes.
+
+## Key Engineering Decisions
 
 ### Resource ownership, and finding where it was missing
 
 The rule is simple to state: an id in a path or a `userId` in a body is caller
 input. It says which resource is wanted; it never says who is entitled to it.
-Every handler resolves the owner from stored state and authorises against that.
+Every handler resolves the owner from stored state and authorizes against that.
 
 Applying it took two passes, and both were found by running the full stack
 rather than by reading code.
@@ -146,7 +177,7 @@ money a second time.
 ### Data minimization at the Server/Client boundary
 
 React Server Components make this a real boundary. Anything a Server Component
-passes to a Client Component is serialised into the RSC payload inside the HTML,
+passes to a Client Component is serialized into the RSC payload inside the HTML,
 and again into the Flight response on a client-side navigation — readable in
 view-source whether or not it is ever rendered.
 
@@ -175,7 +206,7 @@ There is deliberately no digest of the full number: a hash of a nine-digit value
 with known structure is enumerable in seconds, so storing one would be storing
 the number with extra steps.
 
-## Customer experience
+## Customer Experience
 
 The console covers dashboard, accounts and account detail, move money,
 transactions, payments, credit cards and card detail, loans and loan detail,
@@ -199,7 +230,7 @@ repaid" rather than "principal repaid", because the record exposes principal and
 remaining balance but not the split, and calling the difference principal would
 attribute interest payments to it. Direction on a transaction is carried three
 ways — an arrow, an explicit sign, and the wording of the type — so it never
-depends on colour alone.
+depends on color alone.
 
 Every page distinguishes "there is nothing here" from "we could not load this".
 A dashboard that renders zeroes after a failed request has told the customer
@@ -217,19 +248,19 @@ something false about their money.
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
 On demand, against the full running stack: 34 live Playwright scenarios and a
-PowerShell suite that drives registration through to TOTP enrolment.
+PowerShell suite that drives registration through to TOTP enrollment.
 
 Counts are test cases as the runners report them, not assertions.
 
 What the harder suites actually assert: concurrent debits against a real
-database serialise without a lost update; concurrent duplicate money movement
+database serialize without a lost update; concurrent duplicate money movement
 executes once and replays the stored result; forged identity headers at the
 gateway are replaced; a denial returns 403 *and* never reaches the service; one
 customer operation sends one idempotency key however many times it is attempted;
 a double-clicked confirm moves money once; and the account number appears in
 none of the three surfaces a browser can read.
 
-## Security model
+## Security & Correctness
 
 - JWT issued at login, validated at the gateway, never re-verified downstream
 - Identity derived from the token and injected downstream, replacing client input
@@ -262,7 +293,7 @@ transaction endpoints do. A console flow for them would be the one money path
 where a lost response could not be retried safely, so they are deliberately
 absent rather than half-built.
 
-## Known limitations
+## Known Limitations
 
 These are recorded rather than solved, and each is a deliberate stopping point.
 
@@ -274,7 +305,7 @@ These are recorded rather than solved, and each is a deliberate stopping point.
 2. **Unknown outcomes are not reconciled automatically.** They are logged for a
    human. Nothing reads that log.
 3. **No Kafka dead-letter handling.** A poison message hits Spring Kafka's
-   default retry-then-log behaviour and is dropped.
+   default retry-then-log behavior and is dropped.
 4. **Service-to-service calls are not authenticated.** The `/internal`
    endpoints rely on network isolation — no host ports, no gateway route —
    rather than mTLS or a service credential.
@@ -283,19 +314,20 @@ These are recorded rather than solved, and each is a deliberate stopping point.
 6. **Observability stops short of operations.** No log aggregator, traces held
    in memory and lost on restart, no alerting rules and no route for one to
    fire down.
-7. **External rails are simulated.** Wire, ACH and SWIFT are modelled, not
+7. **External rails are simulated.** Wire, ACH and SWIFT are modeled, not
    connected to anything.
 8. **Test depth is uneven.** Three services run against a real PostgreSQL;
    `payment`, `notification`, `integration` and `application` have
    authorization suites but no service-layer tests.
-9. **The live suite runs on demand.** Starting thirteen services on every push
-   is not a sensible trade, so only the offline suite is wired into CI.
+9. **The live suite runs on demand.** Starting thirteen backend processes on
+   every push is not a sensible trade, so only the offline suite is wired into
+   CI.
 10. **No per-account login throttling.** The only limit is the gateway's
     per-IP rate limit, which does not stop a distributed attempt on one account.
 
 ## Technology
 
-Java 21, Spring Boot 3, Spring Cloud Gateway, Spring Security, Spring Data JPA,
+Java 17, Spring Boot 3.3, Spring Cloud Gateway, Spring Security, Spring Data JPA,
 Feign, Resilience4j, PostgreSQL 16, Kafka, Redis, Eureka, Flyway, MapStruct,
 Lombok, JUnit 5, Mockito, Testcontainers, Micrometer, Brave, Prometheus,
 Grafana, Zipkin.
@@ -305,7 +337,10 @@ Vitest, React Testing Library, Playwright.
 
 Docker Compose, GitHub Actions, CodeQL, Trivy.
 
-## Screenshot index
+## Screenshots
+
+The full set is in [`screenshots/`](screenshots/); every image is captured by Playwright
+against the running stack with a seeded synthetic customer.
 
 | File | What it demonstrates |
 |---|---|
@@ -319,13 +354,13 @@ Docker Compose, GitHub Actions, CodeQL, Trivy.
 | `22-move-money-details.png` | Choosing an action and entering the details |
 | `23-move-money-review.png` | What is about to happen, against masked accounts |
 | `24-move-money-receipt.png` | The backend's own reference, nothing invented |
-| `17-transactions.png` | Activity across accounts, direction carried without colour |
-| `18-cards.png` | Card with utilisation, APR, rewards — and no invented expiry or CVV |
+| `17-transactions.png` | Activity across accounts, direction carried without color |
+| `18-cards.png` | Card with utilization, APR, rewards — and no invented expiry or CVV |
 | `19-loans.png` | Balance progress, monthly payment, next payment date |
 | `20-profile-security.png` | Profile with masked SSN and honest identity status |
 | `25-payments.png` | Payees, saved through the console, displayed masked |
 
-## Interview talking points
+## Interview Talking Points
 
 - Found and fixed two rounds of broken object-level authorization, the second in
   services that had no authorization code at all; confirmed live with a second
