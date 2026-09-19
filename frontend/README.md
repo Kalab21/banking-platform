@@ -68,9 +68,10 @@ npm run build       # production build
 
 ## Notes on scope
 
-- **2FA is enrolment only.** The backend's `/api/auth/2fa` endpoints register and verify a
-  TOTP secret, but `POST /api/auth/login` does not challenge for a code. The profile page
-  says so rather than implying a second login step exists.
+- **2FA is enforced at sign-in, and enrolment is optional.** With it enabled, `POST
+  /api/auth/login` answers `twoFactorRequired` and issues no token until a valid TOTP code
+  is presented; the login form swaps to a code prompt and resubmits. Nothing requires a
+  customer to enrol in the first place.
 - **Card numbers are always masked.** The backend returns `cardNumber` in full on
   `CreditCardResponse`; `maskCardNumber` is applied everywhere it is rendered.
 - **KYC review is per customer.** There is no "all pending documents" endpoint, so the staff

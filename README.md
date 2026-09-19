@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 714 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
+| **Testing** | 722 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -361,8 +361,8 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**714 automated tests run in CI** — 440 backend (415 unit and web-slice, 25
-integration against a real PostgreSQL), 205 frontend unit/component and 69
+**722 automated tests run in CI** — 440 backend (415 unit and web-slice, 25
+integration against a real PostgreSQL), 213 frontend unit/component and 69
 offline end-to-end. A further **34 live-stack Playwright scenarios** and a
 PowerShell full-stack suite run on demand; they need all 13 services up and are
 not counted in the CI total.
@@ -371,7 +371,7 @@ Counts are test cases as the runners report them, not assertions.
 
 ```bash
 mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
-cd frontend && npm run test                  # frontend: 205 unit/component
+cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 
@@ -449,7 +449,7 @@ These are the gaps between this project and a production ledger.
   customer rather than a queue. Application and fraud views are read-only.
 - **The live Playwright suite does not run on every CI push.** Starting 13 services
   per push is not a sensible trade, so only the offline suite is wired into CI. The
-  42 live scenarios and the PowerShell suite are automated but triggered on demand.
+  34 live scenarios and the PowerShell suite are automated but triggered on demand.
 - **Test coverage is uneven.** Accounts, loans, cards, 2FA, transactions,
   statistics and the authorization rules are covered; `payment`, `notification`,
   `integration` and `application` services have authorization suites but no

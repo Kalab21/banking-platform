@@ -207,16 +207,16 @@ something false about their money.
 
 ## Verification
 
-691 automated tests run in CI:
+722 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
-| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 405 |
+| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 415 |
 | Backend integration against real PostgreSQL (Testcontainers) | 25 |
-| Frontend unit and component (Vitest, React Testing Library) | 192 |
+| Frontend unit and component (Vitest, React Testing Library) | 213 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
-On demand, against the full running stack: 42 live Playwright scenarios and a
+On demand, against the full running stack: 34 live Playwright scenarios and a
 PowerShell suite that drives registration through to TOTP enrolment.
 
 Counts are test cases as the runners report them, not assertions.

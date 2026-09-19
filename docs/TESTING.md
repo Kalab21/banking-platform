@@ -1,7 +1,7 @@
 # Testing
 
-714 automated tests run in CI: 440 backend (415 unit and
-web-slice, 25 integration against a real PostgreSQL), 205 frontend
+722 automated tests run in CI: 440 backend (415 unit and
+web-slice, 25 integration against a real PostgreSQL), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
 counted in the CI total.
@@ -50,9 +50,10 @@ assertion counts, which are larger and less comparable.
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovementIT` — concurrent duplicates, replay, key release | 8 |
 | Integration | Testcontainers, PostgreSQL 16 | `CustomerProfileMigrationIT` — the customer-profile migration | 7 |
-| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment | 205 |
-| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 205 above) | 23 |
-| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 205 above) | 9 |
+| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment | 213 |
+| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 213 above) | 23 |
+| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 213 above) | 9 |
+| Component | Vitest, React Testing Library | `LoginForm` and `loginAction` — the second-factor challenge, and no session cookie before the code succeeds (counted in the 213 above) | 8 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
 | End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport | 34, on demand |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals | On demand |
@@ -61,7 +62,7 @@ assertion counts, which are larger and less comparable.
 
 ```bash
 mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
-cd frontend && npm run test                  # frontend: 205 unit/component
+cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 
@@ -187,7 +188,7 @@ architecture guarantees: the session cookie is httpOnly, the token never appears
 in the HTML sent to the browser, and a page that cannot load its data says so
 rather than rendering a zero. No backend required.
 
-**Live (42 tests, on demand).** Requires all 13 services plus a seeded customer.
+**Live (34 tests, on demand).** Requires all 13 services plus a seeded customer.
 Covers sign-in to a dashboard showing real balances, account and transaction
 history, the full money-movement journeys, loan amortization, card masking,
 staff-route denial for a customer, sign-out, onboarding, and a phone viewport.
