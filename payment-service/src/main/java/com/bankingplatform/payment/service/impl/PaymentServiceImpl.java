@@ -1,5 +1,6 @@
 package com.bankingplatform.payment.service.impl;
 
+import com.bankingplatform.payment.client.AccountClient;
 import com.bankingplatform.payment.client.TransactionClient;
 import com.bankingplatform.payment.dto.*;
 import com.bankingplatform.payment.exception.PaymentException;
@@ -30,6 +31,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
     private final PaymentEventProducer eventProducer;
     private final TransactionClient transactionClient;
+    private final AccountClient accountClient;
 
     @Override
     @Transactional
@@ -132,7 +134,8 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.setStatus(PaymentStatus.FAILED);
                 payment.setFailureReason(e.getMessage());
                 log.error("Scheduled payment {} failed: {}", payment.getPaymentRef(), e.getMessage());
-                eventProducer.publishPaymentFailed(payment.getId(), payment.getPaymentRef(), e.getMessage());
+                eventProducer.publishPaymentFailed(payment.getId(), payment.getPaymentRef(),
+                        payment.getPayerAccountId(), ownerOf(payment.getPayerAccountId()));
             }
             paymentRepository.save(payment);
         }
@@ -159,9 +162,35 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setProcessedAt(LocalDateTime.now());
 
         eventProducer.publishPaymentCompleted(payment.getId(), payment.getPaymentRef(),
-                payment.getPayerAccountId(), payment.getPayeeAccountId(),
-                payment.getAmount(), payment.getPaymentType().name());
+                payment.getPayerAccountId(), ownerOf(payment.getPayerAccountId()),
+                payment.getPayeeAccountId(), payment.getAmount(), payment.getPaymentType().name());
         return payment;
+    }
+
+    /**
+     * The user who owns the paying account.
+     *
+     * <p>A payment belongs to an account, not to a user, so the owner has to
+     * be resolved from account-service — the same question this service's
+     * authorization already asks of the same service.
+     *
+     * <p>Never fails the payment. The money has already moved by the time
+     * this is called, and an event that cannot name its user is a smaller
+     * problem than a completed payment reported as failed. A null owner means
+     * the notification is skipped, which is what happened for every payment
+     * before this field existed at all.
+     */
+    private Long ownerOf(Long accountId) {
+        if (accountId == null) {
+            return null;
+        }
+        try {
+            return accountClient.getAccountById(accountId).getUserId();
+        } catch (Exception e) {
+            log.warn("Could not resolve the owner of account {} for a payment event: {}",
+                    accountId, e.getClass().getSimpleName());
+            return null;
+        }
     }
 
     private void createNextOccurrence(Payment original, LocalDate nextDate) {

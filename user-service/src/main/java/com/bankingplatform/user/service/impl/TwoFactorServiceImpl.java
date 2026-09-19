@@ -3,6 +3,7 @@ package com.bankingplatform.user.service.impl;
 import com.bankingplatform.user.dto.TwoFactorSetupResponse;
 import com.bankingplatform.user.exception.ResourceNotFoundException;
 import com.bankingplatform.user.model.User;
+import com.bankingplatform.user.kafka.producer.UserEventProducer;
 import com.bankingplatform.user.repository.UserRepository;
 import com.bankingplatform.user.service.TwoFactorService;
 import dev.samstevens.totp.code.CodeVerifier;
@@ -26,9 +27,11 @@ public class TwoFactorServiceImpl implements TwoFactorService {
     private final UserRepository userRepository;
     private final SecretGenerator secretGenerator;
     private final CodeVerifier codeVerifier;
+    private final UserEventProducer eventProducer;
 
-    public TwoFactorServiceImpl(UserRepository userRepository) {
+    public TwoFactorServiceImpl(UserRepository userRepository, UserEventProducer eventProducer) {
         this.userRepository = userRepository;
+        this.eventProducer = eventProducer;
         this.secretGenerator = new DefaultSecretGenerator();
         this.codeVerifier = new DefaultCodeVerifier(
                 new DefaultCodeGenerator(),
@@ -82,6 +85,7 @@ public class TwoFactorServiceImpl implements TwoFactorService {
         user.setTwoFactorEnabled(true);
         userRepository.save(user);
         log.info("2FA enabled for userId={}", userId);
+        eventProducer.publishTwoFactorEnabled(userId);
     }
 
     @Override
@@ -101,6 +105,7 @@ public class TwoFactorServiceImpl implements TwoFactorService {
         user.setTwoFactorSecret(null);
         userRepository.save(user);
         log.info("2FA disabled for userId={}", userId);
+        eventProducer.publishTwoFactorDisabled(userId);
     }
 
     @Override

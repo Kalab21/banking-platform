@@ -1,53 +1,50 @@
 package com.bankingplatform.payment.kafka.producer;
 
+import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.events.PaymentCompleted;
+import com.bankingplatform.common.events.PaymentFailed;
+import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Map;
 
+/**
+ * Publishes the outcome of a payment.
+ *
+ * <p>Both events now name the paying account's owner. Neither did:
+ * {@code notification-service} reads {@code userId} and returned immediately,
+ * so neither the payment receipt nor the failure notice had ever been sent,
+ * and {@code fraud-detection-service} reads {@code payerAccountId} from the
+ * failure — which the failure event did not carry either — so repeated failed
+ * payments, the signal that rule exists to catch, were never counted.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentEventProducer {
 
-    private static final String TOPIC = "payment-events";
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void publishPaymentCompleted(Long paymentId, String ref, Long payerAccountId,
+    public void publishPaymentCompleted(Long paymentId, String ref, Long payerAccountId, Long userId,
                                         Long payeeAccountId, BigDecimal amount, String type) {
-        send(ref, Map.of(
-                "eventType", "PAYMENT_COMPLETED",
-                "paymentId", paymentId,
-                "paymentRef", ref,
-                "payerAccountId", payerAccountId,
-                "payeeAccountId", payeeAccountId != null ? payeeAccountId : "",
-                "amount", amount,
-                "paymentType", type,
-                "timestamp", LocalDateTime.now().toString()
-        ));
+        send(PaymentCompleted.of(paymentId, ref, payerAccountId, userId, payeeAccountId, amount, type));
         log.info("Published PAYMENT_COMPLETED: ref={}, amount={}", ref, amount);
     }
 
-    public void publishPaymentFailed(Long paymentId, String ref, String reason) {
-        send(ref, Map.of(
-                "eventType", "PAYMENT_FAILED",
-                "paymentId", paymentId,
-                "paymentRef", ref,
-                "reason", reason,
-                "timestamp", LocalDateTime.now().toString()
-        ));
-        log.warn("Published PAYMENT_FAILED: ref={}, reason={}", ref, reason);
+    public void publishPaymentFailed(Long paymentId, String ref, Long payerAccountId, Long userId) {
+        send(PaymentFailed.of(paymentId, ref, payerAccountId, userId));
+        log.warn("Published PAYMENT_FAILED: ref={}", ref);
     }
 
-    private void send(String key, Map<String, Object> event) {
+    private void send(DomainEvent event) {
         try {
-            kafkaTemplate.send(TOPIC, key, event);
+            kafkaTemplate.send(Topics.PAYMENT_EVENTS, event.partitionKey(), event);
         } catch (Exception e) {
-            log.warn("Kafka unavailable — event not published for key {}: {}", key, e.getMessage());
+            log.warn("Kafka unavailable — {} not published for key {}: {}",
+                    event.eventType(), event.partitionKey(), e.getMessage());
         }
     }
 }

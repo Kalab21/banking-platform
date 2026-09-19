@@ -1,5 +1,8 @@
 package com.bankingplatform.loan.kafka.consumer;
 
+import com.bankingplatform.common.events.ApplicationApproved;
+import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.events.Topics;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.model.LoanType;
 import com.bankingplatform.loan.service.LoanService;
@@ -9,9 +12,22 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.Set;
 
+/**
+ * Creates the loan behind an approved application.
+ *
+ * <p>Reads the shared {@link ApplicationApproved} type rather than pulling
+ * {@code productType}, {@code requestedAmount} and {@code creditScore} out of
+ * a map by name. The approval used to carry both {@code applicationType} and
+ * {@code productType} holding the same value, because this consumer read one
+ * and notification-service read the other.
+ *
+ * <p>This handler issues a financial product, so a redelivery of the same
+ * event would issue a second loan. {@link DomainEvent#eventId()} is the
+ * identity that makes de-duplication possible; using it is a separate change
+ * and this consumer is not yet idempotent.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -20,33 +36,26 @@ public class ApplicationEventConsumer {
     private static final Set<String> LOAN_PRODUCT_TYPES = Set.of("PERSONAL_LOAN", "AUTO_LOAN", "MORTGAGE");
     private final LoanService loanService;
 
-    @KafkaListener(topics = "application-events", groupId = "loan-service")
-    public void onApplicationEvent(Map<String, Object> event) {
-        try {
-            String eventType = (String) event.get("eventType");
-            String productType = (String) event.get("productType");
-
-            if (!"APPLICATION_APPROVED".equals(eventType) || !LOAN_PRODUCT_TYPES.contains(productType)) {
-                return;
-            }
-
-            Long userId = toLong(event.get("userId"));
-            Long applicationId = toLong(event.get("applicationId"));
-            BigDecimal requestedAmount = toBigDecimal(event.get("requestedAmount"));
-
-            CreateLoanRequest request = new CreateLoanRequest();
-            request.setUserId(userId);
-            request.setApplicationId(applicationId);
-            request.setLoanType(LoanType.valueOf(productType));
-            request.setPrincipal(requestedAmount != null ? requestedAmount : resolveDefaultPrincipal(productType));
-            request.setInterestRate(resolveRate(productType, toInt(event.get("creditScore"))));
-            request.setTermMonths(resolveTermMonths(productType));
-
-            loanService.createLoan(request);
-            log.info("Created loan for userId={}, applicationId={}, type={}", userId, applicationId, productType);
-        } catch (Exception e) {
-            log.error("Error processing application event: {}", e.getMessage(), e);
+    @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "loan-service")
+    public void onApplicationEvent(DomainEvent event) {
+        if (!(event instanceof ApplicationApproved approved)
+                || !LOAN_PRODUCT_TYPES.contains(approved.productType())) {
+            return;
         }
+
+        CreateLoanRequest request = new CreateLoanRequest();
+        request.setUserId(approved.userId());
+        request.setApplicationId(approved.applicationId());
+        request.setLoanType(LoanType.valueOf(approved.productType()));
+        request.setPrincipal(approved.requestedAmount() != null
+                ? approved.requestedAmount()
+                : resolveDefaultPrincipal(approved.productType()));
+        request.setInterestRate(resolveRate(approved.productType(), approved.creditScore()));
+        request.setTermMonths(resolveTermMonths(approved.productType()));
+
+        loanService.createLoan(request);
+        log.info("Created loan for userId={}, applicationId={}, type={}",
+                approved.userId(), approved.applicationId(), approved.productType());
     }
 
     private BigDecimal resolveDefaultPrincipal(String loanType) {
@@ -74,22 +83,6 @@ public class ApplicationEventConsumer {
         };
     }
 
-    private Long toLong(Object val) {
-        if (val == null) return null;
-        if (val instanceof Number n) return n.longValue();
-        return Long.parseLong(val.toString());
-    }
 
-    private Integer toInt(Object val) {
-        if (val == null) return null;
-        if (val instanceof Number n) return n.intValue();
-        return Integer.parseInt(val.toString());
-    }
 
-    private BigDecimal toBigDecimal(Object val) {
-        if (val == null) return null;
-        if (val instanceof BigDecimal bd) return bd;
-        if (val instanceof Number n) return new BigDecimal(n.toString());
-        return new BigDecimal(val.toString());
-    }
 }

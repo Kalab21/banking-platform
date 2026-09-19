@@ -1,61 +1,57 @@
 package com.bankingplatform.loan.kafka.producer;
 
+import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.events.LoanDisbursed;
+import com.bankingplatform.common.events.LoanPaidOff;
+import com.bankingplatform.common.events.LoanRepaymentMade;
+import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Map;
 
+/**
+ * Publishes what happened to a loan.
+ *
+ * <p>The repayment event now names the borrower. It did not, and
+ * {@code user-service} raises a credit score on an on-time repayment by
+ * reading {@code userId} — so that reward had never been applied to anyone.
+ *
+ * <p>Repayments are keyed by loan rather than by payment reference, so a
+ * loan's repayments stay in order on one partition. {@code remainingBalance}
+ * only means anything in order.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class LoanEventProducer {
 
-    private static final String TOPIC = "loan-events";
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public void publishLoanDisbursed(Long loanId, Long userId, BigDecimal principal, Long accountId) {
-        send(String.valueOf(loanId), Map.of(
-                "eventType", "LOAN_DISBURSED",
-                "loanId", loanId,
-                "userId", userId,
-                "principal", principal,
-                "disbursementAccountId", accountId,
-                "timestamp", LocalDateTime.now().toString()
-        ));
+        send(LoanDisbursed.of(loanId, userId, principal, accountId));
         log.info("Published LOAN_DISBURSED: loanId={}, amount={}", loanId, principal);
     }
 
-    public void publishRepaymentMade(Long loanId, String ref, BigDecimal amount, BigDecimal remainingBalance) {
-        send(ref, Map.of(
-                "eventType", "LOAN_REPAYMENT_MADE",
-                "loanId", loanId,
-                "paymentRef", ref,
-                "amount", amount,
-                "remainingBalance", remainingBalance,
-                "timestamp", LocalDateTime.now().toString()
-        ));
+    public void publishRepaymentMade(Long loanId, Long userId, String ref,
+                                     BigDecimal amount, BigDecimal remainingBalance) {
+        send(LoanRepaymentMade.of(loanId, userId, ref, amount, remainingBalance));
         log.info("Published LOAN_REPAYMENT_MADE: loanId={}, amount={}", loanId, amount);
     }
 
     public void publishLoanPaidOff(Long loanId, Long userId) {
-        send(String.valueOf(loanId), Map.of(
-                "eventType", "LOAN_PAID_OFF",
-                "loanId", loanId,
-                "userId", userId,
-                "timestamp", LocalDateTime.now().toString()
-        ));
+        send(LoanPaidOff.of(loanId, userId));
         log.info("Published LOAN_PAID_OFF: loanId={}", loanId);
     }
 
-    private void send(String key, Map<String, Object> event) {
+    private void send(DomainEvent event) {
         try {
-            kafkaTemplate.send(TOPIC, key, event);
+            kafkaTemplate.send(Topics.LOAN_EVENTS, event.partitionKey(), event);
         } catch (Exception e) {
-            log.warn("Kafka unavailable — event not published for key {}: {}", key, e.getMessage());
+            log.warn("Kafka unavailable — {} not published for key {}: {}",
+                    event.eventType(), event.partitionKey(), e.getMessage());
         }
     }
 }

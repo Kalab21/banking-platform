@@ -11,6 +11,7 @@ import com.bankingplatform.user.model.KycDocument;
 import com.bankingplatform.user.model.KycStatus;
 import com.bankingplatform.user.model.User;
 import com.bankingplatform.user.repository.KycDocumentRepository;
+import com.bankingplatform.user.kafka.producer.UserEventProducer;
 import com.bankingplatform.user.repository.UserRepository;
 import com.bankingplatform.user.service.KycService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class KycServiceImpl implements KycService {
     private final KycDocumentRepository kycDocumentRepository;
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final UserEventProducer eventProducer;
 
     @Override
     @Transactional
@@ -86,6 +88,15 @@ public class KycServiceImpl implements KycService {
 
         User saved = userRepository.save(user);
         log.info("KYC status updated: userId={}, status={}", userId, status);
+
+        // notification-service has always listened for these two and nothing
+        // had ever published them, so the customer was never told the outcome
+        // of their own KYC review.
+        if (status == KycStatus.APPROVED) {
+            eventProducer.publishKycApproved(userId);
+        } else if (status == KycStatus.REJECTED) {
+            eventProducer.publishKycRejected(userId);
+        }
         return userMapper.toResponse(saved);
     }
 

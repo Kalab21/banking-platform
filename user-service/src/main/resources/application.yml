@@ -26,9 +26,23 @@ spring:
       group-id: user-service
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         max.poll.interval.ms: 300000
+        # Was a StringDeserializer with an ObjectMapper call inside the
+        # listener, which made every consumer here parse the payload itself
+        # and reinvent the field names. Deserialized as a DomainEvent now,
+        # the same way every other consumer on the platform does it.
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.bankingplatform.common.events.DomainEvent
+        spring.json.trusted.packages: "com.bankingplatform.common.events"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        # user-events had no producer at all until now, so this service had
+        # never configured one.
+        spring.json.add.type.headers: false
     properties:
       max.block.ms: 1000
       request.timeout.ms: 1000

@@ -80,9 +80,27 @@ class NotificationCopyTest {
     @DisplayName("a card is named by its last four digits and nothing more")
     void cardIssued() {
         NotificationService service = service();
-        String message = messageAfter(() -> service.onCreditCardIssued(7L, "4111111111113823"));
+        // The caller supplies four digits now, not a card number. The full
+        // number never reaches this service: credit-card-service masks it
+        // before it publishes, and the event has no field to carry one.
+        String message = messageAfter(() -> service.onCreditCardIssued(7L, "3823"));
 
         assertThat(message).contains("3823");
         assertThat(message).doesNotContain("4111111111113823");
+    }
+
+    @Test
+    @DisplayName("a card with no digits still produces a sentence rather than an error")
+    void cardIssuedWithoutDigits() {
+        NotificationService service = service();
+
+        // This used to be a crash, not a fallback. The method took a whole
+        // card number and called substring(length - 4) on it, and the
+        // producer never sent one — so every issuance notification threw
+        // StringIndexOutOfBoundsException on the empty default and the
+        // consumer's catch block swallowed it.
+        String message = messageAfter(() -> service.onCreditCardIssued(7L, null));
+
+        assertThat(message).contains("your new card");
     }
 }

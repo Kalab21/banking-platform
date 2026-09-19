@@ -18,4 +18,14 @@ public final class Topics {
     public static final String ACCOUNT_EVENTS = "account-events";
     public static final String TRANSACTION_EVENTS = "transaction-events";
     public static final String APPLICATION_EVENTS = "application-events";
+    public static final String CREDIT_CARD_EVENTS = "credit-card-events";
+    public static final String LOAN_EVENTS = "loan-events";
+    public static final String PAYMENT_EVENTS = "payment-events";
+    public static final String USER_EVENTS = "user-events";
+
+    /** Published, with no consumer today. See {@code docs/EVENTS.md}. */
+    public static final String INTEGRATION_EVENTS = "integration-events";
+
+    /** Published, with no consumer today. See {@code docs/EVENTS.md}. */
+    public static final String FRAUD_ALERT_EVENTS = "fraud-alert-events";
 }

@@ -25,6 +25,13 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
+        # The wire contract is the eventType field, not a Java class name.
+        # With type headers on, Jackson would write the producer's FQCN into
+        # __TypeId__ and the consumer would instantiate whatever class that
+        # names — which makes a package rename a breaking protocol change, and
+        # pairs badly with a permissive trusted-packages list. Routing is done
+        # by @JsonTypeInfo on DomainEvent instead.
+        spring.json.add.type.headers: false
         max.block.ms: 1000
         request.timeout.ms: 1000
     consumer:

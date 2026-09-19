@@ -66,6 +66,23 @@ import java.time.Instant;
         @JsonSubTypes.Type(value = ApplicationSubmitted.class, name = EventTypes.APPLICATION_SUBMITTED),
         @JsonSubTypes.Type(value = ApplicationApproved.class, name = EventTypes.APPLICATION_APPROVED),
         @JsonSubTypes.Type(value = ApplicationRejected.class, name = EventTypes.APPLICATION_REJECTED),
+        @JsonSubTypes.Type(value = CreditCardCreated.class, name = EventTypes.CREDIT_CARD_CREATED),
+        @JsonSubTypes.Type(value = CreditCardTransactionCompleted.class,
+                name = EventTypes.CREDIT_CARD_TRANSACTION_COMPLETED),
+        @JsonSubTypes.Type(value = CreditCardStatementGenerated.class,
+                name = EventTypes.CREDIT_CARD_STATEMENT_GENERATED),
+        @JsonSubTypes.Type(value = LoanDisbursed.class, name = EventTypes.LOAN_DISBURSED),
+        @JsonSubTypes.Type(value = LoanRepaymentMade.class, name = EventTypes.LOAN_REPAYMENT_MADE),
+        @JsonSubTypes.Type(value = LoanPaidOff.class, name = EventTypes.LOAN_PAID_OFF),
+        @JsonSubTypes.Type(value = PaymentCompleted.class, name = EventTypes.PAYMENT_COMPLETED),
+        @JsonSubTypes.Type(value = PaymentFailed.class, name = EventTypes.PAYMENT_FAILED),
+        @JsonSubTypes.Type(value = ExternalTransferInitiated.class,
+                name = EventTypes.EXTERNAL_TRANSFER_INITIATED),
+        @JsonSubTypes.Type(value = FraudAlertCreated.class, name = EventTypes.FRAUD_ALERT_CREATED),
+        @JsonSubTypes.Type(value = UserLifecycleEvents.KycApproved.class, name = EventTypes.KYC_APPROVED),
+        @JsonSubTypes.Type(value = UserLifecycleEvents.KycRejected.class, name = EventTypes.KYC_REJECTED),
+        @JsonSubTypes.Type(value = UserLifecycleEvents.TwoFactorEnabled.class, name = EventTypes.TWO_FA_ENABLED),
+        @JsonSubTypes.Type(value = UserLifecycleEvents.TwoFactorDisabled.class, name = EventTypes.TWO_FA_DISABLED),
 })
 public interface DomainEvent {
 

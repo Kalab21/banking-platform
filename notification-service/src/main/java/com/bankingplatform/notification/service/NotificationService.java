@@ -135,8 +135,20 @@ public class NotificationService {
                 null, "APPLICATION");
     }
 
-    public void onCreditCardIssued(Long userId, String cardNumber) {
-        String masked = "**** **** **** " + cardNumber.substring(cardNumber.length() - 4);
+    /**
+     * @param last4 the last four digits of the card, or null if unknown
+     *
+     * <p>Takes four digits rather than a card number. It used to take the
+     * whole number and call {@code substring(length - 4)} on it — and the
+     * producer never sent one, so every issuance notification threw
+     * {@link StringIndexOutOfBoundsException} on the empty default and was
+     * swallowed by the consumer's catch block. A notification does not need
+     * a PAN to name a card, and taking one would put it on a Kafka topic.
+     */
+    public void onCreditCardIssued(Long userId, String last4) {
+        String masked = last4 == null || last4.isBlank()
+                ? "your new card"
+                : "**** **** **** " + last4;
         create(userId, NotificationType.CREDIT_CARD_ISSUED,
                 "Credit Card Issued",
                 String.format("Your new credit card %s has been issued and is ready to use.", masked),

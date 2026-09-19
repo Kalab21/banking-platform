@@ -29,4 +29,30 @@ public final class EventTypes {
     public static final String APPLICATION_SUBMITTED = "APPLICATION_SUBMITTED";
     public static final String APPLICATION_APPROVED = "APPLICATION_APPROVED";
     public static final String APPLICATION_REJECTED = "APPLICATION_REJECTED";
+
+    // credit-card-events
+    public static final String CREDIT_CARD_CREATED = "CREDIT_CARD_CREATED";
+    public static final String CREDIT_CARD_TRANSACTION_COMPLETED = "CREDIT_CARD_TRANSACTION_COMPLETED";
+    public static final String CREDIT_CARD_STATEMENT_GENERATED = "CREDIT_CARD_STATEMENT_GENERATED";
+
+    // loan-events
+    public static final String LOAN_DISBURSED = "LOAN_DISBURSED";
+    public static final String LOAN_REPAYMENT_MADE = "LOAN_REPAYMENT_MADE";
+    public static final String LOAN_PAID_OFF = "LOAN_PAID_OFF";
+
+    // payment-events
+    public static final String PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
+    public static final String PAYMENT_FAILED = "PAYMENT_FAILED";
+
+    // integration-events
+    public static final String EXTERNAL_TRANSFER_INITIATED = "EXTERNAL_TRANSFER_INITIATED";
+
+    // fraud-alert-events
+    public static final String FRAUD_ALERT_CREATED = "FRAUD_ALERT_CREATED";
+
+    // user-events
+    public static final String KYC_APPROVED = "KYC_APPROVED";
+    public static final String KYC_REJECTED = "KYC_REJECTED";
+    public static final String TWO_FA_ENABLED = "TWO_FA_ENABLED";
+    public static final String TWO_FA_DISABLED = "TWO_FA_DISABLED";
 }
