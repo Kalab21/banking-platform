@@ -24,7 +24,7 @@ bearer token.
 | **Cache** | Redis — read-model cache, gateway rate limiting, fraud velocity counters |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, `X-Request-Id` correlation, Brave tracing to Zipkin |
-| **Testing** | 713 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
+| **Testing** | 714 automated tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 **Scale:** 13 backend services plus a Next.js console, 312 Java source files,
@@ -252,7 +252,7 @@ routing to 11 downstream services; JWT validation filter injecting `X-User-Id` /
 | Network boundary | Only the console and the gateway are published; the business services are reachable only on the Compose network, so the gateway cannot be bypassed |
 | Session model | Stateless (`SessionCreationPolicy.STATELESS`); CSRF disabled, appropriate for a token-authenticated API |
 | Input validation | Jakarta Bean Validation on request DTOs |
-| Error hygiene | `@RestControllerAdvice` in all 11 services with controllers; malformed bodies and bad parameter types return 400, unsupported methods 405; the catch-all logs server-side and returns a generic message |
+| Error hygiene | `@RestControllerAdvice` in all 11 services with controllers; malformed bodies and bad parameter types return 400, unsupported methods 405, an unmatched path 404; the catch-all logs server-side and returns a generic message |
 | Card data | The full card number never crosses the API boundary — responses carry a masked value and `last4` |
 | Rate limiting | Redis token bucket at the gateway, keyed per IP |
 | Abuse detection | Fraud velocity rules with automatic account freeze |
@@ -361,7 +361,7 @@ Correlation-ID rules, how to follow a trace, and current gaps are in
 
 ## Testing
 
-**713 automated tests run in CI** — 439 backend (414 unit and web-slice, 25
+**714 automated tests run in CI** — 440 backend (415 unit and web-slice, 25
 integration against a real PostgreSQL), 205 frontend unit/component and 69
 offline end-to-end. A further **34 live-stack Playwright scenarios** and a
 PowerShell full-stack suite run on demand; they need all 13 services up and are
@@ -370,7 +370,7 @@ not counted in the CI total.
 Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 414 unit + 25 integration = 439
+mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
 cd frontend && npm run test                  # frontend: 205 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```

@@ -3,6 +3,8 @@ package com.bankingplatform.user.exception;
 import com.bankingplatform.common.observability.LogSafe;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -75,6 +77,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({AuthorizationDeniedException.class, AccessDeniedException.class})
     public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex, HttpServletRequest req) {
         return build(HttpStatus.FORBIDDEN, "Not permitted to access this resource", req.getRequestURI());
+    }
+
+    /**
+     * A path with no handler is 404.
+     *
+     * <p>Spring Boot 3.2 raises {@code NoResourceFoundException} for an unmatched
+     * route, which the catch-all below would otherwise report as 500. A caller who
+     * mistypes a path should be told the path is wrong, not handed a server error
+     * that reads like a fault worth probing.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponse> handleNoResource(HttpServletRequest req) {
+        return build(HttpStatus.NOT_FOUND, "No such endpoint", req.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)

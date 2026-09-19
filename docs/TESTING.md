@@ -1,6 +1,6 @@
 # Testing
 
-713 automated tests run in CI: 439 backend (414 unit and
+714 automated tests run in CI: 440 backend (415 unit and
 web-slice, 25 integration against a real PostgreSQL), 205 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
@@ -21,7 +21,7 @@ assertion counts, which are larger and less comparable.
 | Unit | JUnit 5, AssertJ | `RequestIdPropagation` — id minted, preserved, sanitised, forwarded | 18 |
 | Unit | JUnit 5, Resilience4j | `AccountServiceCircuitBreaker` — breaker policy and status mapping | 9 |
 | Unit | JUnit 5, AssertJ | `LogSafe` — an untrusted value cannot end a log line and start another | 13 |
-| Web slice | JUnit 5, MockMvc | `ApiErrorContract` — invalid input returns 4xx, errors expose no internals | 5 |
+| Web slice | JUnit 5, MockMvc | `ApiErrorContract` — invalid input returns 4xx, an unmatched path 404, errors expose no internals | 6 |
 | Web slice | JUnit 5, MockMvc | `RegistrationErrorResponse` — the shape a failed registration returns | 5 |
 | Persistence | JUnit 5, Mockito | `OnboardingPersistence` — what onboarding stores, and what it drops | 13 |
 | Validation | JUnit 5, Jakarta Validation | `OnboardingRequestValidation` — every field rule the console mirrors | 47 |
@@ -60,7 +60,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 414 unit + 25 integration = 439
+mvn -B --no-transfer-progress clean verify   # backend: 415 unit + 25 integration = 440
 cd frontend && npm run test                  # frontend: 205 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
