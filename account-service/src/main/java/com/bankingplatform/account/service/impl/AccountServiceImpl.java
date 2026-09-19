@@ -73,9 +73,10 @@ public class AccountServiceImpl implements AccountService {
         audit("ACCOUNT", saved.getId(), "CREATE", request.getUserId(),
                 "Account created: type=" + saved.getAccountType() + ", number=" + saved.getAccountNumber());
 
+        // No account number: the event carries who owns the account and what
+        // kind it is, which is all either consumer reads. See AccountCreated.
         eventProducer.publishAccountCreated(
-                saved.getId(), saved.getUserId(),
-                saved.getAccountNumber(), saved.getAccountType().name());
+                saved.getId(), saved.getUserId(), saved.getAccountType().name());
 
         return accountMapper.toResponse(saved);
     }

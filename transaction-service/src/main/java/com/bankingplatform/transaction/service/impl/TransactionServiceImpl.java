@@ -59,7 +59,8 @@ public class TransactionServiceImpl implements TransactionService {
         audit("TRANSACTION", saved.getId(), "DEPOSIT", null,
                 "Account " + request.getAccountId() + " amount=" + request.getAmount());
         eventProducer.publishTransactionCreated(saved.getId(), saved.getAccountId(),
-                saved.getType().name(), saved.getAmount(), saved.getBalanceAfter(), ref);
+                account.getUserId(), saved.getType().name(), saved.getAmount(),
+                saved.getBalanceAfter(), ref);
 
         return transactionMapper.toResponse(saved);
     }
@@ -90,7 +91,8 @@ public class TransactionServiceImpl implements TransactionService {
         audit("TRANSACTION", saved.getId(), "WITHDRAWAL", null,
                 "Account " + request.getAccountId() + " amount=" + request.getAmount());
         eventProducer.publishTransactionCreated(saved.getId(), saved.getAccountId(),
-                saved.getType().name(), saved.getAmount(), saved.getBalanceAfter(), ref);
+                account.getUserId(), saved.getType().name(), saved.getAmount(),
+                saved.getBalanceAfter(), ref);
 
         return transactionMapper.toResponse(saved);
     }
@@ -169,7 +171,8 @@ public class TransactionServiceImpl implements TransactionService {
                 "From " + request.getFromAccountId() + " to " + request.getToAccountId() + " amount=" + request.getAmount());
 
         eventProducer.publishTransferCompleted(debitRef, creditRef,
-                request.getFromAccountId(), request.getToAccountId(), request.getAmount());
+                request.getFromAccountId(), fromAccount.getUserId(),
+                request.getToAccountId(), request.getAmount());
 
         return TransferResponse.builder()
                 .debit(transactionMapper.toResponse(debit))

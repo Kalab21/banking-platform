@@ -71,6 +71,15 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .creditScoreAtApply(creditScore)
                 .build();
 
+        // Every application is submitted before it is decided, and
+        // statistics-service counts submissions — but nothing had ever called
+        // publishApplicationSubmitted, so that counter had always read zero.
+        // Persisted first so the event names an id that exists; the decision
+        // below saves the same row again.
+        applicationRepository.save(application);
+        eventProducer.publishApplicationSubmitted(application.getId(), request.getUserId(),
+                request.getApplicationType().name());
+
         // Auto-approve or reject based on credit score
         if (creditScore >= minScore) {
             application.setStatus(ApplicationStatus.APPROVED);
