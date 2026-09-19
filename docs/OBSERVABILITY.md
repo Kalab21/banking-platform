@@ -22,7 +22,7 @@ Each service exposes three actuator endpoints — `health`, `info` and `promethe
 Everything else (`env`, `beans`, `heapdump`, `loggers`) stays closed.
 
 Metrics are tagged with `application`, so one scrape configuration and one
-dashboard cover all 13 services:
+dashboard cover all 13 backend processes:
 
 ```bash
 curl -s http://localhost:8083/actuator/prometheus | grep http_server_requests_seconds_count

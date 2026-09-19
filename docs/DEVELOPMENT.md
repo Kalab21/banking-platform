@@ -160,7 +160,9 @@ That override bypasses gateway authentication, so use it only locally.
 
 Kafka topics: `user-events`, `account-events`, `application-events`,
 `transaction-events`, `payment-events`, `credit-card-events`, `loan-events`,
-`integration-events`.
+`integration-events`, `fraud-alert-events` — nine in all. Seven of them have
+consumers; `integration-events` and `fraud-alert-events` are published and not
+yet consumed by anything.
 
 ## Design decisions
 

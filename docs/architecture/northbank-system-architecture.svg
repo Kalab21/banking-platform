@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 916" width="1200" height="916" role="img" aria-label="Northbank system architecture">
+<rect width="1200" height="916" fill="#FFFFFF"/>
+<rect x="420" y="24" width="360" height="56" rx="12" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="600" y="49" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#0B1F3A" font-weight="600" text-anchor="middle">Browser</text>
+<text x="600" y="68" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="middle">holds no bearer token and no full account number</text>
+<line x1="600" y1="80" x2="600" y2="115" stroke="#2563EB" stroke-width="2"/>
+<polygon points="600,124 595.05,115 604.95,115" fill="#2563EB"/>
+<text x="612" y="107" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="start">httpOnly, SameSite=Lax session cookie</text>
+<rect x="360" y="124" width="480" height="78" rx="12" fill="#EAF1FE" stroke="#2563EB" stroke-width="1.5"/>
+<text x="600" y="154" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#0B1F3A" font-weight="600" text-anchor="middle">Next.js console — backend for frontend</text>
+<text x="600" y="175" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#5A6B85" font-weight="400" text-anchor="middle">React Server Components · Server Actions</text>
+<text x="600" y="193" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="middle">every call to the banking API is made server-side</text>
+<line x1="600" y1="202" x2="600" y2="237" stroke="#2563EB" stroke-width="2"/>
+<polygon points="600,246 595.05,237 604.95,237" fill="#2563EB"/>
+<text x="612" y="229" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="start">Bearer JWT, server to server</text>
+<rect x="360" y="246" width="480" height="78" rx="12" fill="#EAF1FE" stroke="#2563EB" stroke-width="1.5"/>
+<text x="600" y="276" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#0B1F3A" font-weight="600" text-anchor="middle">Spring Cloud Gateway</text>
+<text x="600" y="297" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#5A6B85" font-weight="400" text-anchor="middle">validates the JWT · derives the caller identity</text>
+<text x="600" y="315" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="middle">Redis token-bucket rate limiting per client IP</text>
+<rect x="890" y="252" width="280" height="66" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="1030" y="279" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">Eureka</text>
+<text x="1030" y="300" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="middle">service discovery</text>
+<line x1="840" y1="285" x2="881" y2="285" stroke="#5A6B85" stroke-width="2" stroke-dasharray="6 5"/>
+<polygon points="890,285 881,280.05 881,289.95" fill="#5A6B85"/>
+<line x1="600" y1="324" x2="600" y2="349" stroke="#2563EB" stroke-width="2"/>
+<polygon points="600,358 595.05,349 604.95,349" fill="#2563EB"/>
+<line x1="120" y1="358" x2="1080" y2="358" stroke="#2563EB" stroke-width="2"/>
+<text x="600" y="344" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="middle">X-User-Id and X-User-Role derived from the token — anything the client sent is overwritten</text>
+<line x1="132.0" y1="358" x2="132.0" y2="394" stroke="#2563EB" stroke-width="2"/>
+<polygon points="132.0,402 127.6,394 136.4,394" fill="#2563EB"/>
+<rect x="30" y="402" width="204" height="200" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="132.0" y="430" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14.5" fill="#0B1F3A" font-weight="600" text-anchor="middle">Identity &amp; onboarding</text>
+<rect x="44" y="460" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="132.0" y="480" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">user-service</text>
+<rect x="44" y="498" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="132.0" y="518" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">application-service</text>
+<text x="132.0" y="588" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">own database</text>
+<line x1="366.0" y1="358" x2="366.0" y2="394" stroke="#2563EB" stroke-width="2"/>
+<polygon points="366.0,402 361.6,394 370.4,394" fill="#2563EB"/>
+<rect x="264" y="402" width="204" height="200" rx="12" fill="#EAF1FE" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="366.0" y="430" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14.5" fill="#0B1F3A" font-weight="600" text-anchor="middle">Money movement</text>
+<rect x="278" y="460" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="366.0" y="480" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">account-service</text>
+<rect x="278" y="498" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="366.0" y="518" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">transaction-service</text>
+<rect x="278" y="536" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="366.0" y="556" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">payment-service</text>
+<text x="366.0" y="588" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">own database</text>
+<line x1="600.0" y1="358" x2="600.0" y2="394" stroke="#2563EB" stroke-width="2"/>
+<polygon points="600.0,402 595.6,394 604.4,394" fill="#2563EB"/>
+<rect x="498" y="402" width="204" height="200" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="600.0" y="430" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14.5" fill="#0B1F3A" font-weight="600" text-anchor="middle">Lending &amp; cards</text>
+<rect x="512" y="460" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="600.0" y="480" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">loan-service</text>
+<rect x="512" y="498" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="600.0" y="518" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">credit-card-service</text>
+<text x="600.0" y="588" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">own database</text>
+<line x1="834.0" y1="358" x2="834.0" y2="394" stroke="#2563EB" stroke-width="2"/>
+<polygon points="834.0,402 829.6,394 838.4,394" fill="#2563EB"/>
+<rect x="732" y="402" width="204" height="200" rx="12" fill="#E8F5F3" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="834.0" y="430" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14.5" fill="#0B1F3A" font-weight="600" text-anchor="middle">Risk &amp; derived state</text>
+<rect x="746" y="460" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="834.0" y="480" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">fraud-detection-service</text>
+<rect x="746" y="498" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="834.0" y="518" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">statistics-service</text>
+<rect x="746" y="536" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="834.0" y="556" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">notification-service</text>
+<text x="834.0" y="588" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#5A6B85" font-weight="400" text-anchor="middle">own database · Redis: statistics, fraud</text>
+<line x1="1068.0" y1="358" x2="1068.0" y2="394" stroke="#2563EB" stroke-width="2"/>
+<polygon points="1068.0,402 1063.6,394 1072.4,394" fill="#2563EB"/>
+<rect x="966" y="402" width="204" height="200" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="1068.0" y="430" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14.5" fill="#0B1F3A" font-weight="600" text-anchor="middle">External rails</text>
+<rect x="980" y="460" width="176" height="30" rx="8" fill="#FFFFFF" stroke="#C8D4E6" stroke-width="1"/>
+<text x="1068.0" y="480" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#0B1F3A" font-weight="400" text-anchor="middle">integration-service</text>
+<text x="1068.0" y="588" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">own database</text>
+<text x="1068" y="514" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">simulated stubs —</text>
+<text x="1068" y="530" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">no banking network</text>
+<line x1="132.0" y1="602" x2="132.0" y2="652" stroke="#0F766E" stroke-width="2"/>
+<polygon points="132.0,660 127.6,652 136.4,652" fill="#0F766E"/>
+<line x1="366.0" y1="602" x2="366.0" y2="652" stroke="#0F766E" stroke-width="2"/>
+<polygon points="366.0,660 361.6,652 370.4,652" fill="#0F766E"/>
+<line x1="600.0" y1="602" x2="600.0" y2="652" stroke="#0F766E" stroke-width="2"/>
+<polygon points="600.0,660 595.6,652 604.4,652" fill="#0F766E"/>
+<line x1="1068.0" y1="602" x2="1068.0" y2="652" stroke="#0F766E" stroke-width="2"/>
+<polygon points="1068.0,660 1063.6,652 1072.4,652" fill="#0F766E"/>
+<text x="378.0" y="638" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="start">publish</text>
+<line x1="834.0" y1="660" x2="834.0" y2="611" stroke="#0F766E" stroke-width="2"/>
+<polygon points="834.0,602 829.05,611 838.95,611" fill="#0F766E"/>
+<text x="846.0" y="638" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="start">consume</text>
+<rect x="30" y="660" width="1140" height="62" rx="12" fill="#E8F5F3" stroke="#0F766E" stroke-width="1.5"/>
+<text x="600" y="687" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">Apache Kafka — domain events</text>
+<text x="600" y="708" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="middle">statistics, notifications and fraud scoring update off the money-movement path</text>
+<rect x="30" y="758" width="560" height="86" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="310" y="787" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">PostgreSQL 16</text>
+<text x="310" y="809" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="middle">database per service — no shared business schema</text>
+<text x="310" y="828" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="middle">Flyway migrations, schema validated at start-up</text>
+<rect x="610" y="758" width="560" height="86" rx="12" fill="#F4F7FC" stroke="#C8D4E6" stroke-width="1.5"/>
+<text x="890" y="787" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" fill="#0B1F3A" font-weight="600" text-anchor="middle">Redis 7</text>
+<text x="890" y="809" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5A6B85" font-weight="400" text-anchor="middle">gateway rate limiting · fraud velocity counters</text>
+<text x="890" y="828" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5A6B85" font-weight="400" text-anchor="middle">statistics read-model cache</text>
+<text x="600" y="880" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#5A6B85" font-weight="400" text-anchor="middle">Runtime shown is Docker Compose on one host. Terraform under infrastructure/aws defines deployment infrastructure and is not a running environment.</text>
+</svg>

@@ -188,7 +188,7 @@ architecture guarantees: the session cookie is httpOnly, the token never appears
 in the HTML sent to the browser, and a page that cannot load its data says so
 rather than rendering a zero. No backend required.
 
-**Live (34 tests, on demand).** Requires all 13 services plus a seeded customer.
+**Live (34 tests, on demand).** Requires all 13 backend processes plus a seeded customer.
 Covers sign-in to a dashboard showing real balances, account and transaction
 history, the full money-movement journeys, loan amortization, card masking,
 staff-route denial for a customer, sign-out, onboarding, and a phone viewport.
