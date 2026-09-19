@@ -67,10 +67,18 @@ public class GlobalExceptionHandler {
     /**
      * The named source account does not exist.
      *
-     * <p>Reported as 404 rather than 500. It says nothing a caller could not
-     * already determine: an account they do not own answers 403 whether or not
-     * it exists, so this distinguishes only their own missing account from
-     * their own real one.
+     * <p>Reported as 404 rather than 500, so a caller who mistypes an id is
+     * told the id is wrong instead of being handed a server error.
+     *
+     * <p>This does distinguish "no such account" from "not yours", because
+     * {@code AccountController.getById} looks the account up before it
+     * authorises: a missing id is 404 for everyone, an id owned by someone
+     * else is 403. That is an existence oracle over account ids, and it is the
+     * same one {@code /api/accounts/{id}} already answers directly, so
+     * mirroring the status here adds no exposure that the platform did not
+     * already have. Closing it means making the lookup authorise first and
+     * answer 404 for both cases, which belongs in account-service rather than
+     * in an error handler downstream of it.
      */
     @ExceptionHandler(FeignException.NotFound.class)
     public ResponseEntity<Map<String, Object>> handleFeignNotFound() {

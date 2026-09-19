@@ -7,8 +7,10 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -47,17 +49,33 @@ class GatewayRouteExposureTest {
         return (Map<String, Object>) cloud.get("gateway");
     }
 
-    /** The actuator endpoints this service publishes, as a list. */
+    /**
+     * The actuator endpoints this service publishes, as a list.
+     *
+     * <p>Spring accepts {@code include} either as a comma-separated string or
+     * as a YAML sequence, and both are read here. Reading only the string form
+     * would leave this guard passing vacuously if someone reformatted the
+     * config: SnakeYAML would hand back a {@code List}, {@code String.valueOf}
+     * would make it {@code "[health, gateway]"}, and the split would produce
+     * {@code "[health"} and {@code "gateway]"} — so a re-exposed {@code
+     * gateway} endpoint would no longer match. A test that stops testing when
+     * the file is reformatted is worse than no test.
+     */
     @SuppressWarnings("unchecked")
     private List<String> exposedManagementEndpoints() throws Exception {
         Map<String, Object> management = (Map<String, Object>) config().get("management");
         Map<String, Object> endpoints = (Map<String, Object>) management.get("endpoints");
         Map<String, Object> web = (Map<String, Object>) endpoints.get("web");
         Map<String, Object> exposure = (Map<String, Object>) web.get("exposure");
-        return Arrays.stream(String.valueOf(exposure.get("include")).split(","))
-                .map(String::trim)
-                .filter(value -> !value.isEmpty())
-                .toList();
+        Object include = exposure.get("include");
+
+        assertThat(include).as("management.endpoints.web.exposure.include").isNotNull();
+
+        Stream<String> tokens = include instanceof Collection<?> values
+                ? values.stream().map(String::valueOf)
+                : Arrays.stream(String.valueOf(include).split(","));
+
+        return tokens.map(String::trim).filter(value -> !value.isEmpty()).toList();
     }
 
     @SuppressWarnings("unchecked")

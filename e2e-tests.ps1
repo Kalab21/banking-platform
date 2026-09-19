@@ -412,7 +412,6 @@ $otherReg = @{
 $otherAuth = Post "$GW/api/auth/register" $otherReg
 Assert "Register a second customer" ($otherAuth -and $otherAuth.token)
 $OTHER_TOKEN = $otherAuth.token
-$OTHER_USER_ID = $otherAuth.userId
 
 Assert-Refused "Another customer cannot wire from an account they do not own" "POST" `
     "$GW/api/integrations/wire-transfer" $OTHER_TOKEN 403 `
@@ -425,6 +424,11 @@ Assert-Refused "Another customer cannot ACH from an account they do not own" "PO
 if ($wire -and $wire.transferRef) {
     Assert-Refused "Another customer cannot read someone else's transfer by reference" "GET" `
         "$GW/api/integrations/transfer/$($wire.transferRef)" $OTHER_TOKEN 403
+} else {
+    # Without an else the assertion would silently disappear when the wire
+    # transfer failed, and the suite would report a smaller total, all green.
+    # A check that can vanish is not a check.
+    Assert "Another customer cannot read someone else's transfer by reference" $false "skipped - wire transfer failed"
 }
 
 # Second-factor management is self-only: no customer, and no role, manages
