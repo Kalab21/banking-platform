@@ -265,7 +265,7 @@ remaining hardening candidates, including findings this project has not fixed �
 | Offline Playwright (production build, no backend) | 69 |
 | **CI total** | **808** |
 | Live Playwright against the running stack — on demand | 34 scenarios |
-| PowerShell full-stack suite — on demand | 69 / 69 |
+| PowerShell full-stack suite — on demand | 73 / 73 |
 
 The backend total is 501 unit and web-slice tests plus 25 integration tests that run
 `@DataJpaTest` against a real PostgreSQL 16 container, so entity and migration drift fails

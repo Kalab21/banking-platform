@@ -64,7 +64,7 @@ assertion counts, which are larger and less comparable.
 | Component | Vitest, React Testing Library | `LoginForm` and `loginAction` — the second-factor challenge, and no session cookie before the code succeeds (counted in the 213 above) | 8 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
 | End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport | 34, on demand |
-| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals and cross-customer ownership refusals | 69, on demand |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack, including staff-only refusals, cross-customer ownership refusals and the Kafka-driven credit-score update | 73, on demand |
 
 ## Commands
 
@@ -238,7 +238,16 @@ those values replaced with the ones derived from the token.
 `e2e-tests.ps1` drives the whole platform through the gateway: registration,
 account opening, money movement, a credit-card application through Kafka to an
 issued card, a loan through disbursement and repayment, KYC submission,
-notifications, external rails and TOTP enrolment. 69 assertions.
+notifications, external rails and TOTP enrolment. 73 assertions.
+
+It also proves an event-driven workflow end to end. The loan repayment in
+Flow 3 publishes `LOAN_REPAYMENT_MADE`, and `user-service` raises the credit
+score when it consumes it — a reward that had never once been given, because
+the event carried no `userId` and the consumer returned on the null. The suite
+waits for the score to move and asserts it unconditionally, so a regression in
+the contract turns this red rather than quietly dropping an assertion from the
+total. It used to be written as `if (score > 700)`, which is why nobody
+noticed.
 
 It also proves the ownership rules that only a real gateway can prove. A second
 customer is registered purely to be refused: they may not wire or ACH from the

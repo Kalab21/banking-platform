@@ -510,6 +510,18 @@ Assert-Refused "Customer cannot approve their own KYC document" "PUT" `
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 10: Credit Score ===" -ForegroundColor Cyan
 
+# The loan repayment in Flow 3 publishes LOAN_REPAYMENT_MADE, and user-service
+# raises the score by 5 when it consumes it. That reward had never been given:
+# the event carried no userId and the consumer returned on the null. It is
+# waited for rather than assumed, because a Kafka consumer settles when it
+# settles, and asserted unconditionally so a regression turns this red instead
+# of quietly removing an assertion from the total.
+$scoreRose = Wait-For "credit score raised by the loan repayment event" {
+    $s = Get "$GW/api/users/$USER_ID/credit-score" $TOKEN
+    $s -and $s.score -gt 700
+}
+Assert "Score increased via Kafka (loan repayment event processed)" $scoreRose
+
 $score = Get "$GW/api/users/$USER_ID/credit-score" $TOKEN
 Assert "Credit score returned" ($score -ne $null)
 Assert "Score is in valid range (300-850)" ($score.score -ge 300 -and $score.score -le 850)
@@ -524,6 +536,9 @@ Assert "Credit score history is readable" `
     ((Status "GET" "$GW/api/users/$USER_ID/credit-score/history" $TOKEN) -eq 200)
 Write-Host "  History entries=$($history.Count)"
 
+# The repayment reward above guarantees at least one history row, so these are
+# asserted rather than skipped when the list happens to be empty.
+Assert "Credit score history has at least one entry" ($history.Count -gt 0)
 if ($history -and $history.Count -gt 0) {
     $latest = $history[0]
     Assert "History entry has delta" ($latest.delta -ne $null)
@@ -535,14 +550,7 @@ if ($history -and $history.Count -gt 0) {
     Write-Host "  Latest change: $sign$($latest.delta)  Reason=$($latest.changeReason)"
 }
 
-# Verify Kafka drove score updates from loan repayment (Flow 3)
-# Score should be > 700 (initial) if LOAN_REPAYMENT_MADE event was processed
-if ($score.score -gt 700) {
-    Assert "Score increased via Kafka (loan repayment event processed)" $true
-    Write-Host "  Kafka credit score update confirmed: $($score.score) > 700"
-} else {
-    Write-Host "  [NOTE] Score still 700 — Kafka event may not have processed yet (run again after 10s)" -ForegroundColor DarkYellow
-}
+Write-Host "  Kafka credit score update confirmed: $($score.score) > 700"
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 11: 2FA Setup + Verify + Disable ===" -ForegroundColor Cyan
