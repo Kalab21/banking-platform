@@ -60,6 +60,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "resume-events", "resume-events.DLT",
                 "garbage-events", "garbage-events.DLT",
                 "shape-events", "shape-events.DLT",
+                "othergroup-events", "othergroup-events.DLT",
         },
         brokerProperties = {"auto.create.topics.enable=true"})
 @TestPropertySource(properties = {
@@ -243,6 +244,11 @@ class KafkaRecoveryIT {
             // retrying a poison record is how a partition stops for good.
             assertThat(listeners.garbageAttempts).hasValue(0);
 
+            // And the header says so. Reporting the configured maximum here
+            // would tell an operator this was retried for seconds against a
+            // dependency when the listener was never invoked once.
+            assertThat(headerValue(dead, DeadLetterHeaders.ATTEMPTS)).isEqualTo("1");
+
             // The original bytes are preserved rather than re-encoded, so what
             // is on the dead letter topic is what was published.
             assertThat(new String(dead.value(), StandardCharsets.UTF_8))
@@ -267,6 +273,30 @@ class KafkaRecoveryIT {
                     .contains("DeserializationException");
             assertThat(headerValue(dead, DeadLetterHeaders.EVENT_ID)).isEqualTo("evt-9");
             assertThat(headerValue(dead, DeadLetterHeaders.EVENT_TYPE)).isEqualTo("WRONG_SHAPE");
+        }
+    }
+
+    @Nested
+    @DisplayName("a listener with its own consumer group")
+    class OwnGroup {
+
+        /**
+         * {@code @KafkaListener} can set a groupId of its own, so the group
+         * on a dead-lettered record has to come from the container that
+         * failed rather than from the service-wide property. That header is
+         * what tells an operator who to replay a record to, and five services
+         * dead-letter to the same topics.
+         */
+        @Test
+        @DisplayName("is named on the dead-lettered record, not the service default")
+        void groupComesFromTheContainer() throws Exception {
+            template.send("othergroup-events", "k7", new TestEvent("evt-7", "POISON", "x"));
+
+            ConsumerRecord<String, byte[]> dead = readDeadLetter("othergroup-events.DLT");
+
+            assertThat(headerValue(dead, DeadLetterHeaders.CONSUMER_GROUP))
+                    .isEqualTo("a-different-group")
+                    .isNotEqualTo("recovery-test");
         }
     }
 
@@ -319,6 +349,11 @@ class KafkaRecoveryIT {
         @KafkaListener(topics = "garbage-events", groupId = "recovery-test")
         public void onGarbage(TestEvent event) {
             garbageAttempts.incrementAndGet();
+        }
+
+        @KafkaListener(topics = "othergroup-events", groupId = "a-different-group")
+        public void onOtherGroup(TestEvent event) {
+            throw new IllegalStateException("fails, in another group");
         }
 
         @KafkaListener(topics = "shape-events", groupId = "recovery-test")

@@ -228,6 +228,24 @@ The event id is read from the payload, and from the raw bytes carried on the
 exception when deserialization is what failed. That is precisely the record
 that is otherwise hardest to identify.
 
+`x-dlt-attempts` is what actually happened, not what the policy allows. The
+recoverer is reached by two routes and they differ: a retryable failure arrives
+having exhausted every attempt, while a fatal one — a payload that cannot be
+deserialized — is recovered after a single delivery without being retried at
+all. Reporting the configured maximum for both would tell an operator that an
+unreadable record was retried for several seconds against a dependency when the
+listener was never invoked once.
+
+The consumer group is read from the container that failed rather than from the
+service-wide property, because `@KafkaListener` can set a group of its own.
+
+**What the payload is.** For a deserialization failure it is the original bytes,
+byte for byte. For a listener failure it is a re-serialization of the
+deserialized event — which is the same thing for a known type, and for an
+unrecognised one is whatever `UnknownEvent` retained. `UnknownEvent` therefore
+keeps every field it does not declare, so a dead-lettered event from a newer
+producer still carries what it said rather than four envelope fields.
+
 The exception detail and the payload sit side by side on the dead letter topic.
 That is safe here because the events carry no account number, card number,
 password or token — a contract test in `common-events` asserts it — so there is

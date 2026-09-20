@@ -116,6 +116,16 @@ class EventContractTest {
 
             assertThat(event).isInstanceOf(UnknownEvent.class);
             assertThat(event.eventType()).isEqualTo("SOMETHING_ADDED_LATER");
+
+            // The fields this consumer does not know are kept, not dropped.
+            // If such an event is later dead-lettered, the record on the dead
+            // letter topic is a re-serialization of this object — discarding
+            // the payload would leave an operator with an envelope and
+            // nothing else.
+            assertThat(((UnknownEvent) event).payload()).containsEntry("somethingNew", 42);
+            assertThat(mapper.writeValueAsString(event))
+                    .contains("\"somethingNew\":42")
+                    .doesNotContain("\"payload\"");
         }
 
         @Test

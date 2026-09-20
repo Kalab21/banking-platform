@@ -8,9 +8,11 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -23,6 +25,7 @@ import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.KafkaUtils;
 import org.springframework.kafka.support.serializer.DeserializationException;
 import org.springframework.util.backoff.BackOff;
 import org.springframework.util.backoff.ExponentialBackOff;
@@ -73,10 +76,26 @@ import java.util.Map;
  * letter topic. That is correct: none of them will succeed on a second
  * attempt, and retrying a poison record is how a partition stops forever.
  */
-@AutoConfiguration
+// after Boot's Kafka auto-configuration on purpose: auto-configurations are
+// sorted by class name before ordering metadata is applied, so without this
+// "com.bankingplatform..." is evaluated before
+// "org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration" and
+// every @ConditionalOnBean below sees a context with no ConsumerFactory in it
+// yet. The start-up guard silently never registers.
+@AutoConfiguration(after = KafkaAutoConfiguration.class)
 @ConditionalOnClass({KafkaTemplate.class, DefaultErrorHandler.class})
 @EnableConfigurationProperties(KafkaRecoveryProperties.class)
-public class KafkaRecoveryAutoConfiguration {
+public class KafkaRecoveryAutoConfiguration implements DisposableBean {
+
+    /**
+     * Held so it can be closed.
+     *
+     * <p>{@link DefaultKafkaProducerFactory} only closes its producer in
+     * {@code destroy()}. Built outside the container, nothing would ever call
+     * that, and the sender thread, broker sockets and buffer memory would
+     * outlive the context — one leaked producer per refresh.
+     */
+    private volatile DefaultKafkaProducerFactory<Object, Object> deadLetterProducerFactory;
 
     private static final Logger log = LoggerFactory.getLogger(KafkaRecoveryAutoConfiguration.class);
 
@@ -94,6 +113,11 @@ public class KafkaRecoveryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(CommonErrorHandler.class)
+    // Both are required to build a recoverer, and neither exists unless Kafka
+    // is actually configured. Without this condition a service that merely has
+    // this module on its classpath fails to start, which is a worse outcome
+    // than having no dead-letter policy.
+    @ConditionalOnBean({KafkaTemplate.class, ProducerFactory.class})
     public DefaultErrorHandler kafkaRecoveryErrorHandler(
             KafkaTemplate<Object, Object> kafkaTemplate,
             ProducerFactory<Object, Object> producerFactory,
@@ -137,7 +161,16 @@ public class KafkaRecoveryAutoConfiguration {
         configs.put("value.serializer", ByteArraySerializer.class);
         // Removed because they belong to the JSON serializer this one replaces.
         configs.keySet().removeIf(key -> key.startsWith("spring.json"));
-        return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(configs));
+        this.deadLetterProducerFactory = new DefaultKafkaProducerFactory<>(configs);
+        return new KafkaTemplate<>(this.deadLetterProducerFactory);
+    }
+
+    @Override
+    public void destroy() {
+        DefaultKafkaProducerFactory<Object, Object> factory = this.deadLetterProducerFactory;
+        if (factory != null) {
+            factory.destroy();
+        }
     }
 
     private DeadLetterPublishingRecoverer recoverer(KafkaTemplate<Object, Object> jsonTemplate,
@@ -171,8 +204,18 @@ public class KafkaRecoveryAutoConfiguration {
                                                                 String consumerGroup,
                                                                 KafkaRecoveryProperties properties) {
         List<Header> headers = new ArrayList<>();
-        headers.add(header(DeadLetterHeaders.CONSUMER_GROUP, consumerGroup));
-        headers.add(header(DeadLetterHeaders.ATTEMPTS, String.valueOf(properties.getMaxRetries() + 1)));
+        // The group of the container that actually failed, not the
+        // service-wide property: @KafkaListener can set its own groupId, and
+        // this header is the thing that tells an operator who to replay to.
+        String group = KafkaUtils.getConsumerGroupId();
+        headers.add(header(DeadLetterHeaders.CONSUMER_GROUP, group != null ? group : consumerGroup));
+        // What actually happened, not what the policy allows. A
+        // non-retryable failure — a payload that cannot be deserialized — is
+        // recovered after a single delivery, so stating the configured
+        // maximum here would tell an operator the record was retried for
+        // several seconds against a dependency when it was never retried at
+        // all.
+        headers.add(header(DeadLetterHeaders.ATTEMPTS, String.valueOf(deliveryCount(exception, properties))));
 
         Object payload = payloadOf(record, exception);
         String eventId = readEnvelopeField(payload, "eventId");
@@ -184,6 +227,36 @@ public class KafkaRecoveryAutoConfiguration {
             headers.add(header(DeadLetterHeaders.EVENT_TYPE, eventType));
         }
         return new org.apache.kafka.common.header.internals.RecordHeaders(headers);
+    }
+
+    /**
+     * How many times the record was actually delivered.
+     *
+     * <p>The recoverer is reached by exactly two routes, and they differ:
+     * a retryable failure arrives having exhausted every attempt, and a fatal
+     * one — a payload that cannot be deserialized, a listener signature that
+     * does not match — is recovered after a single delivery without being
+     * retried at all.
+     *
+     * <p>Reporting the configured maximum for both would tell an operator
+     * that an unreadable record was retried for several seconds against a
+     * dependency, when the listener was never invoked once.
+     */
+    private int deliveryCount(Exception exception, KafkaRecoveryProperties properties) {
+        return isFatal(exception) ? 1 : properties.getMaxRetries() + 1;
+    }
+
+    /** The failures {@link DefaultErrorHandler} refuses to retry. */
+    private boolean isFatal(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof DeserializationException
+                    || cause instanceof org.springframework.messaging.converter.MessageConversionException
+                    || cause instanceof org.springframework.kafka.support.converter.ConversionException
+                    || cause instanceof ClassCastException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -232,16 +305,36 @@ public class KafkaRecoveryAutoConfiguration {
         }
     }
 
-    /** Finds {@code "field":"value"} in a JSON document, or returns null. */
+    /**
+     * Finds {@code "field":"value"} in a JSON document, or returns null.
+     *
+     * <p>Returns null rather than something plausible when the document is
+     * truncated or the value is not a string. Both were wrong before: a
+     * missing colon made {@code indexOf} restart from zero and report the
+     * first quoted token in the document, so {@code {"eventId"} yielded the
+     * id {@code "eventId"} — a confident wrong answer on exactly the
+     * truncated payload this method exists to read.
+     */
     private String scanJson(String json, String field) {
         String needle = "\"" + field + "\"";
         int at = json.indexOf(needle);
         if (at < 0) {
             return null;
         }
-        int open = json.indexOf('"', json.indexOf(':', at + needle.length()) + 1);
-        int close = open < 0 ? -1 : json.indexOf('"', open + 1);
-        return close < 0 ? null : json.substring(open + 1, close);
+        int colon = json.indexOf(':', at + needle.length());
+        if (colon < 0) {
+            return null;
+        }
+        int cursor = colon + 1;
+        while (cursor < json.length() && Character.isWhitespace(json.charAt(cursor))) {
+            cursor++;
+        }
+        // Only a string value is an identifier worth reporting.
+        if (cursor >= json.length() || json.charAt(cursor) != '"') {
+            return null;
+        }
+        int close = json.indexOf('"', cursor + 1);
+        return close < 0 ? null : json.substring(cursor + 1, close);
     }
 
     private Header header(String name, String value) {
