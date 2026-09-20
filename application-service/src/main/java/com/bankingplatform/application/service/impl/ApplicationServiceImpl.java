@@ -18,8 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -77,14 +75,15 @@ public class ApplicationServiceImpl implements ApplicationService {
         // statistics-service counts submissions — but nothing had ever called
         // publishApplicationSubmitted, so that counter had always read zero.
         //
-        // Saved first so the event can name an id that exists, and published
-        // only after this transaction commits. Publishing inline would count a
-        // submission that never happened: provisionProduct below calls
-        // account-service, and if that fails the whole method rolls back, so
-        // the row disappears while the event has already gone.
+        // Saved first so the event can name an id that exists, then published
+        // inside this transaction rather than after it. The outbox is a
+        // database row, so it rolls back with the application: if
+        // provisionProduct below fails, the row and the publication disappear
+        // together. The after-commit hook this used to need was working around
+        // an unreliable send, and is the wrong tool once the send is a write.
         Application submitted = applicationRepository.save(application);
-        afterCommit(() -> eventProducer.publishApplicationSubmitted(
-                submitted.getId(), request.getUserId(), request.getApplicationType().name()));
+        eventProducer.publishApplicationSubmitted(
+                submitted.getId(), request.getUserId(), request.getApplicationType().name());
 
         // Auto-approve or reject based on credit score
         if (creditScore >= minScore) {
@@ -224,31 +223,6 @@ public class ApplicationServiceImpl implements ApplicationService {
     private Application findById(Long id) {
         return applicationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Application not found with id: " + id));
-    }
-
-    /**
-     * Runs after this transaction commits, or not at all if it rolls back.
-     *
-     * <p>Only for publishing: an event that describes a state change must not
-     * escape before that state is durable. This is the narrow fix for the one
-     * event added here. The general problem — a database commit and a Kafka
-     * send that are not one atomic act — is what a transactional outbox
-     * solves, and every other producer in this service still has it.
-     *
-     * <p>Falls back to running inline when there is no transaction, so the
-     * method behaves the same when called outside one.
-     */
-    private void afterCommit(Runnable action) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            action.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                action.run();
-            }
-        });
     }
 
     private void audit(String entityType, Long entityId, String action, Long performedBy, String details) {

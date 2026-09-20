@@ -7,7 +7,7 @@ import com.bankingplatform.common.events.OverdraftTriggered;
 import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -24,7 +24,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class AccountEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishAccountCreated(Long accountId, Long userId, String accountType) {
         send(AccountCreated.of(accountId, userId, accountType));
@@ -41,22 +41,21 @@ public class AccountEventProducer {
     }
 
     /**
-     * Sends on the event's own key, so ordering follows the aggregate.
+     * Records the event in the outbox, in the caller's transaction.
      *
-     * <p>The swallowed exception is a known gap, not an oversight: a caught
-     * {@code send} failure is not a delivery guarantee anyway, because
-     * {@code send} is asynchronous and returns before the broker has
-     * acknowledged anything. Making this reliable needs the database write and
-     * the publication to commit together, which is the transactional outbox
-     * this project takes on separately. Until then a failure is logged rather
-     * than failing a business operation that has already committed.
+     * <p>This used to call {@code kafkaTemplate.send} and log whatever came
+     * back. That could never be reliable: {@code send} is asynchronous, so it
+     * returns before the broker has acknowledged anything and the caught
+     * exception was not evidence of delivery or of failure. The account could
+     * commit while the event never reached Kafka, and every consumer of it —
+     * notification, statistics, the user's own card and loan views — would
+     * carry on as if the account did not exist.
+     *
+     * <p>A row in the outbox commits with the account or not at all, and
+     * {@code OutboxRelay} sends it afterwards, retrying until the broker takes
+     * it. The failure mode moves from silent loss to visible delay.
      */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.ACCOUNT_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.ACCOUNT_EVENTS, event);
     }
 }

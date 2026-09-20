@@ -1,3 +1,4 @@
 com.bankingplatform.common.kafka.KafkaRecoveryAutoConfiguration
 com.bankingplatform.common.kafka.KafkaHeaderSafetyAutoConfiguration
 com.bankingplatform.common.kafka.inbox.ProcessedEventAutoConfiguration
+com.bankingplatform.common.kafka.outbox.OutboxAutoConfiguration
