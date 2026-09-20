@@ -1,1 +1,2 @@
 com.bankingplatform.common.kafka.KafkaRecoveryAutoConfiguration
+com.bankingplatform.common.kafka.KafkaHeaderSafetyAutoConfiguration

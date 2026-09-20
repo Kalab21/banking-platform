@@ -11,9 +11,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -51,7 +52,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Every scenario owns a topic and its own counters. Sharing either would
  * make the assertions depend on the order JUnit happens to run them in.
  */
-@SpringBootTest
+// Names its own configuration: two integration tests in this package each
+// declare one, and an unqualified @SpringBootTest cannot choose between them.
+@SpringBootTest(classes = KafkaRecoveryIT.TestApp.class)
 @EmbeddedKafka(
         partitions = 1,
         topics = {
@@ -300,7 +303,8 @@ class KafkaRecoveryIT {
         }
     }
 
-    @SpringBootApplication
+    @Configuration
+    @EnableAutoConfiguration
     static class TestApp {
 
         @Bean

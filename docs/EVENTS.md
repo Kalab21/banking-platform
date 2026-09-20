@@ -208,6 +208,29 @@ A start-up check logs an error if a service consumes without the wrapper. It is
 a one-line mistake with a disproportionate consequence and nothing a normal
 test would catch.
 
+### Headers are transport metadata
+
+A record's payload and its headers are two trust boundaries, and Spring maps
+them separately. The payload contract above — type headers off, routing on
+`eventType`, trusted packages narrowed — constrains none of the header
+handling.
+
+Left at the framework default, an inbound record can carry a
+`spring_json_header_types` header naming a Java class and the mapper
+constructs it while building the message for the listener, from bytes the
+producer chose. `SimpleKafkaHeaderMapper` is installed platform-wide instead:
+headers arrive as raw bytes, no type name is honoured, and no object is built
+from a producer-supplied header.
+
+Northbank has no use for typed header objects. What travels in a header here
+is a correlation id, trace context, event identity and dead-letter metadata —
+strings and bytes.
+
+`KafkaHeaderSafetyIT` asserts this against the effective listener
+configuration rather than against the mapper in isolation, including that
+ordinary events, correlation headers, dead-lettering and malformed-payload
+handling all still behave.
+
 ### What a dead-lettered record carries
 
 | Header | From |
