@@ -285,6 +285,50 @@ inspectable, not automatically replayed; deciding what to do with it is an
 operator's job, and replaying safely needs the consumer idempotency that is
 still outstanding.
 
+## Surviving redelivery
+
+Kafka is at-least-once, and the retry described above makes redelivery
+ordinary rather than exceptional. A consumer can commit its database work and
+die before the offset commit reaches the broker; the next poll hands it the
+same record again.
+
+Every handler with a durable effect claims the event id before doing anything,
+in the same transaction as the work:
+
+```sql
+INSERT INTO processed_event (consumer_name, event_id, processed_at)
+VALUES (?, ?, ?)
+ON CONFLICT (consumer_name, event_id) DO NOTHING
+```
+
+A single insert against a composite primary key, not a read-then-write. "Have
+I seen this? no, record it" is two statements with a gap between them, and two
+concurrent deliveries both read "no" before either writes. Only the database
+can decide this once, so the decision is a unique constraint; the losing insert
+affects no rows, and under concurrency it blocks until the first transaction
+resolves.
+
+The guard uses `Propagation.MANDATORY`. In a transaction of its own the claim
+would commit while the work was still uncommitted, and a crash in between would
+leave the event marked processed and the work undone — worse than the duplicate
+it prevents, because nothing would retry it.
+
+`consumer_name` is the handler, not the service. `notification-service` and
+`statistics-service` each run several handlers over the same topics, and each
+has to act on an event exactly once.
+
+### Defence in depth for product issuance
+
+Two consumers create a financial product from `APPLICATION_APPROVED`, so a
+redelivery there means a second loan or a second card. Those also carry a
+partial unique index on `application_id`, so the state cannot exist even if a
+duplicate arrives by a route that misses the guard — a manual replay from a
+dead letter topic, or a future consumer that forgets it. Partial because
+`application_id` is nullable for products created by other routes.
+
+`LoanIssuanceIdempotencyIT` proves both against real PostgreSQL, including
+eight threads released together on the same event.
+
 ## What this does not solve
 
 Publishing is still best-effort. A producer catches the exception from
@@ -294,10 +338,8 @@ transaction can commit and the event never reach the broker. Making that
 reliable needs the domain write and the publication to commit together — a
 transactional outbox — which is separate work.
 
-Consumers are not idempotent. `APPLICATION_APPROVED` causes `loan-service` and
-`credit-card-service` to create a financial product, so a redelivery would
-issue a second loan or a second card. `eventId` is the identity that makes
-de-duplication possible; using it is separate work.
+Consumers are idempotent. Every handler with a durable effect claims the event
+id in the same transaction as its work — see "Surviving redelivery" above.
 
 Listeners no longer swallow exceptions, and bounded retry with a dead-letter
 topic now stands behind them — see "When processing fails" above. What remains
