@@ -86,6 +86,34 @@ class ApplicationEventContractTest {
         verifyNoInteractions(loanService);
     }
 
+    /**
+     * Set.of(...).contains(null) throws NullPointerException rather than
+     * returning false, so an approval without a product type would have
+     * become a poison record on this partition.
+     */
+    @Test
+    @DisplayName("an approval with no product type is ignored rather than throwing")
+    void nullProductTypeIgnored() throws Exception {
+        consumer.onApplicationEvent(mapper.readValue("""
+                {"eventId":"abc","eventType":"APPLICATION_APPROVED","eventVersion":1,
+                 "occurredAt":"2026-01-01T00:00:00Z","applicationId":7,"userId":42}
+                """, DomainEvent.class));
+
+        verifyNoInteractions(loanService);
+    }
+
+    @Test
+    @DisplayName("an approval with no applicant issues nothing")
+    void nullUserIgnored() throws Exception {
+        consumer.onApplicationEvent(mapper.readValue("""
+                {"eventId":"abc","eventType":"APPLICATION_APPROVED","eventVersion":1,
+                 "occurredAt":"2026-01-01T00:00:00Z","applicationId":7,
+                 "productType":"PERSONAL_LOAN","requestedAmount":10000}
+                """, DomainEvent.class));
+
+        verifyNoInteractions(loanService);
+    }
+
     @Test
     @DisplayName("an event type this service does not know is ignored")
     void unknownTypeIgnored() throws Exception {

@@ -151,7 +151,28 @@ could never run, which read as working features.
   `FraudAlert.accountId` is `NOT NULL`, so an alert cannot be recorded against
   a card at all. Card fraud needs a card subject in the fraud model and a
   decision about what freezing a card means — a change to that model, not to an
-  event contract.
+  event contract. `evaluateCreditCardPurchase` and its
+  `fraud.rules.cc-single-purchase-threshold` setting are removed with it, so a
+  rule that cannot run does not read as an active control.
+
+## Nulls on the wire
+
+A typed event makes a field required in Java. It does not make it required in
+the JSON. A record written by an older producer during a rolling deploy, or
+replayed from a topic that predates this change, deserializes with `null`
+where the record declares a value.
+
+That matters because several of these fields back `NOT NULL` columns —
+`notifications.user_id`, `fraud_alerts.account_id`,
+`fraud_rules_audit.account_id`. Passing one through would throw out of the
+listener, and with no dead-letter topic configured yet the container retries
+the same offset ten times and blocks the partition before giving up. A null
+account id would also collapse every such event onto one Redis velocity key,
+mixing unrelated customers into a single fraud counter.
+
+So consumers still check. The check is no longer the normal path — the field
+is populated now — but it is the difference between skipping one odd record
+and stalling a partition.
 
 ## What this does not solve
 

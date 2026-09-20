@@ -124,15 +124,35 @@ public class NotificationService {
     public void onApplicationApproved(Long userId, String productType) {
         create(userId, NotificationType.APPLICATION_APPROVED,
                 "Application Approved",
-                String.format("Congratulations! Your %s application has been approved.", productType),
+                String.format("Congratulations! Your %s application has been approved.",
+                        readable(productType)),
                 null, "APPLICATION");
     }
 
     public void onApplicationRejected(Long userId, String productType) {
         create(userId, NotificationType.APPLICATION_REJECTED,
                 "Application Update",
-                String.format("We're sorry, your %s application was not approved at this time.", productType),
+                String.format("We're sorry, your %s application was not approved at this time.",
+                        readable(productType)),
                 null, "APPLICATION");
+    }
+
+    /**
+     * An enum name as a customer would read it: {@code PERSONAL_LOAN} becomes
+     * "personal loan".
+     *
+     * <p>The product type reaches these messages for the first time now that
+     * the event carries it. Before, the rejection notice had no product type
+     * at all and printed the literal word "product", so nobody had ever seen
+     * a shouted enum name in a sentence about their own application.
+     *
+     * @param productType the product type, or null if the event omitted it
+     */
+    private static String readable(String productType) {
+        if (productType == null || productType.isBlank()) {
+            return "product";
+        }
+        return productType.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
     }
 
     /**

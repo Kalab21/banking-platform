@@ -90,6 +90,36 @@ class NotificationCopyTest {
     }
 
     @Test
+    @DisplayName("a declined application names the product the way a customer says it")
+    void rejectionCopyIsReadable() {
+        // The product type reaches these messages for the first time now that
+        // the event carries it. Printed raw, a declined mortgage read "your
+        // MORTGAGE application was not approved".
+        NotificationService service = service();
+        String message = messageAfter(() -> service.onApplicationRejected(7L, "MORTGAGE"));
+
+        assertThat(message).contains("mortgage").doesNotContain("MORTGAGE");
+    }
+
+    @Test
+    @DisplayName("an approved application names the product the same way")
+    void approvalCopyIsReadable() {
+        NotificationService service = service();
+        String message = messageAfter(() -> service.onApplicationApproved(7L, "PERSONAL_LOAN"));
+
+        assertThat(message).contains("personal loan").doesNotContain("PERSONAL_LOAN");
+    }
+
+    @Test
+    @DisplayName("an application decision with no product type still reads as a sentence")
+    void applicationCopyWithoutProduct() {
+        NotificationService service = service();
+
+        assertThat(messageAfter(() -> service.onApplicationRejected(7L, null)))
+                .contains("your product application");
+    }
+
+    @Test
     @DisplayName("a card with no digits still produces a sentence rather than an error")
     void cardIssuedWithoutDigits() {
         NotificationService service = service();

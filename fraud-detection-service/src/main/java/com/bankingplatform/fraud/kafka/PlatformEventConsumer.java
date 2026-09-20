@@ -42,9 +42,18 @@ public class PlatformEventConsumer {
 
     @KafkaListener(topics = Topics.TRANSACTION_EVENTS, groupId = "fraud-detection-service")
     public void onTransactionEvent(DomainEvent event) {
-        if (event instanceof TransactionCreated e) {
+        // The account is still checked for null. The type makes the field
+        // required in Java, not in the JSON: a record written by an older
+        // producer during a rolling deploy deserializes with a null there.
+        // fraud_alerts.account_id and fraud_rules_audit.account_id are both
+        // NOT NULL, so passing one through would throw out of the listener —
+        // and with no dead-letter topic configured yet, the container would
+        // retry the same offset ten times and block the partition. A null
+        // account also collapses every such event onto one Redis velocity
+        // key, mixing unrelated customers into the same counter.
+        if (event instanceof TransactionCreated e && e.accountId() != null) {
             fraudService.evaluateTransaction(e.accountId(), e.userId(), e.amount(), e.transactionRef());
-        } else if (event instanceof TransferCompleted e) {
+        } else if (event instanceof TransferCompleted e && e.accountId() != null) {
             fraudService.evaluateTransaction(e.accountId(), e.userId(), e.amount(), e.transactionRef());
         }
     }

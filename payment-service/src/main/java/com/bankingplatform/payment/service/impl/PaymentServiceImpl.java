@@ -115,11 +115,17 @@ public class PaymentServiceImpl implements PaymentService {
 
         log.info("Processing {} scheduled payments", due.size());
         for (Payment payment : due) {
+            // Resolved once, before the attempt, and reused by whichever event
+            // is published. Doing it in the catch block meant that when
+            // account-service was the thing that had failed, every failed
+            // payment paid a full Feign read timeout again on the way out,
+            // while this batch transaction held its row locks open.
+            Long payerUserId = ownerOf(payment.getPayerAccountId());
             try {
                 payment.setStatus(PaymentStatus.PROCESSING);
                 paymentRepository.save(payment);
 
-                executePayment(payment);
+                executePayment(payment, payerUserId);
                 payment.setStatus(PaymentStatus.COMPLETED);
                 payment.setProcessedAt(LocalDateTime.now());
 
@@ -135,13 +141,17 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.setFailureReason(e.getMessage());
                 log.error("Scheduled payment {} failed: {}", payment.getPaymentRef(), e.getMessage());
                 eventProducer.publishPaymentFailed(payment.getId(), payment.getPaymentRef(),
-                        payment.getPayerAccountId(), ownerOf(payment.getPayerAccountId()));
+                        payment.getPayerAccountId(), payerUserId);
             }
             paymentRepository.save(payment);
         }
     }
 
     private Payment executePayment(Payment payment) {
+        return executePayment(payment, ownerOf(payment.getPayerAccountId()));
+    }
+
+    private Payment executePayment(Payment payment, Long payerUserId) {
         if (payment.getPaymentType() == PaymentType.INTERNAL
                 && payment.getPayeeAccountId() != null) {
             // The payment reference is the natural key: it is generated once
@@ -162,7 +172,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setProcessedAt(LocalDateTime.now());
 
         eventProducer.publishPaymentCompleted(payment.getId(), payment.getPaymentRef(),
-                payment.getPayerAccountId(), ownerOf(payment.getPayerAccountId()),
+                payment.getPayerAccountId(), payerUserId,
                 payment.getPayeeAccountId(), payment.getAmount(), payment.getPaymentType().name());
         return payment;
     }

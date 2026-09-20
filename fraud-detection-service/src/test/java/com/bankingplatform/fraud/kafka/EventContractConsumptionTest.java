@@ -103,6 +103,25 @@ class EventContractConsumptionTest {
         verifyNoInteractions(fraudService);
     }
 
+    /**
+     * fraud_alerts.account_id and fraud_rules_audit.account_id are both
+     * NOT NULL, and a null account would also collapse every such event onto
+     * one Redis velocity key, mixing unrelated customers into one counter.
+     */
+    @Test
+    @DisplayName("a transaction with no account is skipped rather than thrown out of the listener")
+    void nullAccountIsSkipped() throws Exception {
+        String legacy = """
+                {"eventId":"abc","eventType":"TRANSACTION_CREATED","eventVersion":1,
+                 "occurredAt":"2026-01-01T00:00:00Z","transactionRef":"r","userId":42,
+                 "amount":9000.00}
+                """;
+
+        consumer.onTransactionEvent(mapper.readValue(legacy, DomainEvent.class));
+
+        verifyNoInteractions(fraudService);
+    }
+
     @Test
     @DisplayName("an event type this service does not know is ignored")
     void unknownTypeIgnored() throws Exception {

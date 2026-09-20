@@ -232,6 +232,38 @@ class EventContractConsumptionTest {
             verifyNoInteractions(notificationService);
         }
 
+        /**
+         * The type makes userId required in Java, not in the JSON. A record
+         * written by an older producer, or replayed from before this change,
+         * arrives with a null. notifications.user_id is NOT NULL, so passing
+         * one through would throw out of the listener — and with no
+         * dead-letter topic yet, the container would retry the same offset
+         * ten times and block the partition.
+         */
+        @Test
+        @DisplayName("an event with no user is skipped rather than thrown out of the listener")
+        void nullUserIsSkipped() throws Exception {
+            String legacyTransfer = """
+                    {"eventId":"abc","eventType":"TRANSFER_COMPLETED","eventVersion":1,
+                     "occurredAt":"2026-01-01T00:00:00Z","transactionRef":"d","accountId":3,
+                     "amount":25.00}
+                    """;
+            String legacyAccount = """
+                    {"eventId":"abd","eventType":"ACCOUNT_CREATED","eventVersion":1,
+                     "occurredAt":"2026-01-01T00:00:00Z","accountId":3,"accountType":"CHECKING"}
+                    """;
+            String legacyKyc = """
+                    {"eventId":"abe","eventType":"KYC_APPROVED","eventVersion":1,
+                     "occurredAt":"2026-01-01T00:00:00Z"}
+                    """;
+
+            consumer.onTransactionEvent(mapper.readValue(legacyTransfer, DomainEvent.class));
+            consumer.onAccountEvent(mapper.readValue(legacyAccount, DomainEvent.class));
+            consumer.onUserEvent(mapper.readValue(legacyKyc, DomainEvent.class));
+
+            verifyNoInteractions(notificationService);
+        }
+
         @Test
         @DisplayName("a payment whose owner could not be resolved is skipped, not guessed")
         void unresolvedOwner() throws Exception {

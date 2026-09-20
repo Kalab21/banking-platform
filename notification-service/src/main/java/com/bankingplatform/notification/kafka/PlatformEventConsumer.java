@@ -40,6 +40,16 @@ import java.math.BigDecimal;
  * <p>An event this service does not act on is simply not matched. That
  * includes {@code UnknownEvent}, which is how a type added by a newer
  * producer arrives here.
+ *
+ * <p>Every handler still checks {@code userId} for null. The type makes the
+ * field required in Java, not in the JSON: a record written by an older
+ * producer during a rolling deploy, or replayed from before this change,
+ * deserializes with a null there. {@code notifications.user_id} is
+ * {@code NOT NULL}, so passing one through would throw out of the listener,
+ * and with no dead-letter topic configured yet the container would retry the
+ * same offset ten times and block the partition. Skipping is the same
+ * behaviour as before; what has changed is that the field is now populated,
+ * so the skip is the exception rather than the rule.
  */
 @Component
 @RequiredArgsConstructor
@@ -50,9 +60,9 @@ public class PlatformEventConsumer {
 
     @KafkaListener(topics = Topics.ACCOUNT_EVENTS, groupId = "notification-service")
     public void onAccountEvent(DomainEvent event) {
-        if (event instanceof AccountCreated e) {
+        if (event instanceof AccountCreated e && e.userId() != null) {
             notificationService.onAccountCreated(e.userId());
-        } else if (event instanceof OverdraftTriggered e) {
+        } else if (event instanceof OverdraftTriggered e && e.userId() != null) {
             // Handled here, on the topic it is actually published to. The
             // overdraft notice used to be looked for on transaction-events,
             // under a different field name, so it had never been sent.
@@ -62,9 +72,9 @@ public class PlatformEventConsumer {
 
     @KafkaListener(topics = Topics.TRANSACTION_EVENTS, groupId = "notification-service")
     public void onTransactionEvent(DomainEvent event) {
-        if (event instanceof TransactionCreated e) {
+        if (event instanceof TransactionCreated e && e.userId() != null) {
             notificationService.onLargeTransaction(e.userId(), e.amount(), e.transactionRef());
-        } else if (event instanceof TransferCompleted e) {
+        } else if (event instanceof TransferCompleted e && e.userId() != null) {
             notificationService.onLargeTransaction(e.userId(), e.amount(), e.transactionRef());
         }
     }
@@ -82,19 +92,19 @@ public class PlatformEventConsumer {
 
     @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "notification-service")
     public void onApplicationEvent(DomainEvent event) {
-        if (event instanceof ApplicationApproved e) {
+        if (event instanceof ApplicationApproved e && e.userId() != null) {
             notificationService.onApplicationApproved(e.userId(), e.productType());
-        } else if (event instanceof ApplicationRejected e) {
+        } else if (event instanceof ApplicationRejected e && e.userId() != null) {
             notificationService.onApplicationRejected(e.userId(), e.productType());
         }
     }
 
     @KafkaListener(topics = Topics.CREDIT_CARD_EVENTS, groupId = "notification-service")
     public void onCreditCardEvent(DomainEvent event) {
-        if (event instanceof CreditCardCreated e) {
+        if (event instanceof CreditCardCreated e && e.userId() != null) {
             // last4, never the card number.
             notificationService.onCreditCardIssued(e.userId(), e.last4());
-        } else if (event instanceof CreditCardStatementGenerated e) {
+        } else if (event instanceof CreditCardStatementGenerated e && e.userId() != null) {
             notificationService.onCreditCardStatementGenerated(e.userId(), e.statementDate());
         }
     }
@@ -107,22 +117,22 @@ public class PlatformEventConsumer {
         // rather than left looking like working features. Adding the
         // delinquency job is a change in its own right, and the notification
         // copy is still in NotificationService waiting for it.
-        if (event instanceof LoanDisbursed e) {
+        if (event instanceof LoanDisbursed e && e.userId() != null) {
             notificationService.onLoanDisbursed(e.userId(), orZero(e.principal()), e.loanId());
-        } else if (event instanceof LoanPaidOff e) {
+        } else if (event instanceof LoanPaidOff e && e.userId() != null) {
             notificationService.onLoanPaidOff(e.userId(), e.loanId());
         }
     }
 
     @KafkaListener(topics = Topics.USER_EVENTS, groupId = "notification-service")
     public void onUserEvent(DomainEvent event) {
-        if (event instanceof UserLifecycleEvents.KycApproved e) {
+        if (event instanceof UserLifecycleEvents.KycApproved e && e.userId() != null) {
             notificationService.onKycApproved(e.userId());
-        } else if (event instanceof UserLifecycleEvents.KycRejected e) {
+        } else if (event instanceof UserLifecycleEvents.KycRejected e && e.userId() != null) {
             notificationService.onKycRejected(e.userId());
-        } else if (event instanceof UserLifecycleEvents.TwoFactorEnabled e) {
+        } else if (event instanceof UserLifecycleEvents.TwoFactorEnabled e && e.userId() != null) {
             notificationService.onTwoFaEnabled(e.userId());
-        } else if (event instanceof UserLifecycleEvents.TwoFactorDisabled e) {
+        } else if (event instanceof UserLifecycleEvents.TwoFactorDisabled e && e.userId() != null) {
             notificationService.onTwoFaDisabled(e.userId());
         }
     }

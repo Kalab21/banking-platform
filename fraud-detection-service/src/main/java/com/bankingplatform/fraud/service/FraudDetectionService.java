@@ -46,8 +46,6 @@ public class FraudDetectionService {
     @Value("${fraud.rules.velocity-max-transactions:5}")
     private int velocityMaxTransactions;
 
-    @Value("${fraud.rules.cc-single-purchase-threshold:5000}")
-    private BigDecimal ccSinglePurchaseThreshold;
 
     @Value("${fraud.rules.failed-payment-threshold:3}")
     private int failedPaymentThreshold;
@@ -84,33 +82,6 @@ public class FraudDetectionService {
         if (score >= alertScoreThreshold) {
             createAlert(accountId, userId, "TRANSACTION_FRAUD", score,
                     desc.toString().trim(), txRef, "TRANSACTION", amount);
-        }
-
-        if (score >= freezeScoreThreshold) {
-            freezeAccount(accountId, score);
-        }
-    }
-
-    public void evaluateCreditCardPurchase(Long accountId, Long userId, BigDecimal amount, String txRef) {
-        int score = 0;
-        StringBuilder desc = new StringBuilder();
-
-        if (amount != null && amount.compareTo(ccSinglePurchaseThreshold) > 0) {
-            score += 35;
-            desc.append("Large CC purchase ($").append(amount).append("). ");
-            saveAudit(accountId, "LARGE_CC_PURCHASE", 35, score, txRef);
-        }
-
-        int velocity = incrementVelocityCounter(accountId);
-        if (velocity > velocityMaxTransactions) {
-            score += 30;
-            desc.append("High velocity: ").append(velocity).append(" transactions in 1 hour. ");
-            saveAudit(accountId, "HIGH_VELOCITY", 30, score, txRef);
-        }
-
-        if (score >= alertScoreThreshold) {
-            createAlert(accountId, userId, "CC_FRAUD", score,
-                    desc.toString().trim(), txRef, "CREDIT_CARD_TRANSACTION", amount);
         }
 
         if (score >= freezeScoreThreshold) {

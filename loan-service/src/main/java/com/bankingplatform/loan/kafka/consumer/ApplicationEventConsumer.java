@@ -38,8 +38,21 @@ public class ApplicationEventConsumer {
 
     @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "loan-service")
     public void onApplicationEvent(DomainEvent event) {
+        // The null check comes first: Set.of(...) is an immutable set, and its
+        // contains() throws NullPointerException on a null argument rather
+        // than returning false. An approval that arrives without a
+        // productType would have become a poison record on this partition.
+        // The credit-card consumer uses CREDIT_CARD.equals(...), which is
+        // null-safe; this is the same behaviour, stated explicitly.
         if (!(event instanceof ApplicationApproved approved)
+                || approved.productType() == null
                 || !LOAN_PRODUCT_TYPES.contains(approved.productType())) {
+            return;
+        }
+
+        if (approved.userId() == null) {
+            log.warn("Ignoring an approved application with no applicant: applicationId={}",
+                    approved.applicationId());
             return;
         }
 
