@@ -1,6 +1,6 @@
 # Testing
 
-834 automated tests run in CI: 552 backend (512 unit and
+842 automated tests run in CI: 560 backend (515 unit and
 web-slice, 30 integration against a real PostgreSQL and an embedded Kafka
 broker), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
@@ -59,8 +59,10 @@ assertion counts, which are larger and less comparable.
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovementIT` — concurrent duplicates, replay, key release | 8 |
 | Integration | Testcontainers, PostgreSQL 16 | `CustomerProfileMigrationIT` — the customer-profile migration | 7 |
+| Integration | Testcontainers, PostgreSQL 16 | `LoanIssuanceIdempotencyIT` — a redelivered approval issues one loan, eight concurrent duplicates issue one loan, distinct events are not collapsed, and the partial unique index refuses a second loan per application | 5 |
 | Integration | Embedded Kafka | `KafkaRecoveryIT` — a transient failure retried then processed once, a poison record bounded and dead-lettered with its context, the partition still moving afterwards, malformed bytes dead-lettered rather than retried into the listener, a wrong-shaped payload keeping its event id, a listener's own consumer group named on the record | 6 |
 | Configuration | JUnit 5, ApplicationContextRunner | `KafkaRecoveryAutoConfiguration` — the error handler and the deserializer guard are really in the context, the module backs off for a service-supplied handler, and a service without Kafka still starts | 4 |
+| Configuration | JUnit 5, ApplicationContextRunner | `ProcessedEventAutoConfiguration` — the idempotency guard is really in the context of a service with a database, stays out of one without, and backs off for a service-supplied guard | 3 |
 | Integration | Embedded Kafka | `KafkaHeaderSafetyIT` — the raw header mapper is the one on the listener factory, a producer naming a Java type in `spring_json_header_types` gets no such object, and ordinary events, correlation headers, dead-lettering and malformed-payload handling are unaffected | 9 |
 | Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment | 213 |
 | Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 213 above) | 23 |
@@ -73,7 +75,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 512 unit + 40 integration = 552
+mvn -B --no-transfer-progress clean verify   # backend: 515 unit + 45 integration = 560
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```

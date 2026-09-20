@@ -6,6 +6,7 @@ import com.bankingplatform.common.events.ApplicationRejected;
 import com.bankingplatform.common.events.CreditCardCreated;
 import com.bankingplatform.common.events.CreditCardStatementGenerated;
 import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.common.events.LoanDisbursed;
 import com.bankingplatform.common.events.LoanPaidOff;
 import com.bankingplatform.common.events.OverdraftTriggered;
@@ -49,6 +50,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DisplayName("Notification event contracts")
 class EventContractConsumptionTest {
 
+    /**
+     * Every delivery is the first one, so these keep testing the contract
+     * rather than the de-duplication. Redelivery has its own tests.
+     */
+    private static final ProcessedEventGuard FIRST_DELIVERY = (consumer, eventId) -> true;
+
+
     private ObjectMapper mapper;
     private NotificationService notificationService;
     private PlatformEventConsumer consumer;
@@ -59,7 +67,7 @@ class EventContractConsumptionTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         notificationService = Mockito.mock(NotificationService.class);
-        consumer = new PlatformEventConsumer(notificationService);
+        consumer = new PlatformEventConsumer(FIRST_DELIVERY, notificationService);
     }
 
     /** Exactly what Kafka would hand the listener: bytes in, DomainEvent out. */

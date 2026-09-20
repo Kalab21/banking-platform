@@ -285,6 +285,86 @@ inspectable, not automatically replayed; deciding what to do with it is an
 operator's job, and replaying safely needs the consumer idempotency that is
 still outstanding.
 
+## Surviving redelivery
+
+Kafka is at-least-once, and the retry described above makes redelivery
+ordinary rather than exceptional. A consumer can commit its database work and
+die before the offset commit reaches the broker; the next poll hands it the
+same record again.
+
+Every handler with a durable effect claims the event id before doing anything,
+in the same transaction as the work:
+
+```sql
+INSERT INTO processed_event (consumer_name, event_id, processed_at)
+VALUES (?, ?, ?)
+ON CONFLICT (consumer_name, event_id) DO NOTHING
+```
+
+A single insert against a composite primary key, not a read-then-write. "Have
+I seen this? no, record it" is two statements with a gap between them, and two
+concurrent deliveries both read "no" before either writes. Only the database
+can decide this once, so the decision is a unique constraint; the losing insert
+affects no rows, and under concurrency it blocks until the first transaction
+resolves.
+
+The guard uses `Propagation.MANDATORY`. In a transaction of its own the claim
+would commit while the work was still uncommitted, and a crash in between would
+leave the event marked processed and the work undone — worse than the duplicate
+it prevents, because nothing would retry it.
+
+`consumer_name` is the handler, not the service. `notification-service` and
+`statistics-service` each run several handlers over the same topics, and each
+has to act on an event exactly once.
+
+### Defence in depth for product issuance
+
+Two consumers create a financial product from `APPLICATION_APPROVED`, so a
+redelivery there means a second loan or a second card. Those also carry a
+partial unique index on `application_id`, so the state cannot exist even if a
+duplicate arrives by a route that misses the guard — a manual replay from a
+dead letter topic, or a future consumer that forgets it. Partial because
+`application_id` is nullable for products created by other routes.
+
+`LoanIssuanceIdempotencyIT` proves both against real PostgreSQL, including
+eight threads released together on the same event.
+
+### PostgreSQL, deliberately
+
+`ON CONFLICT DO NOTHING` is not portable SQL, and neither is the `ctid`-bounded
+delete the pruner uses. The portable alternative — insert, catch the duplicate
+key — marks the caller's transaction rollback-only on what is here the
+*ordinary* path, taking the business work down with the duplicate. Every
+service on this platform runs PostgreSQL. A service that did not would supply
+its own `ProcessedEventGuard`, and `ProcessedEventAutoConfiguration` backs off
+for one.
+
+### Retention
+
+The claim table grows with every event a service consumes, and the claim is an
+insert against its primary key on the hot path of every consumer, so an
+unpruned table makes that index deeper forever. `ProcessedEventRetention`
+deletes expired claims nightly, in bounded batches so no single statement holds
+a long lock beside live inserts.
+
+**A claim may only be dropped once the broker can no longer deliver the event
+it guards.** Prune faster than topic retention and a record still sitting in
+Kafka finds no claim on replay and is processed twice — the exact duplicate
+this mechanism exists to prevent, reintroduced by the cleanup for it. So the
+period is floored at seven days and a shorter setting fails at startup rather
+than being quietly honoured.
+
+| Property | Default | Meaning |
+|---|---|---|
+| `kafka.inbox.retention.enabled` | `true` | whether expired claims are pruned at all |
+| `kafka.inbox.retention.period` | `30d` | how long a claim is kept; below 7d is refused |
+| `kafka.inbox.retention.batch-size` | `1000` | rows per delete statement |
+| `kafka.inbox.retention.cron` | `0 30 3 * * *` | when the prune runs |
+
+The auto-configuration carries its own `@EnableScheduling`: three of the six
+consuming services declare none, and a `@Scheduled` method in a context without
+it is never called and never complains.
+
 ## What this does not solve
 
 Publishing is still best-effort. A producer catches the exception from
@@ -294,12 +374,17 @@ transaction can commit and the event never reach the broker. Making that
 reliable needs the domain write and the publication to commit together — a
 transactional outbox — which is separate work.
 
-Consumers are not idempotent. `APPLICATION_APPROVED` causes `loan-service` and
-`credit-card-service` to create a financial product, so a redelivery would
-issue a second loan or a second card. `eventId` is the identity that makes
-de-duplication possible; using it is separate work.
+Consumers are idempotent. Every handler with a durable effect claims the event
+id in the same transaction as its work — see "Surviving redelivery" above.
 
 Listeners no longer swallow exceptions, and bounded retry with a dead-letter
-topic now stands behind them — see "When processing fails" above. What remains
-is that a retry re-delivers the record, so a consumer whose side effect is not
-idempotent can apply it twice.
+topic now stands behind them — see "When processing fails" above.
+
+What the guard does not cover is any effect outside the database transaction it
+lives in. A Redis counter, an outbound HTTP call or a published event is not
+rolled back with the claim, so a handler with one of those has to make it
+idempotent itself — `fraud-detection-service` claims its velocity counter per
+event for exactly this reason. Nor does the guard make a *business* fact
+unique: it keys on the publication, so two genuine publications of one approval
+are two events. The unique index on `application_id` is what stops a second
+product existing.

@@ -4,6 +4,7 @@ import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.events.ApplicationRejected;
 import com.bankingplatform.common.events.ApplicationSubmitted;
 import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.model.LoanType;
 import com.bankingplatform.loan.service.LoanService;
@@ -19,6 +20,7 @@ import org.mockito.Mockito;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -33,6 +35,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DisplayName("Loan issuance event contract")
 class ApplicationEventContractTest {
 
+    /**
+     * Every delivery is the first one, so these keep testing the contract
+     * rather than the de-duplication. Redelivery has its own tests.
+     */
+    private static final ProcessedEventGuard FIRST_DELIVERY = (consumer, eventId) -> true;
+
+
     private ObjectMapper mapper;
     private LoanService loanService;
     private ApplicationEventConsumer consumer;
@@ -43,7 +52,7 @@ class ApplicationEventContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         loanService = Mockito.mock(LoanService.class);
-        consumer = new ApplicationEventConsumer(loanService);
+        consumer = new ApplicationEventConsumer(loanService, FIRST_DELIVERY);
     }
 
     private DomainEvent overTheWire(DomainEvent published) throws Exception {
@@ -103,13 +112,21 @@ class ApplicationEventContractTest {
     }
 
     @Test
-    @DisplayName("an approval with no applicant issues nothing")
-    void nullUserIgnored() throws Exception {
-        consumer.onApplicationEvent(mapper.readValue("""
+    @DisplayName("an approval with no applicant is dead-lettered, not dropped")
+    void nullUserIsDeadLettered() throws Exception {
+        DomainEvent noApplicant = mapper.readValue("""
                 {"eventId":"abc","eventType":"APPLICATION_APPROVED","eventVersion":1,
                  "occurredAt":"2026-01-01T00:00:00Z","applicationId":7,
                  "productType":"PERSONAL_LOAN","requestedAmount":10000}
-                """, DomainEvent.class));
+                """, DomainEvent.class);
+
+        // Throwing rather than logging: an approved application that cannot be
+        // issued must not vanish. The exception carries it to the dead letter
+        // topic, where it is kept and can be looked at. Committing the offset
+        // would lose a real application silently.
+        assertThatThrownBy(() -> consumer.onApplicationEvent(noApplicant))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("names no applicant");
 
         verifyNoInteractions(loanService);
     }

@@ -3,13 +3,16 @@ package com.bankingplatform.creditcard.kafka.consumer;
 import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.Topics;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.creditcard.dto.request.CreateCreditCardRequest;
 import com.bankingplatform.creditcard.model.CardType;
 import com.bankingplatform.creditcard.service.CreditCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
@@ -19,9 +22,12 @@ import java.math.BigDecimal;
  * <p>Reads the shared {@link ApplicationApproved} type rather than a map.
  *
  * <p>This handler creates a financial product, so a redelivery of the same
- * event would issue a second card. {@link DomainEvent#eventId()} is the
- * identity that makes de-duplication possible; using it is a separate change
- * and this consumer is not yet idempotent.
+ * event would issue a second card. It claims the event id in the same
+ * transaction that issues the card: both happen or neither does.
+ *
+ * <p>A partial unique index on {@code credit_cards.application_id} backs that
+ * up, so one approved application cannot produce two cards even if a
+ * duplicate arrives by a route that misses this guard.
  */
 @Component
 @RequiredArgsConstructor
@@ -30,12 +36,34 @@ public class ApplicationEventConsumer {
 
     private static final String CREDIT_CARD = "CREDIT_CARD";
 
+    /** Identifies this handler in the processed-event table. */
+    private static final String CONSUMER = "credit-card-service:application-approved";
+
     private final CreditCardService creditCardService;
+    private final ProcessedEventGuard processedEvents;
 
     @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "credit-card-service")
+    @Transactional
     public void onApplicationEvent(DomainEvent event) {
         if (!(event instanceof ApplicationApproved approved)
                 || !CREDIT_CARD.equals(approved.productType())) {
+            return;
+        }
+
+        if (approved.userId() == null) {
+            // Not swallowed. An approved application with no applicant cannot
+            // be issued and should not vanish: throwing sends it to the dead
+            // letter topic, where it is kept and can be inspected. Logging and
+            // committing the offset would lose a real application silently.
+            throw new IllegalArgumentException(
+                    "Approved application " + approved.applicationId() + " names no applicant");
+        }
+
+        // Claimed in the same transaction as the card it issues, so a
+        // redelivery cannot produce a second card.
+        if (!processedEvents.claim(CONSUMER, approved.eventId())) {
+            log.info("Already issued a card for event {} (applicationId={}); ignoring redelivery",
+                    approved.eventId(), approved.applicationId());
             return;
         }
 
@@ -48,7 +76,18 @@ public class ApplicationEventConsumer {
         request.setCreditLimit(resolveCreditLimit(creditScore));
         request.setApr(resolveApr(creditScore));
 
-        creditCardService.createCard(request);
+        try {
+            creditCardService.createCard(request);
+        } catch (DataIntegrityViolationException alreadyIssued) {
+            // ux_credit_cards_application_id refused it, so the product already exists for this
+            // application. A republished or re-approved application is a
+            // normal business case, not a poison record: without this it
+            // would retry four times and dead-letter, for a state that is
+            // already correct.
+            log.info("A card already exists for application {}; treating event {} as already handled",
+                    approved.applicationId(), approved.eventId());
+            return;
+        }
         log.info("Created credit card for userId={}, applicationId={}",
                 approved.userId(), approved.applicationId());
     }

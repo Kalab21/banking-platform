@@ -3,11 +3,13 @@ package com.bankingplatform.user.kafka.consumer;
 import com.bankingplatform.common.events.CreditCardTransactionCompleted;
 import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.Topics;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.user.service.CreditScoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Raises a credit score when a card is paid down.
@@ -18,6 +20,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>The reward had never been given: the card event carried no
  * {@code userId} and this returned as soon as it read null.
+ *
+ * <p>The event id is claimed in the same transaction as the score change, so
+ * a redelivery does not move a customer's credit score twice.
  */
 @Component
 @RequiredArgsConstructor
@@ -25,9 +30,21 @@ import org.springframework.stereotype.Component;
 public class CreditCardEventConsumer {
 
     private final CreditScoreService creditScoreService;
+    private final ProcessedEventGuard processedEvents;
 
     @KafkaListener(topics = Topics.CREDIT_CARD_EVENTS, groupId = "user-service")
+    @Transactional
     public void consume(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof CreditCardTransactionCompleted)) {
+            return;
+        }
+        if (!processedEvents.claim("user-service:credit-card-score", event.eventId())) {
+            return;
+        }
         if (event instanceof CreditCardTransactionCompleted e
                 && "PAYMENT".equals(e.transactionType())
                 && e.userId() != null) {

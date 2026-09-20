@@ -3,13 +3,16 @@ package com.bankingplatform.loan.kafka.consumer;
 import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.Topics;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.model.LoanType;
 import com.bankingplatform.loan.service.LoanService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Set;
@@ -24,9 +27,13 @@ import java.util.Set;
  * and notification-service read the other.
  *
  * <p>This handler issues a financial product, so a redelivery of the same
- * event would issue a second loan. {@link DomainEvent#eventId()} is the
- * identity that makes de-duplication possible; using it is a separate change
- * and this consumer is not yet idempotent.
+ * event would issue a second loan. It claims the event id in the same
+ * transaction that creates the loan: both happen or neither does, and a
+ * second delivery finds the claim taken and does nothing.
+ *
+ * <p>A partial unique index on {@code loans.application_id} backs that up, so
+ * two loans for one approved application cannot exist even if a duplicate
+ * arrives by some route that misses this guard.
  */
 @Component
 @RequiredArgsConstructor
@@ -34,9 +41,14 @@ import java.util.Set;
 public class ApplicationEventConsumer {
 
     private static final Set<String> LOAN_PRODUCT_TYPES = Set.of("PERSONAL_LOAN", "AUTO_LOAN", "MORTGAGE");
+    /** Identifies this handler in the processed-event table. */
+    private static final String CONSUMER = "loan-service:application-approved";
+
     private final LoanService loanService;
+    private final ProcessedEventGuard processedEvents;
 
     @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "loan-service")
+    @Transactional
     public void onApplicationEvent(DomainEvent event) {
         // The null check comes first: Set.of(...) is an immutable set, and its
         // contains() throws NullPointerException on a null argument rather
@@ -51,8 +63,20 @@ public class ApplicationEventConsumer {
         }
 
         if (approved.userId() == null) {
-            log.warn("Ignoring an approved application with no applicant: applicationId={}",
-                    approved.applicationId());
+            // Not swallowed. An approved application with no applicant cannot
+            // be issued and should not vanish: throwing sends it to the dead
+            // letter topic, where it is kept and can be inspected. Logging and
+            // committing the offset would lose a real application silently.
+            throw new IllegalArgumentException(
+                    "Approved application " + approved.applicationId() + " names no applicant");
+        }
+
+        // Claimed in the same transaction as the loan it creates. Kafka is
+        // at-least-once and this service now retries, so a redelivery is
+        // ordinary — and this handler's side effect is issuing a loan.
+        if (!processedEvents.claim(CONSUMER, approved.eventId())) {
+            log.info("Already issued a loan for event {} (applicationId={}); ignoring redelivery",
+                    approved.eventId(), approved.applicationId());
             return;
         }
 
@@ -66,7 +90,18 @@ public class ApplicationEventConsumer {
         request.setInterestRate(resolveRate(approved.productType(), approved.creditScore()));
         request.setTermMonths(resolveTermMonths(approved.productType()));
 
-        loanService.createLoan(request);
+        try {
+            loanService.createLoan(request);
+        } catch (DataIntegrityViolationException alreadyIssued) {
+            // ux_loans_application_id refused it, so the product already exists for this
+            // application. A republished or re-approved application is a
+            // normal business case, not a poison record: without this it
+            // would retry four times and dead-letter, for a state that is
+            // already correct.
+            log.info("A loan already exists for application {}; treating event {} as already handled",
+                    approved.applicationId(), approved.eventId());
+            return;
+        }
         log.info("Created loan for userId={}, applicationId={}, type={}",
                 approved.userId(), approved.applicationId(), approved.productType());
     }
