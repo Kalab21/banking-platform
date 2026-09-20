@@ -174,6 +174,117 @@ So consumers still check. The check is no longer the normal path — the field
 is populated now — but it is the difference between skipping one odd record
 and stalling a partition.
 
+## When processing fails
+
+A record that a consumer cannot process is retried, and then kept.
+
+Four deliveries by default, spaced by exponential backoff, and then the record
+is published to `<topic>.DLT` and the offset commits so the partition moves on.
+The policy lives in `common-kafka` as an auto-configuration rather than in each
+service, because six services consume these topics and the answer to "how many
+times, how long, and then where" should not be able to differ between them.
+`kafka.recovery.*` makes the numbers configurable.
+
+Both halves of that were missing. Listeners used to catch their own exceptions
+and return normally, which tells the container the record succeeded. With that
+removed, the container's default applied instead: ten immediate attempts and
+then commit the offset anyway — a tight loop that cannot outlast the outage it
+is retrying, followed by silent loss.
+
+### The deserializer has to be wrapped
+
+Deserialization happens *before* the listener runs, so a payload that cannot be
+read never reaches the error handler. Unwrapped, the container retries the same
+offset forever: one malformed record stops that partition permanently while the
+service still reports itself healthy.
+
+Every consuming service therefore sets
+`value-deserializer: ErrorHandlingDeserializer` with the JSON one as
+`spring.deserializer.value.delegate.class`. A failure then arrives as a record
+the error handler can route. It is not retried — it cannot succeed — so it goes
+straight to the dead letter topic.
+
+A start-up check logs an error if a service consumes without the wrapper. It is
+a one-line mistake with a disproportionate consequence and nothing a normal
+test would catch.
+
+### Headers are transport metadata
+
+A record's payload and its headers are two trust boundaries, and Spring maps
+them separately. The payload contract above — type headers off, routing on
+`eventType`, trusted packages narrowed — constrains none of the header
+handling.
+
+Left at the framework default, an inbound record can carry a
+`spring_json_header_types` header naming a Java class and the mapper
+constructs it while building the message for the listener, from bytes the
+producer chose. `SimpleKafkaHeaderMapper` is installed platform-wide instead:
+headers arrive as raw bytes, no type name is honoured, and no object is built
+from a producer-supplied header.
+
+Northbank has no use for typed header objects. What travels in a header here
+is a correlation id, trace context, event identity and dead-letter metadata —
+strings and bytes.
+
+`KafkaHeaderSafetyIT` asserts this against the effective listener
+configuration rather than against the mapper in isolation, including that
+ordinary events, correlation headers, dead-lettering and malformed-payload
+handling all still behave.
+
+### What a dead-lettered record carries
+
+| Header | From |
+|---|---|
+| `kafka_dlt-original-topic`, `-partition`, `-offset`, `-timestamp` | Spring |
+| `kafka_dlt-exception-fqcn`, `-exception-cause-fqcn`, `-exception-message`, `-exception-stacktrace` | Spring |
+| `x-dlt-consumer-group` | added here |
+| `x-dlt-event-id`, `x-dlt-event-type` | added here |
+| `x-dlt-attempts` | added here |
+
+The consumer group matters more than it looks. Five services consume
+`transaction-events` and all of them dead-letter to `transaction-events.DLT`,
+so without the group a record there says something failed but not who failed to
+handle it — and replaying it to everyone would repeat the four side effects
+that did succeed.
+
+The event id is read from the payload, and from the raw bytes carried on the
+exception when deserialization is what failed. That is precisely the record
+that is otherwise hardest to identify.
+
+`x-dlt-attempts` is what actually happened, not what the policy allows. The
+recoverer is reached by two routes and they differ: a retryable failure arrives
+having exhausted every attempt, while a fatal one — a payload that cannot be
+deserialized — is recovered after a single delivery without being retried at
+all. Reporting the configured maximum for both would tell an operator that an
+unreadable record was retried for several seconds against a dependency when the
+listener was never invoked once.
+
+The consumer group is read from the container that failed rather than from the
+service-wide property, because `@KafkaListener` can set a group of its own.
+
+**What the payload is.** For a deserialization failure it is the original bytes,
+byte for byte. For a listener failure it is a re-serialization of the
+deserialized event — which is the same thing for a known type, and for an
+unrecognised one is whatever `UnknownEvent` retained. `UnknownEvent` therefore
+keeps every field it does not declare, so a dead-lettered event from a newer
+producer still carries what it said rather than four envelope fields.
+
+The exception detail and the payload sit side by side on the dead letter topic.
+That is safe here because the events carry no account number, card number,
+password or token — a contract test in `common-events` asserts it — so there is
+nothing in a payload that should not also be in a log.
+
+Dead letter topics are created on demand: the broker has
+`KAFKA_AUTO_CREATE_TOPICS_ENABLE=true`. A deployment that turned that off would
+need them declared.
+
+### What this does not give you
+
+Nothing consumes the dead letter topics. A record there is retained and
+inspectable, not automatically replayed; deciding what to do with it is an
+operator's job, and replaying safely needs the consumer idempotency that is
+still outstanding.
+
 ## What this does not solve
 
 Publishing is still best-effort. A producer catches the exception from
@@ -188,6 +299,7 @@ Consumers are not idempotent. `APPLICATION_APPROVED` causes `loan-service` and
 issue a second loan or a second card. `eventId` is the identity that makes
 de-duplication possible; using it is separate work.
 
-Listeners no longer swallow exceptions, which is a prerequisite rather than a
-solution: a failure now reaches the container instead of being committed as a
-success, but bounded retry and a dead-letter topic are not yet configured.
+Listeners no longer swallow exceptions, and bounded retry with a dead-letter
+topic now stands behind them — see "When processing fails" above. What remains
+is that a retry re-delivers the record, so a consumer whose side effect is not
+idempotent can apply it twice.

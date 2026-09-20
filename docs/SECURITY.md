@@ -178,6 +178,7 @@ developing rather than by default.
 | Second-factor management | Enrolling, confirming and removing an authenticator are self-only — `AccessGuard.requireSelf`, not owner-or-staff. No role can take another account's second factor off |
 | Outward transfer rails | A wire, ACH or SWIFT transfer may only be initiated from an account the caller owns, resolved from `account-service` rather than read from the request. Staff are not exempt |
 | What travels on Kafka | Events carry identifiers and, where a message names something to a customer, a masked form. Never a full account number, PAN, SSN, password, token or TOTP secret. `ACCOUNT_CREATED` used to carry the full account number for no consumer; a contract test now asserts no event declares such a field |
+| Kafka headers | Mapped as raw bytes by `SimpleKafkaHeaderMapper`, so no Java type named by a producer is ever constructed. Header mapping is a separate trust boundary from payload deserialization, and the framework default reconstructs types from a `spring_json_header_types` header the producer controls |
 | Kafka deserialization | Type headers are off, and every service's trusted-package list is `com.bankingplatform.common.events` — the contract package alone. It was `*` in four services and `com.bankingplatform.*` in four more. A record names its type in an `eventType` field rather than a Java class the consumer would instantiate |
 | Management endpoints | `health`, `info` and `prometheus` only, on every service including the gateway, whose actuator is the one reachable without a token |
 | Error hygiene | Denials expose no resource detail; the catch-all logs server-side and returns a generic message |
@@ -240,24 +241,106 @@ no screen reports an identity as verified. Passing a format check is not
 verification, and saying otherwise would be the product making a claim about
 itself that is not true.
 
+## Dependency advisories
+
+The scanner reports advisories against the packages this platform depends on.
+A package containing vulnerable code is not the same as an exploitable path
+through this codebase, and neither fact excuses the other, so each is audited
+for reachability and recorded with the evidence.
+
+None of the entries below are claimed to be patched. The affected versions are
+still what this platform runs, and the fixes are in release trains that need a
+coordinated Spring Boot, Spring Framework and Spring Cloud upgrade — recorded
+at the end as deferred platform maintenance.
+
+### CVE-2026-41731 — spring-kafka — high — MITIGATED IN CONFIGURATION
+
+**What it is.** Arbitrary code execution through insecure deserialization of
+crafted Kafka header values.
+
+**Reachability.** Reachable before this change. Spring maps Kafka headers
+separately from the payload, so the payload hardening — type headers off,
+routing on an `eventType` field, trusted packages narrowed to the contract
+package — constrained none of it. With no header mapper configured, the
+framework default reads a `spring_json_header_types` header naming a Java
+class and constructs it while building the message for the listener. A
+producer controls those bytes.
+
+**Control.** `SimpleKafkaHeaderMapper`, installed platform-wide through the
+`RecordMessageConverter` bean that Spring Boot hands to every listener
+container factory. Headers arrive as raw bytes; no type name is honoured and
+no object is constructed from a producer-supplied header. The capability is
+removed rather than policed — an allowlist would still perform reflective
+construction and would still depend on the framework parsing the header
+correctly, which is the thing the advisory says it does not.
+
+Northbank needs no typed header objects. The headers that matter are a
+correlation id, trace context, event identity and dead-letter metadata, all
+strings or bytes.
+
+**Evidence.** `KafkaHeaderSafetyIT` asserts the effective listener
+configuration: that the converter Boot hands the factory carries the raw
+mapper, that a record naming `java.net.URL`, `java.util.Date` or
+`java.math.BigDecimal` in `spring_json_header_types` produces no such object,
+that ordinary events and correlation headers still arrive, and that
+dead-lettering and payload-deserialization failure handling are unaffected.
+
+**Residual risk.** The package is still the affected version. A different
+reachable path through header handling in the same library would not be
+covered by this control.
+
+### CVE-2026-41726 — spring-kafka — medium — NOT REACHABLE, FEATURE NOT USED
+
+Denial of service through unbounded heap growth in `DelegatingDeserializer`.
+
+Northbank does not use it. No `DelegatingDeserializer`, no
+`spring.kafka.serialization.selector` configuration and no selector-header
+handling exists anywhere in the repository. Every consumer uses
+`ErrorHandlingDeserializer` delegating to `JsonDeserializer`, declared
+explicitly in each service's configuration.
+
+No code was written to work around a feature this platform does not use.
+
+### CVE-2026-41727 — spring-kafka — medium — NOT REACHABLE, FEATURE NOT USED
+
+Retry-sequence manipulation through improper validation of retry-topic header
+values.
+
+Northbank does not use retry topics. There is no `@RetryableTopic`, no
+`RetryTopicConfiguration` and no retry-topic infrastructure. Recovery is a
+`DefaultErrorHandler` with bounded backoff and a
+`DeadLetterPublishingRecoverer`, which is a deliberate design choice and not a
+workaround: it keeps in-order retry semantics rather than re-queueing through
+side topics.
+
+### CVE-2026-41001 — spring-boot — medium — NOT REACHABLE, FEATURE NOT USED
+
+A local attacker can manipulate an embedded Artemis data directory through a
+predictable path.
+
+Northbank does not use Artemis. It is not on the dependency tree, there is no
+`spring-boot-starter-artemis`, and no ActiveMQ or Artemis configuration exists.
+The finding is attributed to `spring-boot-autoconfigure`, which is present for
+every other reason a Spring Boot application needs it.
+
+### Deferred: platform modernization
+
+The fixes for the advisories above are in `spring-kafka` 3.3.16 / 4.0.6 and
+Spring Boot 3.5.15 / 4.0.7. This platform runs Spring Boot 3.3.6 with Spring
+Cloud 2023.0.3, and those Kafka versions target a later Spring Framework
+generation — so this is a coordinated release-train upgrade across Boot,
+Framework, Cloud and Data, not a single dependency bump. Overriding one
+component into an unsupported combination to quiet a scanner would be a worse
+outcome than the finding.
+
+It is tracked as its own piece of work, to be done against a full repository
+test gate rather than folded into a feature change.
+
 ## Next hardening candidates
 
 Recorded rather than implemented. Each is a separate decision.
 
-### 1. No Kafka dead-letter handling — medium
-
-**Evidence.** No `DefaultErrorHandler`, `RetryTopic` or dead-letter configuration
-anywhere in the codebase. A poison message hits Spring Kafka's default
-retry-then-log behaviour and the event is dropped silently.
-
-**Impact.** Statistics, notifications and fraud scoring consume these topics. A
-dropped `transaction-events` message means fraud scoring never sees a transaction,
-with nothing to indicate it was missed.
-
-**Smallest safe fix.** A `DefaultErrorHandler` with a `DeadLetterPublishingRecoverer`
-per consumer factory, plus a dead-letter topic per consumer group.
-
-### 2. No per-account login throttling — medium
+### 1. No per-account login throttling — medium
 
 **Current policy.** `RegisterRequest` requires at least 8 characters with an
 uppercase letter, a lowercase letter and a number (`@Size(min = 8, max = 100)`
@@ -273,7 +356,7 @@ one account.
 **Smallest safe fix.** Per-account attempt throttling with a backoff, and a
 check against a known-breached password list at registration.
 
-### 3. Two-factor is opt-in — low
+### 2. Two-factor is opt-in — low
 
 **Evidence.** `User.twoFactorEnabled` defaults to false; the gate at
 `UserServiceImpl` applies only when the flag is set.

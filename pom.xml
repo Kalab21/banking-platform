@@ -22,6 +22,7 @@
         <module>common-observability</module>
         <module>common-security</module>
         <module>common-events</module>
+        <module>common-kafka</module>
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>user-service</module>
