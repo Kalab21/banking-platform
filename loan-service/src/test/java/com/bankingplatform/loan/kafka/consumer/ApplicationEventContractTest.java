@@ -4,6 +4,7 @@ import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.events.ApplicationRejected;
 import com.bankingplatform.common.events.ApplicationSubmitted;
 import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.model.LoanType;
 import com.bankingplatform.loan.service.LoanService;
@@ -33,6 +34,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DisplayName("Loan issuance event contract")
 class ApplicationEventContractTest {
 
+    /**
+     * Every delivery is the first one, so these keep testing the contract
+     * rather than the de-duplication. Redelivery has its own tests.
+     */
+    private static final ProcessedEventGuard FIRST_DELIVERY = (consumer, eventId) -> true;
+
+
     private ObjectMapper mapper;
     private LoanService loanService;
     private ApplicationEventConsumer consumer;
@@ -43,7 +51,7 @@ class ApplicationEventContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         loanService = Mockito.mock(LoanService.class);
-        consumer = new ApplicationEventConsumer(loanService);
+        consumer = new ApplicationEventConsumer(loanService, FIRST_DELIVERY);
     }
 
     private DomainEvent overTheWire(DomainEvent published) throws Exception {

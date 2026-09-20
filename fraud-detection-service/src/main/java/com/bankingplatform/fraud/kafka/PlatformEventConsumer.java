@@ -3,6 +3,7 @@ package com.bankingplatform.fraud.kafka;
 import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.PaymentFailed;
 import com.bankingplatform.common.events.Topics;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.common.events.TransactionCreated;
 import com.bankingplatform.common.events.TransferCompleted;
 import com.bankingplatform.fraud.service.FraudDetectionService;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Feeds the fraud rules from the event stream.
@@ -32,16 +34,26 @@ import org.springframework.stereotype.Component;
  * and needs a decision about what freezing a card means, which is a change to
  * the fraud model rather than to an event contract. Removed rather than left
  * looking like a working control; recorded in {@code docs/EVENTS.md}.
+ *
+ * <p>Every handler claims the event id in the same transaction as its effect,
+ * so a redelivery — which retry now makes ordinary — does the work once. The
+ * claim is per handler rather than per service, because several handlers here
+ * consume the same topic and each has to act on an event exactly once.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PlatformEventConsumer {
 
+    private final ProcessedEventGuard processedEvents;
     private final FraudDetectionService fraudService;
 
     @KafkaListener(topics = Topics.TRANSACTION_EVENTS, groupId = "fraud-detection-service")
+    @Transactional
     public void onTransactionEvent(DomainEvent event) {
+        if (!processedEvents.claim("fraud-detection-service:transaction", event.eventId())) {
+            return;
+        }
         // The account is still checked for null. The type makes the field
         // required in Java, not in the JSON: a record written by an older
         // producer during a rolling deploy deserializes with a null there.
@@ -59,7 +71,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.PAYMENT_EVENTS, groupId = "fraud-detection-service")
+    @Transactional
     public void onPaymentEvent(DomainEvent event) {
+        if (!processedEvents.claim("fraud-detection-service:payment", event.eventId())) {
+            return;
+        }
         if (event instanceof PaymentFailed e && e.payerAccountId() != null) {
             fraudService.evaluateFailedPayment(e.payerAccountId(), e.userId());
         }

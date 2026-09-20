@@ -2,6 +2,7 @@ package com.bankingplatform.fraud.kafka;
 
 import com.bankingplatform.common.events.CreditCardTransactionCompleted;
 import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.common.events.PaymentCompleted;
 import com.bankingplatform.common.events.PaymentFailed;
 import com.bankingplatform.common.events.TransactionCreated;
@@ -31,6 +32,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DisplayName("Fraud event contracts")
 class EventContractConsumptionTest {
 
+    /**
+     * Every delivery is the first one, so these keep testing the contract
+     * rather than the de-duplication. Redelivery has its own tests.
+     */
+    private static final ProcessedEventGuard FIRST_DELIVERY = (consumer, eventId) -> true;
+
+
     private ObjectMapper mapper;
     private FraudDetectionService fraudService;
     private PlatformEventConsumer consumer;
@@ -41,7 +49,7 @@ class EventContractConsumptionTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         fraudService = Mockito.mock(FraudDetectionService.class);
-        consumer = new PlatformEventConsumer(fraudService);
+        consumer = new PlatformEventConsumer(FIRST_DELIVERY, fraudService);
     }
 
     private DomainEvent overTheWire(DomainEvent published) throws Exception {

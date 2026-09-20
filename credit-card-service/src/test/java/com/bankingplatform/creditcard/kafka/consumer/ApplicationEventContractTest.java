@@ -3,6 +3,7 @@ package com.bankingplatform.creditcard.kafka.consumer;
 import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.events.ApplicationRejected;
 import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.creditcard.dto.request.CreateCreditCardRequest;
 import com.bankingplatform.creditcard.model.CardType;
 import com.bankingplatform.creditcard.service.CreditCardService;
@@ -30,6 +31,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @DisplayName("Card issuance event contract")
 class ApplicationEventContractTest {
 
+    /**
+     * Every delivery is the first one, so these keep testing the contract
+     * rather than the de-duplication. Redelivery has its own tests.
+     */
+    private static final ProcessedEventGuard FIRST_DELIVERY = (consumer, eventId) -> true;
+
+
     private ObjectMapper mapper;
     private CreditCardService creditCardService;
     private ApplicationEventConsumer consumer;
@@ -40,7 +48,7 @@ class ApplicationEventContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         creditCardService = Mockito.mock(CreditCardService.class);
-        consumer = new ApplicationEventConsumer(creditCardService);
+        consumer = new ApplicationEventConsumer(creditCardService, FIRST_DELIVERY);
     }
 
     private DomainEvent overTheWire(DomainEvent published) throws Exception {

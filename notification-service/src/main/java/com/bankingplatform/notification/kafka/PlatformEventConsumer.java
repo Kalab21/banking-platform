@@ -12,6 +12,7 @@ import com.bankingplatform.common.events.OverdraftTriggered;
 import com.bankingplatform.common.events.PaymentCompleted;
 import com.bankingplatform.common.events.PaymentFailed;
 import com.bankingplatform.common.events.Topics;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.common.events.TransactionCreated;
 import com.bankingplatform.common.events.TransferCompleted;
 import com.bankingplatform.common.events.UserLifecycleEvents;
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
@@ -50,16 +52,26 @@ import java.math.BigDecimal;
  * same offset ten times and block the partition. Skipping is the same
  * behaviour as before; what has changed is that the field is now populated,
  * so the skip is the exception rather than the rule.
+ *
+ * <p>Every handler claims the event id in the same transaction as its effect,
+ * so a redelivery — which retry now makes ordinary — does the work once. The
+ * claim is per handler rather than per service, because several handlers here
+ * consume the same topic and each has to act on an event exactly once.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PlatformEventConsumer {
 
+    private final ProcessedEventGuard processedEvents;
     private final NotificationService notificationService;
 
     @KafkaListener(topics = Topics.ACCOUNT_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onAccountEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:account", event.eventId())) {
+            return;
+        }
         if (event instanceof AccountCreated e && e.userId() != null) {
             notificationService.onAccountCreated(e.userId());
         } else if (event instanceof OverdraftTriggered e && e.userId() != null) {
@@ -71,7 +83,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.TRANSACTION_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onTransactionEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:transaction", event.eventId())) {
+            return;
+        }
         if (event instanceof TransactionCreated e && e.userId() != null) {
             notificationService.onLargeTransaction(e.userId(), e.amount(), e.transactionRef());
         } else if (event instanceof TransferCompleted e && e.userId() != null) {
@@ -80,7 +96,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.PAYMENT_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onPaymentEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:payment", event.eventId())) {
+            return;
+        }
         // A null owner means account-service could not be asked who owns the
         // paying account; the notification is skipped rather than guessed.
         if (event instanceof PaymentCompleted e && e.userId() != null) {
@@ -91,7 +111,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onApplicationEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:application", event.eventId())) {
+            return;
+        }
         if (event instanceof ApplicationApproved e && e.userId() != null) {
             notificationService.onApplicationApproved(e.userId(), e.productType());
         } else if (event instanceof ApplicationRejected e && e.userId() != null) {
@@ -100,7 +124,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.CREDIT_CARD_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onCreditCardEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:credit-card", event.eventId())) {
+            return;
+        }
         if (event instanceof CreditCardCreated e && e.userId() != null) {
             // last4, never the card number.
             notificationService.onCreditCardIssued(e.userId(), e.last4());
@@ -110,7 +138,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.LOAN_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onLoanEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:loan", event.eventId())) {
+            return;
+        }
         // LOAN_PAYMENT_DUE and LOAN_PAYMENT_MISSED used to be handled here.
         // Nothing has ever produced them: there is no scheduler that looks
         // for an instalment coming due or going unpaid. The handlers are gone
@@ -125,7 +157,11 @@ public class PlatformEventConsumer {
     }
 
     @KafkaListener(topics = Topics.USER_EVENTS, groupId = "notification-service")
+    @Transactional
     public void onUserEvent(DomainEvent event) {
+        if (!processedEvents.claim("notification-service:user", event.eventId())) {
+            return;
+        }
         if (event instanceof UserLifecycleEvents.KycApproved e && e.userId() != null) {
             notificationService.onKycApproved(e.userId());
         } else if (event instanceof UserLifecycleEvents.KycRejected e && e.userId() != null) {
