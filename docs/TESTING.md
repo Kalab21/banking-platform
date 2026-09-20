@@ -1,6 +1,6 @@
 # Testing
 
-825 automated tests run in CI: 543 backend (512 unit and
+834 automated tests run in CI: 552 backend (512 unit and
 web-slice, 30 integration against a real PostgreSQL and an embedded Kafka
 broker), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
@@ -73,7 +73,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 512 unit + 31 integration = 543
+mvn -B --no-transfer-progress clean verify   # backend: 512 unit + 40 integration = 552
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
