@@ -8,11 +8,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 
@@ -35,10 +34,14 @@ class OutboxAutoConfigurationTest {
     // the real Boot auto-configurations, not SQL.
     private final ApplicationContextRunner context = new ApplicationContextRunner()
             .withBean(DataSource.class, () -> Mockito.mock(DataSource.class))
-            .withBean(PlatformTransactionManager.class,
-                    () -> new DataSourceTransactionManager(Mockito.mock(DataSource.class)))
+            // The transaction manager comes from its own auto-configuration
+            // rather than being registered directly. Registering it as a bean
+            // here made every condition match regardless of ordering, so the
+            // first version of this test passed against a relay that was never
+            // registered in any running service.
             .withConfiguration(AutoConfigurations.of(
                     JdbcTemplateAutoConfiguration.class,
+                    DataSourceTransactionManagerAutoConfiguration.class,
                     KafkaAutoConfiguration.class,
                     OutboxAutoConfiguration.class))
             .withPropertyValues("spring.kafka.bootstrap-servers=localhost:9092");

@@ -8,8 +8,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
+import org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,14 +34,24 @@ import java.util.Map;
  * a key with {@code pg_try_advisory_xact_lock} and the prune bounds itself by
  * {@code ctid}. See {@code docs/EVENTS.md}.
  */
-// Ordered after all three of the auto-configurations whose beans are required
-// here, because auto-configurations are sorted by class name before ordering
-// metadata applies — a condition that runs too early simply matches nothing,
-// and the resulting bean is missing rather than broken. Both previous modules
-// in this package got exactly that wrong.
+// Ordered after every auto-configuration whose beans are required below.
+// Auto-configurations are sorted by class name before ordering metadata
+// applies, so "com.bankingplatform..." runs before "org.springframework..."
+// unless it says otherwise — and a condition that runs too early matches
+// nothing, leaving the bean absent rather than broken.
+//
+// The transaction manager is the one that caught this out a third time. It
+// comes from HibernateJpaAutoConfiguration in the JPA services and from
+// DataSourceTransactionManagerAutoConfiguration elsewhere, neither of which
+// was listed, so the relay was never registered: events were written to the
+// outbox and nothing ever sent them. The live stack is where that showed up,
+// because nothing about it fails.
 @AutoConfiguration(after = {
         JdbcTemplateAutoConfiguration.class,
-        KafkaAutoConfiguration.class})
+        KafkaAutoConfiguration.class,
+        TransactionAutoConfiguration.class,
+        DataSourceTransactionManagerAutoConfiguration.class,
+        HibernateJpaAutoConfiguration.class})
 @ConditionalOnClass({JdbcTemplate.class, KafkaTemplate.class})
 @EnableConfigurationProperties(OutboxProperties.class)
 public class OutboxAutoConfiguration {
@@ -85,9 +98,16 @@ public class OutboxAutoConfiguration {
 
         private DefaultKafkaProducerFactory<String, byte[]> relayProducerFactory;
 
+        /**
+         * The transaction manager is injected rather than made a condition.
+         *
+         * <p>A missing one is then a startup failure naming what is missing,
+         * instead of a relay that silently does not exist — which is how this
+         * shipped the first time. Any service with a {@code JdbcTemplate} has
+         * a transaction manager, so requiring it costs nothing.
+         */
         @Bean
-        @ConditionalOnBean({JdbcTemplate.class, ProducerFactory.class,
-                PlatformTransactionManager.class})
+        @ConditionalOnBean({JdbcTemplate.class, ProducerFactory.class})
         @ConditionalOnMissingBean(OutboxRelay.class)
         public OutboxRelay outboxRelay(JdbcTemplate jdbcTemplate,
                                        ProducerFactory<Object, Object> producerFactory,
