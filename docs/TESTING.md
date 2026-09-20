@@ -1,6 +1,6 @@
 # Testing
 
-808 automated tests run in CI: 526 backend (501 unit and
+815 automated tests run in CI: 533 backend (508 unit and
 web-slice, 25 integration against a real PostgreSQL), 213 frontend
 unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
@@ -41,11 +41,11 @@ assertion counts, which are larger and less comparable.
 | Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 15 |
 | Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 13 |
 | Event contract | JUnit 5, Jackson | `EventContract` — envelope, versioning, type routing, unknown-type fallback, partition keys, no sensitive field on any event | 16 |
-| Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (notification) — every notification that was dead now fires from the producer's own event, over JSON | 14 |
+| Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (notification) — every notification that was dead now fires from the producer's own event, over JSON, and a legacy record with no user is skipped rather than stalling the partition | 15 |
 | Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (statistics) — counters attribute to the right user, submitted applications are counted | 5 |
-| Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (fraud) — transaction and failed-payment rules receive what they read; the card listener is gone | 6 |
+| Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (fraud) — transaction and failed-payment rules receive what they read; a null account is skipped; the card listener is gone | 7 |
 | Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (user) — card payment and loan repayment move a credit score; the missed-payment branch is gone | 6 |
-| Event contract | JUnit 5, Jackson, Mockito | `ApplicationEventContract` (loan, credit-card) — an approval issues the right product on the right terms | 8 |
+| Event contract | JUnit 5, Jackson, Mockito | `ApplicationEventContract` (loan, credit-card) — an approval issues the right product on the right terms, and an approval missing its product type or applicant issues nothing | 10 |
 | Authorization | JUnit 5, MockMvc | `IntegrationAuthorization` — external transfers may only be sent from an owned account, staff included; reads are owner-or-staff | 17 |
 | Authorization | JUnit 5, MockMvc | `TwoFactorAuthorization` — second-factor setup, verify and disable are self-only, and staff cannot bypass it | 10 |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 |
@@ -69,7 +69,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 501 unit + 25 integration = 526
+mvn -B --no-transfer-progress clean verify   # backend: 508 unit + 25 integration = 533
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
