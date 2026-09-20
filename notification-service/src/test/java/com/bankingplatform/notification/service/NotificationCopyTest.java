@@ -80,9 +80,57 @@ class NotificationCopyTest {
     @DisplayName("a card is named by its last four digits and nothing more")
     void cardIssued() {
         NotificationService service = service();
-        String message = messageAfter(() -> service.onCreditCardIssued(7L, "4111111111113823"));
+        // The caller supplies four digits now, not a card number. The full
+        // number never reaches this service: credit-card-service masks it
+        // before it publishes, and the event has no field to carry one.
+        String message = messageAfter(() -> service.onCreditCardIssued(7L, "3823"));
 
         assertThat(message).contains("3823");
         assertThat(message).doesNotContain("4111111111113823");
+    }
+
+    @Test
+    @DisplayName("a declined application names the product the way a customer says it")
+    void rejectionCopyIsReadable() {
+        // The product type reaches these messages for the first time now that
+        // the event carries it. Printed raw, a declined mortgage read "your
+        // MORTGAGE application was not approved".
+        NotificationService service = service();
+        String message = messageAfter(() -> service.onApplicationRejected(7L, "MORTGAGE"));
+
+        assertThat(message).contains("mortgage").doesNotContain("MORTGAGE");
+    }
+
+    @Test
+    @DisplayName("an approved application names the product the same way")
+    void approvalCopyIsReadable() {
+        NotificationService service = service();
+        String message = messageAfter(() -> service.onApplicationApproved(7L, "PERSONAL_LOAN"));
+
+        assertThat(message).contains("personal loan").doesNotContain("PERSONAL_LOAN");
+    }
+
+    @Test
+    @DisplayName("an application decision with no product type still reads as a sentence")
+    void applicationCopyWithoutProduct() {
+        NotificationService service = service();
+
+        assertThat(messageAfter(() -> service.onApplicationRejected(7L, null)))
+                .contains("your product application");
+    }
+
+    @Test
+    @DisplayName("a card with no digits still produces a sentence rather than an error")
+    void cardIssuedWithoutDigits() {
+        NotificationService service = service();
+
+        // This used to be a crash, not a fallback. The method took a whole
+        // card number and called substring(length - 4) on it, and the
+        // producer never sent one — so every issuance notification threw
+        // StringIndexOutOfBoundsException on the empty default and the
+        // consumer's catch block swallowed it.
+        String message = messageAfter(() -> service.onCreditCardIssued(7L, null));
+
+        assertThat(message).contains("your new card");
     }
 }

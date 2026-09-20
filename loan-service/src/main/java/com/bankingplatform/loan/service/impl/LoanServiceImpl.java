@@ -172,7 +172,8 @@ public class LoanServiceImpl implements LoanService {
                 .isEarlyPayoff(false)
                 .build());
 
-        eventProducer.publishRepaymentMade(loanId, repayment.getPaymentRef(), payAmount, loan.getRemainingBalance());
+        eventProducer.publishRepaymentMade(loanId, loan.getUserId(), repayment.getPaymentRef(),
+                payAmount, loan.getRemainingBalance());
 
         if (loan.getStatus() == LoanStatus.PAID_OFF) {
             eventProducer.publishLoanPaidOff(loanId, loan.getUserId());
@@ -221,7 +222,8 @@ public class LoanServiceImpl implements LoanService {
                 .isEarlyPayoff(true)
                 .build());
 
-        eventProducer.publishRepaymentMade(loanId, repayment.getPaymentRef(), payoffAmount, BigDecimal.ZERO);
+        eventProducer.publishRepaymentMade(loanId, loan.getUserId(), repayment.getPaymentRef(),
+                payoffAmount, BigDecimal.ZERO);
         eventProducer.publishLoanPaidOff(loanId, loan.getUserId());
         return repaymentMapper.toResponse(repayment);
     }

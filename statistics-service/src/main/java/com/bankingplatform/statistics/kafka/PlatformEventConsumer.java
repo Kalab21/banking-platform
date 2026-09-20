@@ -1,5 +1,20 @@
 package com.bankingplatform.statistics.kafka;
 
+import com.bankingplatform.common.events.AccountCreated;
+import com.bankingplatform.common.events.ApplicationApproved;
+import com.bankingplatform.common.events.ApplicationRejected;
+import com.bankingplatform.common.events.ApplicationSubmitted;
+import com.bankingplatform.common.events.CreditCardCreated;
+import com.bankingplatform.common.events.CreditCardTransactionCompleted;
+import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.events.LoanDisbursed;
+import com.bankingplatform.common.events.LoanPaidOff;
+import com.bankingplatform.common.events.LoanRepaymentMade;
+import com.bankingplatform.common.events.PaymentCompleted;
+import com.bankingplatform.common.events.PaymentFailed;
+import com.bankingplatform.common.events.Topics;
+import com.bankingplatform.common.events.TransactionCreated;
+import com.bankingplatform.common.events.TransferCompleted;
 import com.bankingplatform.statistics.service.StatisticsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -7,8 +22,15 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
+/**
+ * Keeps the platform counters.
+ *
+ * <p>Two of these were counting nothing. Per-user transaction statistics read
+ * a {@code userId} the transaction events never carried, so every transaction
+ * was attributed to a null user; and the submitted-applications counter
+ * listened for an event whose producer method existed but was never called.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -16,107 +38,64 @@ public class PlatformEventConsumer {
 
     private final StatisticsService statisticsService;
 
-    @KafkaListener(topics = "account-events", groupId = "statistics-service")
-    public void onAccountEvent(Map<String, Object> event) {
-        try {
-            String type = (String) event.get("eventType");
-            if ("ACCOUNT_CREATED".equals(type)) {
-                statisticsService.onAccountCreated(toLong(event.get("userId")));
-            }
-        } catch (Exception e) {
-            log.error("Error processing account-event: {}", e.getMessage());
+    @KafkaListener(topics = Topics.ACCOUNT_EVENTS, groupId = "statistics-service")
+    public void onAccountEvent(DomainEvent event) {
+        if (event instanceof AccountCreated e) {
+            statisticsService.onAccountCreated(e.userId());
         }
     }
 
-    @KafkaListener(topics = "transaction-events", groupId = "statistics-service")
-    public void onTransactionEvent(Map<String, Object> event) {
-        try {
-            String type = (String) event.get("eventType");
-            if ("TRANSACTION_CREATED".equals(type) || "TRANSFER_COMPLETED".equals(type)) {
-                BigDecimal amount = toBigDecimal(event.get("amount"));
-                Long userId = toLong(event.get("userId"));
-                statisticsService.onTransactionCreated(userId, amount != null ? amount : BigDecimal.ZERO);
-            }
-        } catch (Exception e) {
-            log.error("Error processing transaction-event: {}", e.getMessage());
+    @KafkaListener(topics = Topics.TRANSACTION_EVENTS, groupId = "statistics-service")
+    public void onTransactionEvent(DomainEvent event) {
+        if (event instanceof TransactionCreated e) {
+            statisticsService.onTransactionCreated(e.userId(), orZero(e.amount()));
+        } else if (event instanceof TransferCompleted e) {
+            statisticsService.onTransactionCreated(e.userId(), orZero(e.amount()));
         }
     }
 
-    @KafkaListener(topics = "payment-events", groupId = "statistics-service")
-    public void onPaymentEvent(Map<String, Object> event) {
-        try {
-            String type = (String) event.get("eventType");
-            if ("PAYMENT_COMPLETED".equals(type)) {
-                BigDecimal amount = toBigDecimal(event.get("amount"));
-                Long payerAccountId = toLong(event.get("payerAccountId"));
-                statisticsService.onPaymentCompleted(payerAccountId, amount != null ? amount : BigDecimal.ZERO);
-            } else if ("PAYMENT_FAILED".equals(type)) {
-                statisticsService.onPaymentFailed();
-            }
-        } catch (Exception e) {
-            log.error("Error processing payment-event: {}", e.getMessage());
+    @KafkaListener(topics = Topics.PAYMENT_EVENTS, groupId = "statistics-service")
+    public void onPaymentEvent(DomainEvent event) {
+        if (event instanceof PaymentCompleted e) {
+            statisticsService.onPaymentCompleted(e.payerAccountId(), orZero(e.amount()));
+        } else if (event instanceof PaymentFailed) {
+            statisticsService.onPaymentFailed();
         }
     }
 
-    @KafkaListener(topics = "application-events", groupId = "statistics-service")
-    public void onApplicationEvent(Map<String, Object> event) {
-        try {
-            String type = (String) event.get("eventType");
-            switch (type != null ? type : "") {
-                case "APPLICATION_SUBMITTED" -> statisticsService.onApplicationSubmitted();
-                case "APPLICATION_APPROVED"  -> statisticsService.onApplicationApproved();
-                case "APPLICATION_REJECTED"  -> statisticsService.onApplicationRejected();
-            }
-        } catch (Exception e) {
-            log.error("Error processing application-event: {}", e.getMessage());
+    @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "statistics-service")
+    public void onApplicationEvent(DomainEvent event) {
+        // The submitted counter had never moved: nothing published the event.
+        if (event instanceof ApplicationSubmitted) {
+            statisticsService.onApplicationSubmitted();
+        } else if (event instanceof ApplicationApproved) {
+            statisticsService.onApplicationApproved();
+        } else if (event instanceof ApplicationRejected) {
+            statisticsService.onApplicationRejected();
         }
     }
 
-    @KafkaListener(topics = "credit-card-events", groupId = "statistics-service")
-    public void onCreditCardEvent(Map<String, Object> event) {
-        try {
-            String type = (String) event.get("eventType");
-            if ("CREDIT_CARD_CREATED".equals(type)) {
-                statisticsService.onCreditCardCreated(toLong(event.get("userId")));
-            } else if ("CREDIT_CARD_TRANSACTION_COMPLETED".equals(type)) {
-                BigDecimal amount = toBigDecimal(event.get("amount"));
-                Long cardId = toLong(event.get("cardId"));
-                statisticsService.onCcTransaction(cardId, amount != null ? amount : BigDecimal.ZERO);
-            }
-        } catch (Exception e) {
-            log.error("Error processing credit-card-event: {}", e.getMessage());
+    @KafkaListener(topics = Topics.CREDIT_CARD_EVENTS, groupId = "statistics-service")
+    public void onCreditCardEvent(DomainEvent event) {
+        if (event instanceof CreditCardCreated e) {
+            statisticsService.onCreditCardCreated(e.userId());
+        } else if (event instanceof CreditCardTransactionCompleted e) {
+            statisticsService.onCcTransaction(e.cardId(), orZero(e.amount()));
         }
     }
 
-    @KafkaListener(topics = "loan-events", groupId = "statistics-service")
-    public void onLoanEvent(Map<String, Object> event) {
-        try {
-            String type = (String) event.get("eventType");
-            if ("LOAN_DISBURSED".equals(type)) {
-                Long userId = toLong(event.get("userId"));
-                BigDecimal amount = toBigDecimal(event.get("principal"));
-                statisticsService.onLoanDisbursed(userId, amount != null ? amount : BigDecimal.ZERO);
-            } else if ("LOAN_REPAYMENT_MADE".equals(type)) {
-                BigDecimal amount = toBigDecimal(event.get("amount"));
-                statisticsService.onLoanRepayment(amount != null ? amount : BigDecimal.ZERO);
-            } else if ("LOAN_PAID_OFF".equals(type)) {
-                statisticsService.onLoanPaidOff(toLong(event.get("userId")));
-            }
-        } catch (Exception e) {
-            log.error("Error processing loan-event: {}", e.getMessage());
+    @KafkaListener(topics = Topics.LOAN_EVENTS, groupId = "statistics-service")
+    public void onLoanEvent(DomainEvent event) {
+        if (event instanceof LoanDisbursed e) {
+            statisticsService.onLoanDisbursed(e.userId(), orZero(e.principal()));
+        } else if (event instanceof LoanRepaymentMade e) {
+            statisticsService.onLoanRepayment(orZero(e.amount()));
+        } else if (event instanceof LoanPaidOff e) {
+            statisticsService.onLoanPaidOff(e.userId());
         }
     }
 
-    private Long toLong(Object val) {
-        if (val == null) return null;
-        if (val instanceof Number n) return n.longValue();
-        return Long.parseLong(val.toString());
-    }
-
-    private BigDecimal toBigDecimal(Object val) {
-        if (val == null) return null;
-        if (val instanceof BigDecimal bd) return bd;
-        if (val instanceof Number n) return new BigDecimal(n.toString());
-        return new BigDecimal(val.toString());
+    private static BigDecimal orZero(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 }

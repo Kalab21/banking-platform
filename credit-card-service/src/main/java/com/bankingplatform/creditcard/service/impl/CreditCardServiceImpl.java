@@ -7,6 +7,7 @@ import com.bankingplatform.creditcard.exception.CardNotActiveException;
 import com.bankingplatform.creditcard.exception.InsufficientCreditException;
 import com.bankingplatform.creditcard.exception.ResourceNotFoundException;
 import com.bankingplatform.creditcard.kafka.producer.CreditCardEventProducer;
+import com.bankingplatform.creditcard.mapper.CardNumberMasker;
 import com.bankingplatform.creditcard.mapper.CreditCardMapper;
 import com.bankingplatform.creditcard.mapper.CreditCardStatementMapper;
 import com.bankingplatform.creditcard.mapper.CreditCardTransactionMapper;
@@ -74,7 +75,9 @@ public class CreditCardServiceImpl implements CreditCardService {
                 .build();
 
         card = cardRepository.save(card);
-        eventProducer.publishCardCreated(card.getId(), card.getUserId(), card.getCardType().name());
+        // last4 only: the notification names the card, it does not need the number.
+        eventProducer.publishCardCreated(card.getId(), card.getUserId(), card.getCardType().name(),
+                CardNumberMasker.last4(card.getCardNumber()));
         log.info("Created credit card id={} for userId={}", card.getId(), card.getUserId());
         return cardMapper.toResponse(card);
     }
@@ -115,7 +118,7 @@ public class CreditCardServiceImpl implements CreditCardService {
                 request.getAmount(), request.getDescription(),
                 request.getMerchantName(), request.getMerchantCategory());
 
-        eventProducer.publishTransactionCompleted(card.getId(), tx.getTransactionRef(),
+        eventProducer.publishTransactionCompleted(card.getId(), card.getUserId(), tx.getTransactionRef(),
                 "PURCHASE", request.getAmount(), card.getAvailableCredit());
         return txMapper.toResponse(tx);
     }
@@ -140,7 +143,7 @@ public class CreditCardServiceImpl implements CreditCardService {
         CreditCardTransaction tx = saveTx(card, CreditCardTransactionType.CASH_ADVANCE,
                 request.getAmount(), "Cash advance to account " + request.getTargetAccountId(), null, null);
 
-        eventProducer.publishTransactionCompleted(card.getId(), tx.getTransactionRef(),
+        eventProducer.publishTransactionCompleted(card.getId(), card.getUserId(), tx.getTransactionRef(),
                 "CASH_ADVANCE", request.getAmount(), card.getAvailableCredit());
         return txMapper.toResponse(tx);
     }
@@ -171,7 +174,7 @@ public class CreditCardServiceImpl implements CreditCardService {
         CreditCardTransaction tx = saveTx(card, CreditCardTransactionType.PAYMENT,
                 payAmount, "Card payment", null, null);
 
-        eventProducer.publishTransactionCompleted(card.getId(), tx.getTransactionRef(),
+        eventProducer.publishTransactionCompleted(card.getId(), card.getUserId(), tx.getTransactionRef(),
                 "PAYMENT", payAmount, card.getAvailableCredit());
         return txMapper.toResponse(tx);
     }
@@ -241,7 +244,7 @@ public class CreditCardServiceImpl implements CreditCardService {
         cardRepository.save(card);
 
         statement = statementRepository.save(statement);
-        eventProducer.publishStatementGenerated(cardId, statement.getId(), today.toString());
+        eventProducer.publishStatementGenerated(cardId, card.getUserId(), statement.getId(), today.toString());
         return statementMapper.toResponse(statement);
     }
 

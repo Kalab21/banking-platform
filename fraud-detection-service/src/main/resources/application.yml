@@ -27,13 +27,26 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "*"
+        # Deserialize every record on these topics as a DomainEvent and let
+        # @JsonTypeInfo route on the eventType field. An unrecognised type
+        # becomes UnknownEvent rather than throwing, so a service can publish
+        # a new event without poisoning the partition for consumers that have
+        # not been redeployed.
         spring.json.use.type.headers: false
-        spring.json.value.default.type: java.util.Map
+        spring.json.value.default.type: com.bankingplatform.common.events.DomainEvent
+        # Narrowed from "*": only the contract package may be instantiated.
+        spring.json.trusted.packages: "com.bankingplatform.common.events"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
+        # The wire contract is the eventType field, not a Java class name.
+        # With type headers on, Jackson would write the producer's FQCN into
+        # __TypeId__ and the consumer would instantiate whatever class that
+        # names — which makes a package rename a breaking protocol change, and
+        # pairs badly with a permissive trusted-packages list. Routing is done
+        # by @JsonTypeInfo on DomainEvent instead.
+        spring.json.add.type.headers: false
         max.block.ms: 1000
 
 eureka:
@@ -111,7 +124,10 @@ fraud:
     critical-amount-threshold: 25000
     velocity-window-seconds: 3600
     velocity-max-transactions: 5
-    cc-single-purchase-threshold: 5000
+    # cc-single-purchase-threshold is gone with the credit-card rule it
+    # configured. That rule read an accountId a card transaction does not
+    # carry, so it had never run, and wiring it properly needs a card subject
+    # in the alert model rather than a threshold. See docs/EVENTS.md.
     failed-payment-threshold: 3
     alert-score-threshold: 50
     freeze-score-threshold: 80

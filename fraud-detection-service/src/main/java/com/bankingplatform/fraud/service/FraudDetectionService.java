@@ -6,6 +6,8 @@ import com.bankingplatform.fraud.model.FraudAlert;
 import com.bankingplatform.fraud.model.FraudRulesAudit;
 import com.bankingplatform.fraud.repository.FraudAlertRepository;
 import com.bankingplatform.fraud.repository.FraudRulesAuditRepository;
+import com.bankingplatform.common.events.FraudAlertCreated;
+import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,8 +46,6 @@ public class FraudDetectionService {
     @Value("${fraud.rules.velocity-max-transactions:5}")
     private int velocityMaxTransactions;
 
-    @Value("${fraud.rules.cc-single-purchase-threshold:5000}")
-    private BigDecimal ccSinglePurchaseThreshold;
 
     @Value("${fraud.rules.failed-payment-threshold:3}")
     private int failedPaymentThreshold;
@@ -82,33 +82,6 @@ public class FraudDetectionService {
         if (score >= alertScoreThreshold) {
             createAlert(accountId, userId, "TRANSACTION_FRAUD", score,
                     desc.toString().trim(), txRef, "TRANSACTION", amount);
-        }
-
-        if (score >= freezeScoreThreshold) {
-            freezeAccount(accountId, score);
-        }
-    }
-
-    public void evaluateCreditCardPurchase(Long accountId, Long userId, BigDecimal amount, String txRef) {
-        int score = 0;
-        StringBuilder desc = new StringBuilder();
-
-        if (amount != null && amount.compareTo(ccSinglePurchaseThreshold) > 0) {
-            score += 35;
-            desc.append("Large CC purchase ($").append(amount).append("). ");
-            saveAudit(accountId, "LARGE_CC_PURCHASE", 35, score, txRef);
-        }
-
-        int velocity = incrementVelocityCounter(accountId);
-        if (velocity > velocityMaxTransactions) {
-            score += 30;
-            desc.append("High velocity: ").append(velocity).append(" transactions in 1 hour. ");
-            saveAudit(accountId, "HIGH_VELOCITY", 30, score, txRef);
-        }
-
-        if (score >= alertScoreThreshold) {
-            createAlert(accountId, userId, "CC_FRAUD", score,
-                    desc.toString().trim(), txRef, "CREDIT_CARD_TRANSACTION", amount);
         }
 
         if (score >= freezeScoreThreshold) {
@@ -204,16 +177,21 @@ public class FraudDetectionService {
         }
     }
 
+    /**
+     * Publishes the alert.
+     *
+     * <p>Nothing consumes {@code fraud-alert-events} today; that is recorded
+     * in {@code docs/EVENTS.md} rather than resolved by inventing a consumer.
+     *
+     * <p>The record is keyed by account now. It was sent with no key at all,
+     * so alerts round-robined across partitions and two alerts on one account
+     * could reach any future consumer out of order.
+     */
     private void publishFraudAlert(FraudAlert alert) {
+        FraudAlertCreated event = FraudAlertCreated.of(alert.getId(), alert.getAccountId(),
+                alert.getUserId(), alert.getAlertType(), alert.getRiskScore());
         try {
-            Map<String, Object> event = new HashMap<>();
-            event.put("eventType", "FRAUD_ALERT_CREATED");
-            event.put("alertId", alert.getId());
-            event.put("accountId", alert.getAccountId());
-            event.put("userId", alert.getUserId());
-            event.put("alertType", alert.getAlertType());
-            event.put("riskScore", alert.getRiskScore());
-            kafkaTemplate.send("fraud-alert-events", event);
+            kafkaTemplate.send(Topics.FRAUD_ALERT_EVENTS, event.partitionKey(), event);
         } catch (Exception e) {
             log.error("Failed to publish fraud alert event: {}", e.getMessage());
         }

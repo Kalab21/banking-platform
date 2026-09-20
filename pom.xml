@@ -21,6 +21,7 @@
     <modules>
         <module>common-observability</module>
         <module>common-security</module>
+        <module>common-events</module>
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>user-service</module>
@@ -105,24 +106,18 @@
          RestTemplate, Feign and Spring Kafka are already instrumented for it
          out of the box on Boot 3.3 — one tracing system, no competing
          exporters. -->
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-prometheus</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-tracing-bridge-brave</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.zipkin.reporter2</groupId>
-            <artifactId>zipkin-reporter-brave</artifactId>
-        </dependency>
-    </dependencies>
+    <!-- No <dependencies> here on purpose.
+         The actuator, Prometheus registry and Brave tracing used to be
+         declared at this level, so every module inherited them whether it
+         was a running service or not. That put a web actuator on the
+         classpath of two modules that are not Spring applications at all:
+         common-security, and common-events, which is a handful of records
+         and a Jackson dependency. It also meant a Spring Boot CVE against
+         the actuator was reported against those modules' poms, which is
+         noise that hides the services where it would actually matter.
+         They are declared by common-observability, which every servlet
+         service already depends on, and explicitly by api-gateway, which
+         does not. -->
 
     <build>
         <plugins>

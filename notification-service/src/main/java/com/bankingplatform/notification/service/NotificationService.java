@@ -124,19 +124,51 @@ public class NotificationService {
     public void onApplicationApproved(Long userId, String productType) {
         create(userId, NotificationType.APPLICATION_APPROVED,
                 "Application Approved",
-                String.format("Congratulations! Your %s application has been approved.", productType),
+                String.format("Congratulations! Your %s application has been approved.",
+                        readable(productType)),
                 null, "APPLICATION");
     }
 
     public void onApplicationRejected(Long userId, String productType) {
         create(userId, NotificationType.APPLICATION_REJECTED,
                 "Application Update",
-                String.format("We're sorry, your %s application was not approved at this time.", productType),
+                String.format("We're sorry, your %s application was not approved at this time.",
+                        readable(productType)),
                 null, "APPLICATION");
     }
 
-    public void onCreditCardIssued(Long userId, String cardNumber) {
-        String masked = "**** **** **** " + cardNumber.substring(cardNumber.length() - 4);
+    /**
+     * An enum name as a customer would read it: {@code PERSONAL_LOAN} becomes
+     * "personal loan".
+     *
+     * <p>The product type reaches these messages for the first time now that
+     * the event carries it. Before, the rejection notice had no product type
+     * at all and printed the literal word "product", so nobody had ever seen
+     * a shouted enum name in a sentence about their own application.
+     *
+     * @param productType the product type, or null if the event omitted it
+     */
+    private static String readable(String productType) {
+        if (productType == null || productType.isBlank()) {
+            return "product";
+        }
+        return productType.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+    }
+
+    /**
+     * @param last4 the last four digits of the card, or null if unknown
+     *
+     * <p>Takes four digits rather than a card number. It used to take the
+     * whole number and call {@code substring(length - 4)} on it — and the
+     * producer never sent one, so every issuance notification threw
+     * {@link StringIndexOutOfBoundsException} on the empty default and was
+     * swallowed by the consumer's catch block. A notification does not need
+     * a PAN to name a card, and taking one would put it on a Kafka topic.
+     */
+    public void onCreditCardIssued(Long userId, String last4) {
+        String masked = last4 == null || last4.isBlank()
+                ? "your new card"
+                : "**** **** **** " + last4;
         create(userId, NotificationType.CREDIT_CARD_ISSUED,
                 "Credit Card Issued",
                 String.format("Your new credit card %s has been issued and is ready to use.", masked),

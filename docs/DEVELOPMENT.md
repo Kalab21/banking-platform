@@ -160,9 +160,16 @@ That override bypasses gateway authentication, so use it only locally.
 
 Kafka topics: `user-events`, `account-events`, `application-events`,
 `transaction-events`, `payment-events`, `credit-card-events`, `loan-events`,
-`integration-events`, `fraud-alert-events` — nine in all. Seven of them have
-consumers; `integration-events` and `fraud-alert-events` are published and not
-yet consumed by anything.
+`integration-events`, `fraud-alert-events` — nine in all. Seven have both a
+producer and a consumer; `integration-events` and `fraud-alert-events` are
+published and not consumed by anything.
+
+Events are explicit versioned types in `common-events`, shared by producer and
+consumer, routed by an `eventType` field rather than a Java class name in a
+Kafka header. `docs/EVENTS.md` holds the full matrix: every topic, who
+publishes it, who consumes it, which fields each consumer depends on, what is
+deliberately absent, and which behaviour was removed because nothing produced
+the event it waited for.
 
 ## Design decisions
 

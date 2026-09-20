@@ -1,5 +1,8 @@
 package com.bankingplatform.creditcard.kafka.consumer;
 
+import com.bankingplatform.common.events.ApplicationApproved;
+import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.events.Topics;
 import com.bankingplatform.creditcard.dto.request.CreateCreditCardRequest;
 import com.bankingplatform.creditcard.model.CardType;
 import com.bankingplatform.creditcard.service.CreditCardService;
@@ -9,41 +12,45 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
+/**
+ * Issues the card behind an approved application.
+ *
+ * <p>Reads the shared {@link ApplicationApproved} type rather than a map.
+ *
+ * <p>This handler creates a financial product, so a redelivery of the same
+ * event would issue a second card. {@link DomainEvent#eventId()} is the
+ * identity that makes de-duplication possible; using it is a separate change
+ * and this consumer is not yet idempotent.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class ApplicationEventConsumer {
 
+    private static final String CREDIT_CARD = "CREDIT_CARD";
+
     private final CreditCardService creditCardService;
 
-    @KafkaListener(topics = "application-events", groupId = "credit-card-service")
-    public void onApplicationEvent(Map<String, Object> event) {
-        try {
-            String eventType = (String) event.get("eventType");
-            String productType = (String) event.get("productType");
-
-            if (!"APPLICATION_APPROVED".equals(eventType) || !"CREDIT_CARD".equals(productType)) {
-                return;
-            }
-
-            Long userId = toLong(event.get("userId"));
-            Long applicationId = toLong(event.get("applicationId"));
-            Integer creditScore = toInt(event.get("creditScore"));
-
-            CreateCreditCardRequest request = new CreateCreditCardRequest();
-            request.setUserId(userId);
-            request.setApplicationId(applicationId);
-            request.setCardType(resolveCardType(creditScore));
-            request.setCreditLimit(resolveCreditLimit(creditScore));
-            request.setApr(resolveApr(creditScore));
-
-            creditCardService.createCard(request);
-            log.info("Created credit card for userId={}, applicationId={}", userId, applicationId);
-        } catch (Exception e) {
-            log.error("Error processing application event: {}", e.getMessage(), e);
+    @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "credit-card-service")
+    public void onApplicationEvent(DomainEvent event) {
+        if (!(event instanceof ApplicationApproved approved)
+                || !CREDIT_CARD.equals(approved.productType())) {
+            return;
         }
+
+        Integer creditScore = approved.creditScore();
+
+        CreateCreditCardRequest request = new CreateCreditCardRequest();
+        request.setUserId(approved.userId());
+        request.setApplicationId(approved.applicationId());
+        request.setCardType(resolveCardType(creditScore));
+        request.setCreditLimit(resolveCreditLimit(creditScore));
+        request.setApr(resolveApr(creditScore));
+
+        creditCardService.createCard(request);
+        log.info("Created credit card for userId={}, applicationId={}",
+                approved.userId(), approved.applicationId());
     }
 
     private CardType resolveCardType(Integer creditScore) {
@@ -67,17 +74,5 @@ public class ApplicationEventConsumer {
         if (creditScore >= 720) return new BigDecimal("18.99");
         if (creditScore >= 680) return new BigDecimal("21.99");
         return new BigDecimal("24.99");
-    }
-
-    private Long toLong(Object val) {
-        if (val == null) return null;
-        if (val instanceof Number n) return n.longValue();
-        return Long.parseLong(val.toString());
-    }
-
-    private Integer toInt(Object val) {
-        if (val == null) return null;
-        if (val instanceof Number n) return n.intValue();
-        return Integer.parseInt(val.toString());
     }
 }

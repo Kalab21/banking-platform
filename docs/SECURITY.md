@@ -177,6 +177,8 @@ developing rather than by default.
 | Rate limiting | Redis token bucket at the gateway, per client IP |
 | Second-factor management | Enrolling, confirming and removing an authenticator are self-only — `AccessGuard.requireSelf`, not owner-or-staff. No role can take another account's second factor off |
 | Outward transfer rails | A wire, ACH or SWIFT transfer may only be initiated from an account the caller owns, resolved from `account-service` rather than read from the request. Staff are not exempt |
+| What travels on Kafka | Events carry identifiers and, where a message names something to a customer, a masked form. Never a full account number, PAN, SSN, password, token or TOTP secret. `ACCOUNT_CREATED` used to carry the full account number for no consumer; a contract test now asserts no event declares such a field |
+| Kafka deserialization | Type headers are off, and every service's trusted-package list is `com.bankingplatform.common.events` — the contract package alone. It was `*` in four services and `com.bankingplatform.*` in four more. A record names its type in an `eventType` field rather than a Java class the consumer would instantiate |
 | Management endpoints | `health`, `info` and `prometheus` only, on every service including the gateway, whose actuator is the one reachable without a token |
 | Error hygiene | Denials expose no resource detail; the catch-all logs server-side and returns a generic message |
 | Log injection | The request path is reduced to the RFC 3986 path alphabet before being logged |
