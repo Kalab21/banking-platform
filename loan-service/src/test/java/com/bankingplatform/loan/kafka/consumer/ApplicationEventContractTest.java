@@ -20,6 +20,7 @@ import org.mockito.Mockito;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -111,13 +112,21 @@ class ApplicationEventContractTest {
     }
 
     @Test
-    @DisplayName("an approval with no applicant issues nothing")
-    void nullUserIgnored() throws Exception {
-        consumer.onApplicationEvent(mapper.readValue("""
+    @DisplayName("an approval with no applicant is dead-lettered, not dropped")
+    void nullUserIsDeadLettered() throws Exception {
+        DomainEvent noApplicant = mapper.readValue("""
                 {"eventId":"abc","eventType":"APPLICATION_APPROVED","eventVersion":1,
                  "occurredAt":"2026-01-01T00:00:00Z","applicationId":7,
                  "productType":"PERSONAL_LOAN","requestedAmount":10000}
-                """, DomainEvent.class));
+                """, DomainEvent.class);
+
+        // Throwing rather than logging: an approved application that cannot be
+        // issued must not vanish. The exception carries it to the dead letter
+        // topic, where it is kept and can be looked at. Committing the offset
+        // would lose a real application silently.
+        assertThatThrownBy(() -> consumer.onApplicationEvent(noApplicant))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("names no applicant");
 
         verifyNoInteractions(loanService);
     }

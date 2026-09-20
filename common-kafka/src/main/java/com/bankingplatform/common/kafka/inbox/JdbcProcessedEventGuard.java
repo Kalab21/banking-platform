@@ -22,6 +22,14 @@ import java.time.Instant;
  * first transaction resolves, then sees the conflict — which is exactly the
  * serialisation wanted.
  *
+ * <p><b>PostgreSQL only.</b> {@code ON CONFLICT DO NOTHING} is not portable
+ * SQL. The portable alternative — insert and catch the duplicate key — marks
+ * the caller's transaction rollback-only on what is, here, the ordinary path
+ * rather than the exceptional one, and the caller's business work would be
+ * lost along with the duplicate. Every service on this platform runs
+ * PostgreSQL; one that did not would supply its own {@link
+ * ProcessedEventGuard}, which the auto-configuration backs off for.
+ *
  * <p><b>Propagation is MANDATORY on purpose.</b> This has to join the caller's
  * transaction, never start its own. In a transaction of its own the claim
  * would commit while the business work was still uncommitted, and a crash in

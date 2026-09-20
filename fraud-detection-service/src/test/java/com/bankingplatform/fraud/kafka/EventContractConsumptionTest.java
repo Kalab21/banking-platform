@@ -18,6 +18,8 @@ import org.mockito.Mockito;
 
 import java.math.BigDecimal;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -63,7 +65,8 @@ class EventContractConsumptionTest {
                 1L, "ref-1", 3L, 42L, "WITHDRAWAL",
                 new BigDecimal("9000.00"), new BigDecimal("100.00"))));
 
-        verify(fraudService).evaluateTransaction(3L, 42L, new BigDecimal("9000.00"), "ref-1");
+        verify(fraudService).evaluateTransaction(eq(3L), eq(42L), eq(new BigDecimal("9000.00")),
+                eq("ref-1"), anyString());
     }
 
     @Test
@@ -72,7 +75,8 @@ class EventContractConsumptionTest {
         consumer.onTransactionEvent(overTheWire(TransferCompleted.of(
                 "debit-1", "credit-1", 3L, 42L, 4L, new BigDecimal("500.00"))));
 
-        verify(fraudService).evaluateTransaction(3L, 42L, new BigDecimal("500.00"), "debit-1");
+        verify(fraudService).evaluateTransaction(eq(3L), eq(42L), eq(new BigDecimal("500.00")),
+                eq("debit-1"), anyString());
     }
 
     @Test
@@ -81,7 +85,7 @@ class EventContractConsumptionTest {
         // The signal this rule exists to catch, and it had never been counted.
         consumer.onPaymentEvent(overTheWire(PaymentFailed.of(1L, "pay-1", 3L, 42L)));
 
-        verify(fraudService).evaluateFailedPayment(3L, 42L);
+        verify(fraudService).evaluateFailedPayment(eq(3L), eq(42L), anyString());
     }
 
     @Test

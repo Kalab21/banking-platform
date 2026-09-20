@@ -10,6 +10,7 @@ import com.bankingplatform.creditcard.service.CreditCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,9 +51,12 @@ public class ApplicationEventConsumer {
         }
 
         if (approved.userId() == null) {
-            log.warn("Ignoring an approved application with no applicant: applicationId={}",
-                    approved.applicationId());
-            return;
+            // Not swallowed. An approved application with no applicant cannot
+            // be issued and should not vanish: throwing sends it to the dead
+            // letter topic, where it is kept and can be inspected. Logging and
+            // committing the offset would lose a real application silently.
+            throw new IllegalArgumentException(
+                    "Approved application " + approved.applicationId() + " names no applicant");
         }
 
         // Claimed in the same transaction as the card it issues, so a
@@ -72,7 +76,18 @@ public class ApplicationEventConsumer {
         request.setCreditLimit(resolveCreditLimit(creditScore));
         request.setApr(resolveApr(creditScore));
 
-        creditCardService.createCard(request);
+        try {
+            creditCardService.createCard(request);
+        } catch (DataIntegrityViolationException alreadyIssued) {
+            // ux_credit_cards_application_id refused it, so the product already exists for this
+            // application. A republished or re-approved application is a
+            // normal business case, not a poison record: without this it
+            // would retry four times and dead-letter, for a state that is
+            // already correct.
+            log.info("A card already exists for application {}; treating event {} as already handled",
+                    approved.applicationId(), approved.eventId());
+            return;
+        }
         log.info("Created credit card for userId={}, applicationId={}",
                 approved.userId(), approved.applicationId());
     }

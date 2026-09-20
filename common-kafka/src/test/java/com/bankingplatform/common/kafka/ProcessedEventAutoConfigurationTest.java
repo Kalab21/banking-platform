@@ -2,6 +2,7 @@ package com.bankingplatform.common.kafka;
 
 import com.bankingplatform.common.kafka.inbox.ProcessedEventAutoConfiguration;
 import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventRetention;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -55,5 +56,41 @@ class ProcessedEventAutoConfigurationTest {
     void backsOffForUserSuppliedGuard() {
         context.withBean("mine", ProcessedEventGuard.class, () -> (consumer, eventId) -> true)
                 .run(loaded -> assertThat(loaded).doesNotHaveBean("processedEventGuard"));
+    }
+
+    @Test
+    @DisplayName("registers the pruner, so the claim table is not unbounded")
+    void registersRetention() {
+        context.run(loaded -> assertThat(loaded).hasSingleBean(ProcessedEventRetention.class));
+    }
+
+    @Test
+    @DisplayName("turns scheduling on, since half the consuming services have none")
+    void enablesScheduling() {
+        // @Scheduled in a context without @EnableScheduling is never invoked
+        // and never complains, so the table would grow exactly as before. The
+        // post-processor registered by @EnableScheduling is the evidence it
+        // is switched on here rather than assumed from each service.
+        context.run(loaded -> assertThat(loaded)
+                .hasBean("org.springframework.context.annotation.internalScheduledAnnotationProcessor"));
+    }
+
+    @Test
+    @DisplayName("pruning can be switched off without losing the guard")
+    void retentionIsOptional() {
+        context.withPropertyValues("kafka.inbox.retention.enabled=false")
+                .run(loaded -> {
+                    assertThat(loaded).doesNotHaveBean(ProcessedEventRetention.class);
+                    assertThat(loaded).hasSingleBean(ProcessedEventGuard.class);
+                });
+    }
+
+    @Test
+    @DisplayName("a retention shorter than broker retention stops the service starting")
+    void refusesUnsafeRetention() {
+        // Loud at startup beats a prune that quietly reopens the duplicate
+        // window it was added to close.
+        context.withPropertyValues("kafka.inbox.retention.period=1d")
+                .run(loaded -> assertThat(loaded).hasFailed());
     }
 }

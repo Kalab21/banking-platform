@@ -329,6 +329,42 @@ dead letter topic, or a future consumer that forgets it. Partial because
 `LoanIssuanceIdempotencyIT` proves both against real PostgreSQL, including
 eight threads released together on the same event.
 
+### PostgreSQL, deliberately
+
+`ON CONFLICT DO NOTHING` is not portable SQL, and neither is the `ctid`-bounded
+delete the pruner uses. The portable alternative — insert, catch the duplicate
+key — marks the caller's transaction rollback-only on what is here the
+*ordinary* path, taking the business work down with the duplicate. Every
+service on this platform runs PostgreSQL. A service that did not would supply
+its own `ProcessedEventGuard`, and `ProcessedEventAutoConfiguration` backs off
+for one.
+
+### Retention
+
+The claim table grows with every event a service consumes, and the claim is an
+insert against its primary key on the hot path of every consumer, so an
+unpruned table makes that index deeper forever. `ProcessedEventRetention`
+deletes expired claims nightly, in bounded batches so no single statement holds
+a long lock beside live inserts.
+
+**A claim may only be dropped once the broker can no longer deliver the event
+it guards.** Prune faster than topic retention and a record still sitting in
+Kafka finds no claim on replay and is processed twice — the exact duplicate
+this mechanism exists to prevent, reintroduced by the cleanup for it. So the
+period is floored at seven days and a shorter setting fails at startup rather
+than being quietly honoured.
+
+| Property | Default | Meaning |
+|---|---|---|
+| `kafka.inbox.retention.enabled` | `true` | whether expired claims are pruned at all |
+| `kafka.inbox.retention.period` | `30d` | how long a claim is kept; below 7d is refused |
+| `kafka.inbox.retention.batch-size` | `1000` | rows per delete statement |
+| `kafka.inbox.retention.cron` | `0 30 3 * * *` | when the prune runs |
+
+The auto-configuration carries its own `@EnableScheduling`: three of the six
+consuming services declare none, and a `@Scheduled` method in a context without
+it is never called and never complains.
+
 ## What this does not solve
 
 Publishing is still best-effort. A producer catches the exception from
@@ -342,6 +378,13 @@ Consumers are idempotent. Every handler with a durable effect claims the event
 id in the same transaction as its work — see "Surviving redelivery" above.
 
 Listeners no longer swallow exceptions, and bounded retry with a dead-letter
-topic now stands behind them — see "When processing fails" above. What remains
-is that a retry re-delivers the record, so a consumer whose side effect is not
-idempotent can apply it twice.
+topic now stands behind them — see "When processing fails" above.
+
+What the guard does not cover is any effect outside the database transaction it
+lives in. A Redis counter, an outbound HTTP call or a published event is not
+rolled back with the claim, so a handler with one of those has to make it
+idempotent itself — `fraud-detection-service` claims its velocity counter per
+event for exactly this reason. Nor does the guard make a *business* fact
+unique: it keys on the publication, so two genuine publications of one approval
+are two events. The unique index on `application_id` is what stops a second
+product existing.

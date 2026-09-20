@@ -2,6 +2,7 @@ package com.bankingplatform.loan.kafka.consumer;
 
 import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.kafka.inbox.JdbcProcessedEventGuard;
+import com.bankingplatform.common.kafka.inbox.ProcessedEventGuard;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.service.LoanService;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,7 +12,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.mockito.Mockito;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -53,6 +58,7 @@ import static org.mockito.Mockito.verify;
 @Testcontainers
 @DataJpaTest(showSql = false)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(LoanIssuanceIdempotencyIT.GuardConfig.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Loan issuance idempotency — PostgreSQL integration")
 class LoanIssuanceIdempotencyIT {
@@ -76,6 +82,14 @@ class LoanIssuanceIdempotencyIT {
 
     @Autowired
     private PlatformTransactionManager transactions;
+
+    /**
+     * The container-managed guard, so its {@code @Transactional(MANDATORY)}
+     * is actually applied. The hand-built one used elsewhere in this class is
+     * a plain object and carries no proxy.
+     */
+    @Autowired
+    private ProcessedEventGuard springManagedGuard;
 
     private final LoanService loanService = Mockito.mock(LoanService.class);
 
@@ -115,6 +129,17 @@ class LoanIssuanceIdempotencyIT {
     }
 
     @Test
+    @DisplayName("the guard refuses to claim outside a transaction")
+    void claimRequiresATransaction() {
+        // The hole MANDATORY closes: a consumer whose listener forgot
+        // @Transactional would auto-commit the claim, fail the work, and mark
+        // the event processed for good with nothing left to retry it. The
+        // container-managed guard must refuse rather than oblige.
+        assertThatThrownBy(() -> springManagedGuard.claim("no-transaction", "evt-x"))
+                .isInstanceOf(IllegalTransactionStateException.class);
+    }
+
+    @Test
     @DisplayName("the same event delivered twice issues one loan")
     void redeliveryIssuesOneLoan() {
         ApplicationApproved approved = approval(7001L);
@@ -129,16 +154,19 @@ class LoanIssuanceIdempotencyIT {
     }
 
     @Test
-    @DisplayName("a different event for the same application is a different event")
-    void distinctEventsAreNotCollapsed() {
-        // Two publications of the same business fact are still two events.
-        // De-duplication keys on the publication, not on the application, so
-        // a genuine re-approval is not silently swallowed — the unique index
-        // on application_id is what stops a second loan existing.
-        deliver(approval(7002L));
+    @DisplayName("a re-approval reaches the service and is absorbed by the unique index")
+    void reApprovalIsNotAPoisonRecord() {
+        // Two publications of the same business fact are two events: the claim
+        // keys on the publication, so the second one passes the guard and
+        // reaches createLoan. The index is what stops a second loan existing,
+        // and the consumer treats that refusal as "already issued" rather than
+        // letting it retry four times and dead-letter a normal business case.
+        Mockito.doThrow(new DuplicateKeyException("ux_loans_application_id"))
+                .when(loanService).createLoan(any(CreateLoanRequest.class));
+
         deliver(approval(7002L));
 
-        verify(loanService, times(2)).createLoan(any(CreateLoanRequest.class));
+        verify(loanService, times(1)).createLoan(any(CreateLoanRequest.class));
     }
 
     @Test
@@ -164,23 +192,15 @@ class LoanIssuanceIdempotencyIT {
         pool.shutdown();
         assertThat(pool.awaitTermination(60, TimeUnit.SECONDS)).isTrue();
 
-        int failures = 0;
         for (Future<Void> result : results) {
-            try {
-                result.get();
-            } catch (Exception losingRace) {
-                // A loser may surface as a constraint violation rather than a
-                // quiet no-op depending on how the race resolves. Either is a
-                // correct outcome; issuing a second loan is not.
-                failures++;
-            }
+            // Every delivery resolves cleanly: the losers see ON CONFLICT DO
+            // NOTHING and return, rather than throwing. A raised exception
+            // here would mean a redelivery could poison a partition.
+            result.get();
         }
 
         verify(loanService, times(1)).createLoan(any(CreateLoanRequest.class));
         assertThat(claimsFor(approved.eventId())).isEqualTo(1);
-        assertThat(failures)
-                .as("seven of the eight lose the race, one way or another")
-                .isLessThanOrEqualTo(threads - 1);
     }
 
     @Test
@@ -223,8 +243,27 @@ class LoanIssuanceIdempotencyIT {
                     """);
         }
 
+        // Scoped to the rows this test inserts. An absolute count over every
+        // application-less loan would break the moment another test in this
+        // class created one, and the container is shared across the class.
         Long count = jdbc.queryForObject(
-                "SELECT count(*) FROM loans WHERE application_id IS NULL", Long.class);
+                "SELECT count(*) FROM loans WHERE application_id IS NULL AND principal = 5000",
+                Long.class);
         assertThat(count).isEqualTo(2);
+    }
+
+    /**
+     * The guard as the container builds it, so its {@code @Transactional}
+     * is actually proxied. A hand-constructed instance carries no proxy, and
+     * a test using one would never exercise the MANDATORY propagation the
+     * class relies on.
+     */
+    @TestConfiguration
+    static class GuardConfig {
+
+        @Bean
+        ProcessedEventGuard springManagedGuard(JdbcTemplate jdbc) {
+            return new JdbcProcessedEventGuard(jdbc);
+        }
     }
 }

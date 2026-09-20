@@ -69,6 +69,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.ACCOUNT_EVENTS, groupId = "notification-service")
     @Transactional
     public void onAccountEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof AccountCreated || event instanceof OverdraftTriggered)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:account", event.eventId())) {
             return;
         }
@@ -85,6 +92,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.TRANSACTION_EVENTS, groupId = "notification-service")
     @Transactional
     public void onTransactionEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof TransactionCreated || event instanceof TransferCompleted)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:transaction", event.eventId())) {
             return;
         }
@@ -98,6 +112,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.PAYMENT_EVENTS, groupId = "notification-service")
     @Transactional
     public void onPaymentEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof PaymentCompleted || event instanceof PaymentFailed)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:payment", event.eventId())) {
             return;
         }
@@ -113,6 +134,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.APPLICATION_EVENTS, groupId = "notification-service")
     @Transactional
     public void onApplicationEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof ApplicationApproved || event instanceof ApplicationRejected)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:application", event.eventId())) {
             return;
         }
@@ -126,6 +154,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.CREDIT_CARD_EVENTS, groupId = "notification-service")
     @Transactional
     public void onCreditCardEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof CreditCardCreated || event instanceof CreditCardStatementGenerated)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:credit-card", event.eventId())) {
             return;
         }
@@ -140,6 +175,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.LOAN_EVENTS, groupId = "notification-service")
     @Transactional
     public void onLoanEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof LoanDisbursed || event instanceof LoanPaidOff)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:loan", event.eventId())) {
             return;
         }
@@ -159,6 +201,13 @@ public class PlatformEventConsumer {
     @KafkaListener(topics = Topics.USER_EVENTS, groupId = "notification-service")
     @Transactional
     public void onUserEvent(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof UserLifecycleEvents.KycApproved || event instanceof UserLifecycleEvents.KycRejected || event instanceof UserLifecycleEvents.TwoFactorEnabled || event instanceof UserLifecycleEvents.TwoFactorDisabled)) {
+            return;
+        }
         if (!processedEvents.claim("notification-service:user", event.eventId())) {
             return;
         }

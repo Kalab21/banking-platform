@@ -9,6 +9,8 @@ import com.bankingplatform.fraud.repository.FraudRulesAuditRepository;
 import com.bankingplatform.common.events.FraudAlertCreated;
 import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -58,7 +60,12 @@ public class FraudDetectionService {
 
     // ---- public entry points ----
 
-    public void evaluateTransaction(Long accountId, Long userId, BigDecimal amount, String txRef) {
+    /**
+     * @param eventId the publication this evaluation is for, used to keep the
+     *                Redis counters from advancing twice on a redelivery
+     */
+    public void evaluateTransaction(Long accountId, Long userId, BigDecimal amount, String txRef,
+                                    String eventId) {
         int score = 0;
         StringBuilder desc = new StringBuilder();
 
@@ -72,7 +79,7 @@ public class FraudDetectionService {
             saveAudit(accountId, "HIGH_AMOUNT", 40, score, txRef);
         }
 
-        int velocity = incrementVelocityCounter(accountId);
+        int velocity = incrementVelocityCounter(accountId, eventId);
         if (velocity > velocityMaxTransactions) {
             score += 30;
             desc.append("High velocity: ").append(velocity).append(" transactions in 1 hour. ");
@@ -85,12 +92,17 @@ public class FraudDetectionService {
         }
 
         if (score >= freezeScoreThreshold) {
-            freezeAccount(accountId, score);
+            // After the transaction commits, not inside it. Freezing calls
+            // account-service, and holding a database connection open across a
+            // remote call is how a listener thread pool starves a connection
+            // pool when that service is slow.
+            int finalScore = score;
+            afterCommit(() -> freezeAccount(accountId, finalScore));
         }
     }
 
-    public void evaluateFailedPayment(Long accountId, Long userId) {
-        long failedCount = incrementFailedPaymentCounter(accountId);
+    public void evaluateFailedPayment(Long accountId, Long userId, String eventId) {
+        long failedCount = incrementFailedPaymentCounter(accountId, eventId);
         if (failedCount >= failedPaymentThreshold) {
             int score = 25;
             String desc = "Multiple failed payments: " + failedCount + " failures detected.";
@@ -121,8 +133,26 @@ public class FraudDetectionService {
 
     // ---- private helpers ----
 
-    private int incrementVelocityCounter(Long accountId) {
+    /**
+     * Counts one transaction against the account, once per event.
+     *
+     * <p>Redis is not part of the database transaction, so a redelivery would
+     * otherwise advance this counter again — and the processed-event guard
+     * cannot help, because it rolls back with the transaction it lives in.
+     * Four delivery attempts of one transaction would look like four
+     * transactions, which is enough on its own to cross the velocity
+     * threshold, raise a fraud alert and freeze a live customer's account.
+     *
+     * <p>So the increment is claimed per event first: a marker set only if
+     * absent, expiring with the window it belongs to. A retry finds the marker
+     * and reads the current count without adding to it.
+     */
+    private int incrementVelocityCounter(Long accountId, String eventId) {
         String key = "fraud:velocity:" + accountId;
+        if (!firstTimeCounting(key, eventId, Duration.ofSeconds(velocityWindowSeconds))) {
+            String current = redisTemplate.opsForValue().get(key);
+            return current == null ? 1 : Integer.parseInt(current);
+        }
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1) {
             redisTemplate.expire(key, Duration.ofSeconds(velocityWindowSeconds));
@@ -130,8 +160,41 @@ public class FraudDetectionService {
         return count != null ? count.intValue() : 1;
     }
 
-    private long incrementFailedPaymentCounter(Long accountId) {
+    /**
+     * True the first time this event is counted against this key.
+     *
+     * <p>An event with no id cannot be de-duplicated, so it is counted — the
+     * alternative is never counting it at all.
+     */
+    private boolean firstTimeCounting(String key, String eventId, Duration window) {
+        if (eventId == null || eventId.isBlank()) {
+            return true;
+        }
+        Boolean claimed = redisTemplate.opsForValue()
+                .setIfAbsent("counted:" + key + ":" + eventId, "1", window);
+        return !Boolean.FALSE.equals(claimed);
+    }
+
+    /** Runs after the surrounding transaction commits, or inline if there is none. */
+    private void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    private long incrementFailedPaymentCounter(Long accountId, String eventId) {
         String key = "fraud:failed-payments:" + accountId;
+        if (!firstTimeCounting(key, eventId, Duration.ofHours(24))) {
+            String current = redisTemplate.opsForValue().get(key);
+            return current == null ? 1 : Long.parseLong(current);
+        }
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1) {
             redisTemplate.expire(key, Duration.ofHours(24));

@@ -37,6 +37,13 @@ public class LoanEventConsumer {
     @KafkaListener(topics = Topics.LOAN_EVENTS, groupId = "user-service")
     @Transactional
     public void consume(DomainEvent event) {
+        // Below the type check: an event this service does not act on should
+        // leave no trace, and UnknownEvent is documented as no side effect and
+        // no error. Claiming first would write a row for every record on the
+        // topic and grow the table at full throughput.
+        if (!(event instanceof LoanPaidOff || event instanceof LoanRepaymentMade)) {
+            return;
+        }
         if (!processedEvents.claim("user-service:loan-score", event.eventId())) {
             return;
         }
