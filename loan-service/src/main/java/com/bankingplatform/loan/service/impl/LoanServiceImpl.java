@@ -93,7 +93,11 @@ public class LoanServiceImpl implements LoanService {
             throw new LoanNotActiveException("Loan not in PENDING state: " + loan.getStatus());
         }
 
-        accountClient.credit(request.getDisbursementAccountId(), loan.getPrincipal(),
+        // Keyed by the loan, because a loan is disbursed once. A retry of the
+        // same disbursement carries the same key; there is no second
+        // disbursement of one loan for it to collide with.
+        accountClient.credit(request.getDisbursementAccountId(),
+                "loan-disburse-" + loanId, loan.getPrincipal(),
                 "Loan disbursement — loanId=" + loanId);
 
         loan.setDisbursementAccountId(request.getDisbursementAccountId());
@@ -142,8 +146,13 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal interestPaid = payAmount.min(interestDue);
         BigDecimal principalPaid = payAmount.subtract(interestPaid);
 
+        // Minted before the debit so it names this repayment, and reused as
+        // the repayment's own reference below.
+        String paymentRef = generateRef();
+
         if (request.getSourceAccountId() != null) {
-            accountClient.debit(request.getSourceAccountId(), payAmount, "Loan repayment — loanId=" + loanId);
+            accountClient.debit(request.getSourceAccountId(), "loan-" + paymentRef,
+                    payAmount, "Loan repayment — loanId=" + loanId);
         }
 
         loan.setRemainingBalance(loan.getRemainingBalance().subtract(principalPaid).max(BigDecimal.ZERO));
@@ -169,7 +178,7 @@ public class LoanServiceImpl implements LoanService {
 
         LoanRepayment repayment = repaymentRepository.save(LoanRepayment.builder()
                 .loan(loan)
-                .paymentRef(generateRef())
+                .paymentRef(paymentRef)
                 .amount(payAmount)
                 .principalPaid(principalPaid)
                 .interestPaid(interestPaid)
@@ -203,8 +212,11 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal accruedInterest = principalPaid.multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
         BigDecimal payoffAmount = principalPaid.add(accruedInterest);
 
+        String payoffRef = generateRef();
+
         if (request.getSourceAccountId() != null) {
-            accountClient.debit(request.getSourceAccountId(), payoffAmount, "Early loan payoff — loanId=" + loanId);
+            accountClient.debit(request.getSourceAccountId(), "loan-" + payoffRef,
+                    payoffAmount, "Early loan payoff — loanId=" + loanId);
         }
 
         // Mark all remaining schedule entries PAID
@@ -220,7 +232,7 @@ public class LoanServiceImpl implements LoanService {
 
         LoanRepayment repayment = repaymentRepository.save(LoanRepayment.builder()
                 .loan(loan)
-                .paymentRef(generateRef())
+                .paymentRef(payoffRef)
                 .amount(payoffAmount)
                 .principalPaid(principalPaid)
                 .interestPaid(accruedInterest)

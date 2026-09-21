@@ -132,8 +132,15 @@ public class CreditCardServiceImpl implements CreditCardService {
         BigDecimal totalCharge = request.getAmount().add(fee);
         requireSufficientCredit(card, totalCharge);
 
+        // The reference is minted here rather than inside saveTx below,
+        // because it is what names this movement to account-service. A
+        // reference generated after the call is a new value on every attempt,
+        // which is exactly what an idempotency key must not be.
+        String advanceRef = UUID.randomUUID().toString();
+
         // Credit target account
-        accountClient.credit(request.getTargetAccountId(), request.getAmount(), "Cash advance from credit card");
+        accountClient.credit(request.getTargetAccountId(), "card-" + advanceRef,
+                request.getAmount(), "Cash advance from credit card");
 
         card.setCurrentBalance(card.getCurrentBalance().add(totalCharge));
         card.setAvailableCredit(card.getAvailableCredit().subtract(totalCharge));
@@ -141,7 +148,8 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         saveTx(card, CreditCardTransactionType.FEE, fee, "Cash advance fee", null, null);
         CreditCardTransaction tx = saveTx(card, CreditCardTransactionType.CASH_ADVANCE,
-                request.getAmount(), "Cash advance to account " + request.getTargetAccountId(), null, null);
+                request.getAmount(), "Cash advance to account " + request.getTargetAccountId(),
+                null, null, advanceRef);
 
         eventProducer.publishTransactionCompleted(card.getId(), card.getUserId(), tx.getTransactionRef(),
                 "CASH_ADVANCE", request.getAmount(), card.getAvailableCredit());
@@ -157,8 +165,11 @@ public class CreditCardServiceImpl implements CreditCardService {
             throw new IllegalStateException("No balance to pay");
         }
 
+        String paymentRef = UUID.randomUUID().toString();
+
         if (request.getSourceAccountId() != null) {
-            accountClient.debit(request.getSourceAccountId(), payAmount, "Credit card payment");
+            accountClient.debit(request.getSourceAccountId(), "card-" + paymentRef,
+                    payAmount, "Credit card payment");
         }
 
         card.setCurrentBalance(card.getCurrentBalance().subtract(payAmount));
@@ -172,7 +183,7 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         cardRepository.save(card);
         CreditCardTransaction tx = saveTx(card, CreditCardTransactionType.PAYMENT,
-                payAmount, "Card payment", null, null);
+                payAmount, "Card payment", null, null, paymentRef);
 
         eventProducer.publishTransactionCompleted(card.getId(), card.getUserId(), tx.getTransactionRef(),
                 "PAYMENT", payAmount, card.getAvailableCredit());
@@ -336,9 +347,25 @@ public class CreditCardServiceImpl implements CreditCardService {
     private CreditCardTransaction saveTx(CreditCard card, CreditCardTransactionType type,
                                           BigDecimal amount, String description,
                                           String merchantName, String merchantCategory) {
+        return saveTx(card, type, amount, description, merchantName, merchantCategory, generateRef());
+    }
+
+    /**
+     * The same, with the reference supplied by the caller.
+     *
+     * <p>Used by the two operations that call account-service before the row
+     * exists. They mint the reference first so it can key the balance
+     * movement, and the transaction then carries that same reference -- so
+     * the card's record of the movement and the key it was applied under are
+     * the same string, which is what makes a stuck one reconcilable.
+     */
+    private CreditCardTransaction saveTx(CreditCard card, CreditCardTransactionType type,
+                                          BigDecimal amount, String description,
+                                          String merchantName, String merchantCategory,
+                                          String transactionRef) {
         return txRepository.save(CreditCardTransaction.builder()
                 .creditCard(card)
-                .transactionRef(generateRef())
+                .transactionRef(transactionRef)
                 .type(type)
                 .amount(amount)
                 .description(description)

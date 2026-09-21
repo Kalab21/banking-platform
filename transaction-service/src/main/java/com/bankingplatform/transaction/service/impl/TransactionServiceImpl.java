@@ -36,15 +36,19 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional
     public TransactionResponse deposit(DepositRequest request) {
+        // Minted before the call, not after, so it can name the movement. A
+        // reference generated afterwards is a different value on every
+        // attempt, which is exactly what an idempotency key must not be.
+        String ref = generateRef();
+
         AccountResponse account = accountClient.updateBalance(
                 request.getAccountId(),
+                balanceKey(ref),
                 BalanceUpdateRequest.builder()
                         .amount(request.getAmount())
                         .operation("CREDIT")
                         .build()
         );
-
-        String ref = generateRef();
         Transaction tx = Transaction.builder()
                 .transactionRef(ref)
                 .accountId(request.getAccountId())
@@ -68,15 +72,16 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional
     public TransactionResponse withdraw(WithdrawRequest request) {
+        String ref = generateRef();
+
         AccountResponse account = accountClient.updateBalance(
                 request.getAccountId(),
+                balanceKey(ref),
                 BalanceUpdateRequest.builder()
                         .amount(request.getAmount())
                         .operation("DEBIT")
                         .build()
         );
-
-        String ref = generateRef();
         Transaction tx = Transaction.builder()
                 .transactionRef(ref)
                 .accountId(request.getAccountId())
@@ -104,9 +109,17 @@ public class TransactionServiceImpl implements TransactionService {
             throw new TransactionException("Cannot transfer to the same account");
         }
 
+        // Both references are minted up front, because each names its own
+        // leg to account-service. Generated after the calls, as they were,
+        // they would be new values on every attempt -- and the two legs would
+        // have nothing stable to be keyed by.
+        String debitRef = generateRef();
+        String creditRef = generateRef();
+
         // Debit source
         AccountResponse fromAccount = accountClient.updateBalance(
                 request.getFromAccountId(),
+                balanceKey(debitRef),
                 BalanceUpdateRequest.builder()
                         .amount(request.getAmount())
                         .operation("DEBIT")
@@ -126,6 +139,7 @@ public class TransactionServiceImpl implements TransactionService {
         try {
             toAccount = accountClient.updateBalance(
                     request.getToAccountId(),
+                    balanceKey(creditRef),
                     BalanceUpdateRequest.builder()
                             .amount(request.getAmount())
                             .operation("CREDIT")
@@ -140,8 +154,6 @@ public class TransactionServiceImpl implements TransactionService {
                     creditFailure);
         }
 
-        String debitRef = generateRef();
-        String creditRef = generateRef();
         String currency = request.getCurrency() != null ? request.getCurrency() : fromAccount.getCurrency();
         String desc = request.getDescription() != null ? request.getDescription() : "Transfer";
 
@@ -208,6 +220,23 @@ public class TransactionServiceImpl implements TransactionService {
         return number != null && number.length() >= 4
                 ? "••••" + number.substring(number.length() - 4)
                 : "another account";
+    }
+
+    /**
+     * The key one balance movement is applied under.
+     *
+     * <p>Derived from the transaction reference, which is minted once per
+     * movement and does not change when the call is retried -- so a retry is
+     * recognised as the same movement, and a genuinely new movement, even for
+     * the same amount between the same accounts, is not.
+     *
+     * <p>A transfer sends two, one per leg. They are different references, so
+     * the debit and the credit are separately idempotent: a retry that
+     * re-sends both replays the debit and applies the credit, which is
+     * precisely the recovery wanted after a credit that failed.
+     */
+    private String balanceKey(String transactionRef) {
+        return "txn-" + transactionRef;
     }
 
     private String generateRef() {

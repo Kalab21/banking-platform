@@ -4,12 +4,17 @@ import com.bankingplatform.account.dto.AccountResponse;
 import com.bankingplatform.account.dto.BalanceUpdateRequest;
 import com.bankingplatform.account.model.AccountStatus;
 import com.bankingplatform.account.service.AccountService;
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * Service-to-service account operations.
@@ -41,12 +46,53 @@ import org.springframework.web.bind.annotation.*;
 public class InternalAccountController {
 
     private final AccountService accountService;
+    private final IdempotencyGuard idempotency;
 
+    private static final String BALANCE = "BALANCE";
+
+    private static final String KEY_DESCRIPTION =
+            "Names one balance movement. The calling service derives it from the "
+                    + "transaction or payment reference the movement belongs to, so a retry "
+                    + "of that movement carries the same key and a new movement does not.";
+
+    /**
+     * Credit or debit a balance, at most once per key.
+     *
+     * <p>This is the one place on the platform where a balance actually
+     * changes. Every service that moves money arrives here over HTTP, and a
+     * call that times out tells the caller nothing about whether it applied.
+     * Without a key the caller has only bad options: never retry, and strand
+     * a movement that may not have happened; or retry, and debit twice.
+     *
+     * <p>The key is <b>required</b>. An endpoint that is idempotent only when
+     * asked is the worst of both — it looks safe and is not, and the caller
+     * that most needs the guarantee is the one that forgot to ask for it.
+     *
+     * <p>No caller identity, deliberately, and none in the fingerprint. This
+     * endpoint is reachable only from inside the Compose network and takes no
+     * {@code CallerIdentity} — an endpoint that accepted one would be
+     * admitting it is callable by a user. The key itself is scoped by the
+     * calling service, which derives it from its own transaction reference.
+     */
     @PutMapping("/{id}/balance")
     @Operation(summary = "Credit or debit an account balance (service-to-service only)")
-    public ResponseEntity<AccountResponse> updateBalance(@PathVariable Long id,
-                                                          @Valid @RequestBody BalanceUpdateRequest request) {
-        return ResponseEntity.ok(accountService.updateBalance(id, request));
+    public ResponseEntity<AccountResponse> updateBalance(
+            @PathVariable Long id,
+            @Valid @RequestBody BalanceUpdateRequest request,
+            @Parameter(description = KEY_DESCRIPTION)
+            @RequestHeader(name = IdempotencyGuard.HEADER, required = false) String idempotencyKey) {
+
+        // The account is a path variable, so a fingerprint over the body
+        // alone would make the same amount against two different accounts
+        // look like one request -- and the second account would be served the
+        // first one's response and never move.
+        return idempotency.execute(idempotencyKey, BALANCE, null,
+                Map.of("accountId", id, "request", request),
+                AccountResponse.class, response -> String.valueOf(response.getId()),
+                // 200, not 201: a balance movement creates nothing, and a
+                // replay answering 201 would be inventing a resource.
+                HttpStatus.OK,
+                () -> accountService.updateBalance(id, request));
     }
 
     @PutMapping("/{id}/status")

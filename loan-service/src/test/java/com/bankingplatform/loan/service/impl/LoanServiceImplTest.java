@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -248,7 +249,7 @@ class LoanServiceImplTest {
             request.setDisbursementAccountId(ACCOUNT_ID);
             loanService.disburseLoan(LOAN_ID, request);
 
-            verify(accountClient).credit(eq(ACCOUNT_ID), eq(PRINCIPAL), any());
+            verify(accountClient).credit(eq(ACCOUNT_ID), anyString(), eq(PRINCIPAL), any());
             verify(loanRepository).save(savedLoan.capture());
 
             Loan result = savedLoan.getValue();
@@ -270,7 +271,7 @@ class LoanServiceImplTest {
                     .isInstanceOf(LoanNotActiveException.class)
                     .hasMessageContaining("ACTIVE");
 
-            verify(accountClient, never()).credit(anyLong(), any(), any());
+            verify(accountClient, never()).credit(anyLong(), anyString(), any(), any());
             verify(loanRepository, never()).save(any());
         }
     }
@@ -333,7 +334,7 @@ class LoanServiceImplTest {
 
             loanService.makeRepayment(LOAN_ID, repaymentRequest("860.66", ACCOUNT_ID));
 
-            verify(accountClient).debit(eq(ACCOUNT_ID), eq(new BigDecimal("860.66")), any());
+            verify(accountClient).debit(eq(ACCOUNT_ID), anyString(), eq(new BigDecimal("860.66")), any());
         }
 
         @Test
@@ -347,7 +348,7 @@ class LoanServiceImplTest {
 
             loanService.makeRepayment(LOAN_ID, repaymentRequest("860.66", null));
 
-            verify(accountClient, never()).debit(anyLong(), any(), any());
+            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
         }
 
         @Test
@@ -446,7 +447,7 @@ class LoanServiceImplTest {
                     .isInstanceOf(LoanNotActiveException.class)
                     .hasMessageContaining("PENDING");
 
-            verify(accountClient, never()).debit(anyLong(), any(), any());
+            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
         }
 
         @Test
@@ -477,7 +478,7 @@ class LoanServiceImplTest {
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
 
             // 9,189.34 x (6.00 / 1200) = 45.95 accrued; payoff = 9,235.29
-            verify(accountClient).debit(eq(ACCOUNT_ID), eq(new BigDecimal("9235.29")), any());
+            verify(accountClient).debit(eq(ACCOUNT_ID), anyString(), eq(new BigDecimal("9235.29")), any());
 
             verify(repaymentRepository).save(savedRepayment.capture());
             assertThat(savedRepayment.getValue().getAmount()).isEqualByComparingTo("9235.29");
@@ -530,7 +531,7 @@ class LoanServiceImplTest {
                     .isInstanceOf(LoanNotActiveException.class)
                     .hasMessageContaining("PAID_OFF");
 
-            verify(accountClient, never()).debit(anyLong(), any(), any());
+            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
         }
 
         /**
@@ -564,7 +565,7 @@ class LoanServiceImplTest {
                     .isEqualByComparingTo(repayment.getAmount());
 
             // and the amount collected must be what the customer was actually debited
-            verify(accountClient).debit(eq(ACCOUNT_ID), eq(new BigDecimal("9235.29")), any());
+            verify(accountClient).debit(eq(ACCOUNT_ID), anyString(), eq(new BigDecimal("9235.29")), any());
 
             // loan is settled and closed
             verify(loanRepository).save(savedLoan.capture());
@@ -582,7 +583,7 @@ class LoanServiceImplTest {
 
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", null));
 
-            verify(accountClient, never()).debit(anyLong(), any(), any());
+            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
 
             verify(repaymentRepository).save(savedRepayment.capture());
             assertThat(savedRepayment.getValue().getPrincipalPaid()).isEqualByComparingTo("9189.34");
