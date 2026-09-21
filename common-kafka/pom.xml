@@ -50,6 +50,14 @@
             <artifactId>spring-jdbc</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Optional: the outbox reports its own backlog where a registry
+             exists, and is silent where one does not. A shared module must
+             not force a metrics stack onto a service that has none. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
