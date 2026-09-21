@@ -28,6 +28,18 @@ public class AuditLog {
     @Column(name = "performed_by")
     private Long performedBy;
 
+    /**
+     * What kind of actor made the change: CUSTOMER, EMPLOYEE, ADMIN, or
+     * SYSTEM when the platform acted on its own behalf.
+     *
+     * <p>Never null. A null {@code performedBy} beside {@code SYSTEM} means
+     * "no user was involved"; beside a role it would mean the attribution was
+     * lost, which is the thing this column exists to make visible.
+     */
+    @Column(name = "actor_type", nullable = false, length = 20)
+    private String actorType;
+
+
     @Column(columnDefinition = "TEXT")
     private String details;
 

@@ -1,5 +1,6 @@
 package com.bankingplatform.account.service.impl;
 
+import com.bankingplatform.common.security.CallerContext;
 import com.bankingplatform.account.client.UserClient;
 import com.bankingplatform.account.dto.*;
 import com.bankingplatform.account.exception.AccountStatusException;
@@ -70,7 +71,7 @@ public class AccountServiceImpl implements AccountService {
 
         Account saved = accountRepository.save(account);
 
-        audit("ACCOUNT", saved.getId(), "CREATE", request.getUserId(),
+        audit("ACCOUNT", saved.getId(), "CREATE",
                 "Account created: type=" + saved.getAccountType() + ", number=" + saved.getAccountNumber());
 
         // No account number: the event carries who owns the account and what
@@ -161,7 +162,7 @@ public class AccountServiceImpl implements AccountService {
         }
 
         Account saved = accountRepository.save(account);
-        audit("ACCOUNT", id, request.getOperation(), null, "Amount: " + amount);
+        audit("ACCOUNT", id, request.getOperation(), "Amount: " + amount);
         eventProducer.publishBalanceUpdated(saved.getId(), saved.getUserId(),
                 saved.getBalance(), request.getOperation());
 
@@ -183,7 +184,7 @@ public class AccountServiceImpl implements AccountService {
             throw new AccountStatusException("Cannot reopen a closed account");
         }
         account.setStatus(status);
-        audit("ACCOUNT", id, "STATUS_CHANGE", null, "New status: " + status);
+        audit("ACCOUNT", id, "STATUS_CHANGE", "New status: " + status);
         return accountMapper.toResponse(accountRepository.save(account));
     }
 
@@ -199,7 +200,7 @@ public class AccountServiceImpl implements AccountService {
     public AccountResponse updateOverdraftLimit(Long id, UpdateOverdraftRequest request) {
         Account account = findByIdForUpdate(id);
         account.setOverdraftLimit(request.getOverdraftLimit());
-        audit("ACCOUNT", id, "OVERDRAFT_UPDATE", null, "New limit: " + request.getOverdraftLimit());
+        audit("ACCOUNT", id, "OVERDRAFT_UPDATE", "New limit: " + request.getOverdraftLimit());
         return accountMapper.toResponse(accountRepository.save(account));
     }
 
@@ -235,12 +236,27 @@ public class AccountServiceImpl implements AccountService {
         return String.format("%06d", SECURE_RANDOM.nextInt(999999));
     }
 
-    private void audit(String entityType, Long entityId, String action, Long performedBy, String details) {
+    /**
+     * Records who did this, not only what was done.
+     *
+     * <p>The actor comes from the request rather than from an argument.
+     * Several call sites used to pass the <em>subject</em> of the change --
+     * the account holder, the applicant -- which reads correctly right up
+     * until a member of staff acts on a customer's behalf, and then the audit
+     * row names the customer as having done it themselves.
+     *
+     * <p>{@code actorType} is always set. A scheduled job or a Kafka listener
+     * has no caller and is recorded as {@code SYSTEM}, so a null
+     * {@code performedBy} beside it means "no user was involved" rather than
+     * "the attribution was lost".
+     */
+    private void audit(String entityType, Long entityId, String action, String details) {
         auditLogRepository.save(AuditLog.builder()
                 .entityType(entityType)
                 .entityId(entityId)
                 .action(action)
-                .performedBy(performedBy)
+                .performedBy(CallerContext.userId().orElse(null))
+                .actorType(CallerContext.actor())
                 .details(details)
                 .build());
     }
