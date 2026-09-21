@@ -6,7 +6,7 @@ import com.bankingplatform.common.events.TransactionCreated;
 import com.bankingplatform.common.events.TransferCompleted;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -25,7 +25,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class TransactionEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishTransactionCreated(Long transactionId, Long accountId, Long userId,
                                           String type, BigDecimal amount,
@@ -41,18 +41,19 @@ public class TransactionEventProducer {
     }
 
     /**
-     * Keyed by account rather than by transaction reference.
+     * Records the event in the outbox, in the caller's transaction.
      *
-     * <p>A reference is unique per event, so keying on it put one account's
-     * transactions on every partition and gave up the only ordering Kafka
-     * offers. Consumers that care about sequence on an account now get it.
+     * <p>Keyed by account rather than by transaction reference. A reference is
+     * unique per event, so keying on it put one account's transactions on
+     * every partition and gave up the only ordering Kafka offers.
+     *
+     * <p>Written to the outbox rather than sent here. A transfer debits one
+     * account and credits another in a single transaction; publishing from
+     * inside it with an asynchronous {@code send} meant the money could move
+     * while the event announcing it was lost, leaving every downstream view of
+     * that balance permanently wrong with nothing to reconcile against.
      */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.TRANSACTION_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.TRANSACTION_EVENTS, event);
     }
 }

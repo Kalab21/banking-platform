@@ -365,14 +365,127 @@ The auto-configuration carries its own `@EnableScheduling`: three of the six
 consuming services declare none, and a `@Scheduled` method in a context without
 it is never called and never complains.
 
+## Publishing what actually happened
+
+`kafkaTemplate.send` is asynchronous. It returns before the broker has
+acknowledged anything, so the exception a producer catches is evidence of
+neither delivery nor failure — the database transaction could commit while the
+event never reached Kafka, and nothing in the platform would know. An account
+that exists and was never announced. A transfer whose balances every
+downstream view has permanently wrong. An approval that no issuing service
+will ever act on.
+
+So the publication is a row, written in the same transaction as the change:
+
+```sql
+INSERT INTO outbox_event
+    (event_id, event_type, topic, partition_key, payload, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (event_id) DO NOTHING
+```
+
+It commits with the business change or not at all. `OutboxRelay` sends it
+afterwards and retries until the broker takes it, so the failure mode moves
+from silent loss to visible delay.
+
+`Propagation.MANDATORY`, for the mirror of the reason the processed-event
+guard uses it: a row that committed on its own would announce something that
+had not happened and might never happen, and a consumer acting on that is
+worse than a lost event, because the damage is downstream and nothing
+contradicts it.
+
+### Ordering
+
+Rows go out in id order within a partition key, and the Kafka client has been
+idempotent by default since 3.0 (`enable.idempotence=true`, `acks=all`), so a
+retry cannot reorder in-flight batches on the wire.
+
+Across replicas the danger is two relays holding rows for the same key at
+once. `FOR UPDATE SKIP LOCKED` does not prevent that — it stops two relays
+taking the same *row*, not two adjacent rows of one key — so the relay claims
+a **key**, with a transaction-scoped advisory lock, and a relay that cannot
+take a key leaves it to whoever holds it.
+
+That is also why the relay opens its transaction explicitly rather than with
+`@Transactional`. The annotation would sit on a method the class calls on
+itself, which does not go through the proxy, and the lock would be released
+the instant the statement that took it finished — the guarantee would quietly
+not exist.
+
+It does mean a database transaction is held open across a call to Kafka, which
+is normally how a connection pool starves. Here it is the point, so the
+exposure is bounded instead: a few keys per tick, a bounded batch per key, and
+a send timeout.
+
+### Failure
+
+A key stops at its first failed send, and the rest of that key waits for the
+next tick. Skipping past a failure would deliver events out of order, which
+for a balance is worse than delivering them late. Other keys are unaffected,
+so one poisoned aggregate does not stall the service. The reason is stored on
+the row, and the log moves from warning to error once a row has failed enough
+times to count as stalled rather than unlucky.
+
+`KafkaTemplate.send` is not purely asynchronous: it blocks while the client
+waits for cluster metadata and throws on the calling thread when
+`max.block.ms` expires, which this platform sets to one second. That is caught
+and turned into a failed send like any other. Uncaught it would escape the
+tick, roll back the rows already marked sent for every other key, and record
+no attempt against the row that caused it — which is exactly what it did the
+first time the relay ran against the live stack, while every test passed,
+because a mocked template only ever returned a failed future.
+
+A send that succeeds but whose row is not marked — the relay dies in between —
+is sent again next tick. The outbox is at-least-once; consumers claim the
+event id, which is what makes the duplicate harmless. The two halves of this
+document depend on each other.
+
+### The payload is serialised at write time
+
+What is stored is what goes on the wire. Serialising in the relay would mean a
+change to an event class between the write and the send silently altered an
+already-committed publication.
+
+It is serialised with **spring-kafka's** mapper, not the application's. The
+`JsonSerializer` these events used to go through builds its own through
+`JacksonUtils.enhancedObjectMapper()`, so that mapper — not Boot's — is the
+definition of the current wire format, down to how an `Instant` is written.
+Boot's is configured by the application's Jackson properties and whatever
+modules are on the classpath, and the two agree only by coincidence. Using it
+would have re-encoded every event the moment publishing moved to the outbox: a
+wire-format change for every consumer, from a refactor meant to change only
+where the event is written. `OutboxIT` pins the stored bytes to exactly what
+the serializer would have sent.
+
+### Retention, and services that have no outbox
+
+Only **sent** rows are pruned — `published_at IS NOT NULL`, never an age on
+`created_at`. An old row that has not been sent is the one row that must never
+be deleted: it is a publication the database already promised, and its age
+means something is wrong, not that it is stale.
+
+| Property | Default |
+|---|---|
+| `kafka.outbox.enabled` | `true` |
+| `kafka.outbox.poll-interval` | `1000` ms |
+| `kafka.outbox.keys-per-poll` | `20` |
+| `kafka.outbox.batch-size` | `50` |
+| `kafka.outbox.send-timeout` | `10s` |
+| `kafka.outbox.retention` | `7d` |
+
+Every service carries `common-kafka`, but a consumer has no `outbox_event` and
+a producer has no `processed_event`. The scheduled jobs check the table is
+present before polling it — otherwise half the platform would log a SQL error
+every second, and the failures worth reading would be buried in it.
+
 ## What this does not solve
 
-Publishing is still best-effort. A producer catches the exception from
-`kafkaTemplate.send` and logs it, and `send` is asynchronous, so a caught
-exception is not a delivery guarantee in the first place: the database
-transaction can commit and the event never reach the broker. Making that
-reliable needs the domain write and the publication to commit together — a
-transactional outbox — which is separate work.
+Publishing is reliable for `account-service`, `transaction-service` and
+`application-service` — see "Publishing what actually happened" below. The
+remaining producers (`payment-service`, `loan-service`,
+`credit-card-service`, `integration-service` and the fraud alert) still call
+`kafkaTemplate.send` directly and can still lose an event; migrating them is
+separate work.
 
 Consumers are idempotent. Every handler with a durable effect claims the event
 id in the same transaction as its work — see "Surviving redelivery" above.

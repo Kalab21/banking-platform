@@ -7,7 +7,7 @@ import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -29,7 +29,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class ApplicationEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishApplicationSubmitted(Long applicationId, Long userId, String productType) {
         send(ApplicationSubmitted.of(applicationId, userId, productType));
@@ -47,12 +47,16 @@ public class ApplicationEventProducer {
         log.info("Published APPLICATION_REJECTED for application {}", applicationId);
     }
 
+    /**
+     * Records the event in the outbox, in the caller's transaction.
+     *
+     * <p>This is the topic that causes financial products to exist: an
+     * approval makes {@code loan-service} and {@code credit-card-service}
+     * issue against it. A lost approval means a customer who was told yes and
+     * has nothing, and nothing in the platform that knows it. Committing the
+     * publication with the approval is what removes that case.
+     */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.APPLICATION_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.APPLICATION_EVENTS, event);
     }
 }

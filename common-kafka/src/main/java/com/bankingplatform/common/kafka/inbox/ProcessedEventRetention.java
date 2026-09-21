@@ -1,5 +1,6 @@
 package com.bankingplatform.common.kafka.inbox;
 
+import com.bankingplatform.common.kafka.TablePresence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -50,6 +51,7 @@ public class ProcessedEventRetention {
     private final JdbcTemplate jdbc;
     private final Duration retention;
     private final int batchSize;
+    private final TablePresence claimTable;
 
     public ProcessedEventRetention(JdbcTemplate jdbc, Duration retention, int batchSize) {
         if (retention == null || retention.compareTo(MINIMUM) < 0) {
@@ -64,10 +66,15 @@ public class ProcessedEventRetention {
         this.jdbc = jdbc;
         this.retention = retention;
         this.batchSize = batchSize;
+        this.claimTable = new TablePresence(jdbc, "processed_event");
     }
 
     @Scheduled(cron = "${kafka.inbox.retention.cron:0 30 3 * * *}")
     public void prune() {
+        // A produce-only service has this module but no claim table.
+        if (!claimTable.exists()) {
+            return;
+        }
         int removed = pruneOnce();
         if (removed > 0) {
             log.info("Pruned {} processed-event claims older than {}", removed, retention);

@@ -20,6 +20,19 @@
     </description>
 
     <dependencies>
+        <!-- The outbox stores DomainEvent payloads, so the contracts are
+             part of this module's API rather than only its callers'. -->
+        <dependency>
+            <groupId>com.bankingplatform</groupId>
+            <artifactId>common-events</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Declared rather than inherited through spring-kafka, which treats
+             it as optional: the outbox serialises payloads itself. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
@@ -50,6 +63,24 @@
              routing are container behaviour; asserting them against mocks
              would assert the mock. Embedded rather than Testcontainers so the
              test needs no Docker daemon and no second JVM's worth of memory. -->
+        <!-- The relay claims a key with a PostgreSQL advisory lock and the
+             prune bounds itself by ctid, so both are proved against the engine
+             the platform runs rather than against a mock of it. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka-test</artifactId>
