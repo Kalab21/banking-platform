@@ -1,5 +1,6 @@
 package com.bankingplatform.account.exception;
 
+import com.bankingplatform.common.idempotency.IdempotencyException;
 import com.bankingplatform.common.observability.LogSafe;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,25 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /**
+     * The idempotency rules refused the call.
+     *
+     * <p>A caller has to be able to tell "you sent this wrong" from "this key
+     * is already spent" from "we do not know what happened last time",
+     * because only the first is safe to correct and resend.
+     */
+    @ExceptionHandler(IdempotencyException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotency(IdempotencyException ex,
+                                                           HttpServletRequest req) {
+        ResponseEntity<ErrorResponse> body = build(ex.getStatus(), ex.getMessage(), req.getRequestURI());
+        if (ex.getRetryAfterSeconds() == null) {
+            return body;
+        }
+        return ResponseEntity.status(ex.getStatus())
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(body.getBody());
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex, HttpServletRequest req) {

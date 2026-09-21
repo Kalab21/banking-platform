@@ -41,7 +41,8 @@ public class AccountClientFallbackFactory implements FallbackFactory<AccountClie
             }
 
             @Override
-            public AccountResponse updateBalance(Long id, BalanceUpdateRequest request) {
+            public AccountResponse updateBalance(Long id, String idempotencyKey,
+                                                 BalanceUpdateRequest request) {
                 throw rethrow(cause);
             }
         };

@@ -99,6 +99,25 @@ public class IdempotencyGuard {
                                          Class<T> responseType,
                                          Function<T, String> reference,
                                          Supplier<T> action) {
+        return execute(rawKey, operation, caller, request, responseType, reference,
+                HttpStatus.CREATED, action);
+    }
+
+    /**
+     * The same, for an operation whose success is not a creation.
+     *
+     * <p>The status is part of what a replay returns, so it has to be the
+     * operation's own. Crediting a balance answers 200: nothing was created,
+     * and a replay that said 201 would be inventing a resource.
+     */
+    public <T> ResponseEntity<T> execute(String rawKey,
+                                         String operation,
+                                         CallerIdentity caller,
+                                         Object request,
+                                         Class<T> responseType,
+                                         Function<T, String> reference,
+                                         HttpStatus successStatus,
+                                         Supplier<T> action) {
 
         String key = requireValidKey(rawKey);
         String fingerprint = RequestFingerprint.of(operation, caller, request);
@@ -108,7 +127,7 @@ public class IdempotencyGuard {
             return replay(existing.get(), key, fingerprint, responseType);
         }
 
-        return executeAndRecord(key, reference, action);
+        return executeAndRecord(key, reference, successStatus, action);
     }
 
     private Optional<IdempotencyOutcome> claim(String key, String operation, String fingerprint) {
@@ -134,6 +153,7 @@ public class IdempotencyGuard {
      */
     private <T> ResponseEntity<T> executeAndRecord(String key,
                                                    Function<T, String> reference,
+                                                   HttpStatus successStatus,
                                                    Supplier<T> action) {
         T result;
         try {
@@ -150,8 +170,8 @@ public class IdempotencyGuard {
         // Only now, with the operation actually successful, is a result
         // recorded. Writing COMPLETED before this point would let a replay
         // report money that never moved.
-        store.complete(key, HttpStatus.CREATED.value(), serialise(result), reference.apply(result));
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        store.complete(key, successStatus.value(), serialise(result), reference.apply(result));
+        return ResponseEntity.status(successStatus).body(result);
     }
 
     private <T> ResponseEntity<T> replay(IdempotencyOutcome record, String key,

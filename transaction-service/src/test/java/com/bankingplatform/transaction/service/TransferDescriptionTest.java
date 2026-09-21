@@ -75,7 +75,7 @@ class TransferDescriptionTest {
     }
 
     private List<Transaction> legsFor(String description, String fromNumber, String toNumber) {
-        when(accountClient.updateBalance(anyLong(), any(BalanceUpdateRequest.class)))
+        when(accountClient.updateBalance(anyLong(), anyString(), any(BalanceUpdateRequest.class)))
                 .thenAnswer(invocation -> {
                     long id = invocation.getArgument(0);
                     return id == FROM_ID ? account(FROM_ID, fromNumber) : account(TO_ID, toNumber);

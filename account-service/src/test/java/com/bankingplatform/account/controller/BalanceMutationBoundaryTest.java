@@ -1,5 +1,10 @@
 package com.bankingplatform.account.controller;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
+import com.bankingplatform.account.idempotency.BalanceOutcomeClassifier;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.bankingplatform.account.dto.AccountResponse;
 import com.bankingplatform.account.model.AccountStatus;
 import com.bankingplatform.account.service.AccountService;
@@ -61,7 +66,7 @@ class BalanceMutationBoundaryTest {
     }
 
     private MockMvc internalApi() {
-        return MockMvcBuilders.standaloneSetup(new InternalAccountController(accountService)).build();
+        return MockMvcBuilders.standaloneSetup(new InternalAccountController(accountService, passThroughIdempotency())).build();
     }
 
     @Nested
@@ -105,6 +110,7 @@ class BalanceMutationBoundaryTest {
         @DisplayName("a service-to-service debit succeeds, so transfers keep working")
         void internalDebitWorks() throws Exception {
             internalApi().perform(put("/internal/accounts/{id}/balance", ACCOUNT_OF_A)
+                            .header(IdempotencyGuard.HEADER, "boundary-test-debit")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"amount\":25.00,\"operation\":\"DEBIT\"}"))
                     .andExpect(status().isOk());
@@ -116,6 +122,7 @@ class BalanceMutationBoundaryTest {
         @DisplayName("a service-to-service credit succeeds, so disbursements keep working")
         void internalCreditWorks() throws Exception {
             internalApi().perform(put("/internal/accounts/{id}/balance", ACCOUNT_OF_A)
+                            .header(IdempotencyGuard.HEADER, "boundary-test-credit")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"amount\":25.00,\"operation\":\"CREDIT\"}"))
                     .andExpect(status().isOk());
@@ -128,6 +135,7 @@ class BalanceMutationBoundaryTest {
             // Kafka listeners and service code, where there is no request to
             // derive an identity from.
             internalApi().perform(put("/internal/accounts/{id}/balance", ACCOUNT_OF_A)
+                            .header(IdempotencyGuard.HEADER, "boundary-test-no-identity")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"amount\":10.00,\"operation\":\"CREDIT\"}"))
                     .andExpect(status().isOk());
@@ -145,5 +153,18 @@ class BalanceMutationBoundaryTest {
 
             verify(accountService).updateStatus(ACCOUNT_OF_A, AccountStatus.FROZEN);
         }
+    }
+
+    /**
+     * A guard whose store always hands out the key, so this test exercises
+     * the boundary rather than replay. The idempotency rules themselves are
+     * covered by BalanceIdempotencyIT.
+     */
+    private static IdempotencyGuard passThroughIdempotency() {
+        IdempotencyStore store = Mockito.mock(IdempotencyStore.class);
+        Mockito.when(store.claim(Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(java.util.Optional.empty());
+        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()),
+                new BalanceOutcomeClassifier());
     }
 }

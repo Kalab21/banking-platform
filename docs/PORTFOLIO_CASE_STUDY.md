@@ -11,7 +11,7 @@ boundaries.
 It uses synthetic data and makes no production or regulatory claim.
 
 **At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
-services), 923 automated tests in CI, 34 live-stack scenarios on demand, and a
+services), 930 automated tests in CI, 34 live-stack scenarios on demand, and a
 customer console that never holds a bearer token or a full account number.
 
 ## Problem / Context
@@ -238,12 +238,12 @@ something false about their money.
 
 ## Verification
 
-923 automated tests run in CI:
+930 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
 | Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 547 |
-| Backend integration against real PostgreSQL and an embedded Kafka broker | 94 |
+| Backend integration against real PostgreSQL and an embedded Kafka broker | 101 |
 | Frontend unit and component (Vitest, React Testing Library) | 213 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
