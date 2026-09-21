@@ -16,6 +16,7 @@ import org.springframework.boot.autoconfigure.transaction.TransactionAutoConfigu
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -80,6 +81,21 @@ public class OutboxAutoConfiguration {
     @ConditionalOnMissingBean(OutboxPublisher.class)
     public OutboxPublisher outboxPublisher(JdbcTemplate jdbcTemplate) {
         return new JdbcOutboxPublisher(jdbcTemplate, JacksonUtils.enhancedObjectMapper());
+    }
+
+    /**
+     * Reports the outbox's backlog where a metrics registry exists.
+     *
+     * <p>Conditional on the registry rather than requiring it: the module is
+     * on the classpath of services that publish nothing, and a shared module
+     * has no business forcing a metrics stack onto them.
+     */
+    @Bean
+    @ConditionalOnClass(MeterRegistry.class)
+    @ConditionalOnBean({JdbcTemplate.class, MeterRegistry.class})
+    @ConditionalOnMissingBean(OutboxMetrics.class)
+    public OutboxMetrics outboxMetrics(JdbcTemplate jdbcTemplate, MeterRegistry registry) {
+        return new OutboxMetrics(jdbcTemplate, registry);
     }
 
     /**

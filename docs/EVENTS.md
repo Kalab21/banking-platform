@@ -478,6 +478,49 @@ a producer has no `processed_event`. The scheduled jobs check the table is
 present before polling it — otherwise half the platform would log a SQL error
 every second, and the failures worth reading would be buried in it.
 
+## When something stops
+
+Every mechanism in this document turns a loud failure into a quiet one. A
+lost event becomes a delayed event; a duplicate becomes a claim; a
+half-applied transfer becomes a row. That is the right trade and it has a
+cost: the platform keeps looking healthy while work piles up somewhere
+nobody is looking.
+
+So each of those states is a metric, on `/actuator/prometheus`:
+
+| Metric | What a non-zero value means |
+|---|---|
+| `banking.outbox.pending` | events written and not yet sent. Briefly non-zero is normal; only ever growing means the relay is not running |
+| `banking.outbox.oldest.age.seconds` | how long the oldest unsent event has waited. **The one to alert on** — a big backlog that drains is load, one row waiting an hour is a stall |
+| `banking.outbox.failing` | rows the broker has already refused. A different problem from a backlog, so a different number |
+| `banking.kafka.deadletter` | records the platform has given up on, tagged by source topic. Unlike a retry, this is final |
+| `banking.idempotency.unknown` | money movements whose effect was never established. Each needs a person |
+| `banking.idempotency.abandoned` | claims left behind by a process that died. The key is blocked until someone looks |
+| `banking.transfers.half.applied` | money that left one account and arrived nowhere |
+| `banking.transfers.unsettled` | transfers that did not finish, including those whose fate is merely unknown |
+| `banking.payments.stuck` | scheduled payments in PROCESSING for over an hour |
+| `banking.payments.overdue` | payments due and unclaimed. Growing means the scheduler is not running |
+
+Gauges rather than counters for the states, because a gauge read from the
+table at scrape time cannot drift from the table the way an in-memory counter
+can. Each one answers zero rather than throwing if its table is absent or the
+database is unreachable: a metric that fails a scrape takes every other metric
+on that endpoint down with it.
+
+### Retention
+
+`processed_event`, `outbox_event` and `idempotency_record` are all pruned on a
+schedule. What the pruning refuses to touch matters more than what it removes:
+
+- an `UNKNOWN` idempotency record is **never** pruned at any age — it is the
+  only evidence that a movement's effect was never established, and an old one
+  is overdue rather than stale
+- an `IN_PROGRESS` claim is never pruned either, because releasing a claimed
+  key could let an operation that already moved money run again
+- an **unsent** outbox row is never pruned, only sent ones
+- a processed-event claim is kept well beyond the broker's own retention, or
+  pruning it would reopen the duplicate window it exists to close
+
 ## What this does not solve
 
 Publishing is reliable. Every producer on the platform writes its event to a

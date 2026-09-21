@@ -1,5 +1,6 @@
 package com.bankingplatform.common.kafka;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
@@ -10,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
@@ -34,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 
@@ -96,6 +99,17 @@ public class KafkaRecoveryAutoConfiguration implements DisposableBean {
      * outlive the context — one leaked producer per refresh.
      */
     private volatile DefaultKafkaProducerFactory<Object, Object> deadLetterProducerFactory;
+
+    /**
+     * Empty in a service with no metrics registry, which is why every use of
+     * it is guarded rather than assumed.
+     */
+    private Optional<DeadLetterCounter> deadLetters = Optional.empty();
+
+    @Autowired(required = false)
+    void setMeterRegistry(MeterRegistry registry) {
+        this.deadLetters = Optional.ofNullable(registry).map(DeadLetterCounter::new);
+    }
 
     private static final Logger log = LoggerFactory.getLogger(KafkaRecoveryAutoConfiguration.class);
 
@@ -173,6 +187,29 @@ public class KafkaRecoveryAutoConfiguration implements DisposableBean {
         }
     }
 
+    /**
+     * Counts records that reach a dead letter topic, tagged by where they
+     * came from.
+     *
+     * <p>Optional, because this module sits on the classpath of services that
+     * may have no metrics registry, and a shared module must not force one on
+     * them. Where a registry exists, {@code banking.kafka.deadletter} is the
+     * number to alert on: unlike a retry, a dead letter means the platform
+     * has given up on a record.
+     */
+    private static final class DeadLetterCounter {
+
+        private final MeterRegistry registry;
+
+        private DeadLetterCounter(MeterRegistry registry) {
+            this.registry = registry;
+        }
+
+        void increment(String sourceTopic) {
+            registry.counter("banking.kafka.deadletter", "topic", sourceTopic).increment();
+        }
+    }
+
     private DeadLetterPublishingRecoverer recoverer(KafkaTemplate<Object, Object> jsonTemplate,
                                                     KafkaTemplate<Object, Object> bytesTemplate,
                                                     KafkaRecoveryProperties properties,
@@ -189,8 +226,19 @@ public class KafkaRecoveryAutoConfiguration implements DisposableBean {
                         // letter topic has fewer partitions than the source.
                         -1));
 
-        recoverer.setHeadersFunction((record, exception) ->
-                extraHeaders(record, exception, consumerGroup, properties));
+        recoverer.setHeadersFunction((record, exception) -> {
+            // The one place a record is known to be beyond retrying. A log
+            // line here is true and unwatched; a counter is the thing an
+            // alert can be hung on, and a dead letter is exactly the event
+            // worth waking someone for.
+            //
+            // Counted in the headers function rather than by wrapping the
+            // recoverer, because that function runs once per recovered record
+            // and is the only hook Spring offers that sees both the record
+            // and the failure.
+            deadLetters.ifPresent(counter -> counter.increment(record.topic()));
+            return extraHeaders(record, exception, consumerGroup, properties);
+        });
         return recoverer;
     }
 
