@@ -13,5 +13,15 @@ public interface PaymentService {
     List<PaymentResponse> getByPayerAccount(Long accountId);
     List<PaymentResponse> getScheduledByPayerAccount(Long accountId);
     PaymentResponse cancel(Long id);
-    void processScheduledPayments();
+    /**
+     * Takes ownership of up to {@code limit} payments that are due, and of
+     * any left stalled by a worker that died.
+     *
+     * @return the ids now owned by this caller, to be handed to
+     *         {@link #processClaimedPayment(Long)} one at a time
+     */
+    List<Long> claimScheduledPayments(int limit);
+
+    /** Processes one payment this worker has already claimed. */
+    void processClaimedPayment(Long paymentId);
 }
