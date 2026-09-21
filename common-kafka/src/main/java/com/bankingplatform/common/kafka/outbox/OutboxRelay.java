@@ -125,6 +125,13 @@ public class OutboxRelay {
             // next tick resumes exactly where this left off, because nothing
             // was marked sent.
             log.warn("Outbox relay could not read the outbox: {}", e.getMessage());
+        } catch (Exception e) {
+            // Nothing that happens in one tick may stop the relay running
+            // again. An escaped exception is handled by the scheduler, which
+            // logs it and carries on — but it also means this tick rolled
+            // back, so the alternative to catching it here is a relay whose
+            // failures are indistinguishable from an idle one.
+            log.error("Outbox relay tick failed and rolled back: {}", e.toString());
         }
     }
 
@@ -170,15 +177,30 @@ public class OutboxRelay {
         // Issued in id order on one producer, so the broker sees them in that
         // order. Results are collected afterwards rather than blocking on each
         // send, which would make a batch as slow as its round trips.
+        //
+        // send() is not purely asynchronous: it blocks while the client waits
+        // for cluster metadata and throws on the calling thread when
+        // max.block.ms expires. Left uncaught that escapes this tick entirely,
+        // rolls back the rows already marked sent for other keys, and gives
+        // this row no recorded attempt — so the failure is converted to a
+        // failed future and handled with every other kind.
         List<CompletableFuture<?>> inFlight = new ArrayList<>(pending.size());
         for (PendingEvent event : pending) {
-            inFlight.add(kafka.send(event.topic(), event.partitionKey(),
-                    event.payload().getBytes(StandardCharsets.UTF_8)));
+            try {
+                inFlight.add(kafka.send(event.topic(), event.partitionKey(),
+                        event.payload().getBytes(StandardCharsets.UTF_8)));
+            } catch (Exception refused) {
+                inFlight.add(CompletableFuture.failedFuture(refused));
+                // Nothing further on this key is offered: a send that has not
+                // been issued cannot arrive out of order, and the rows are
+                // still there for the next tick.
+                break;
+            }
         }
 
         Duration timeout = properties.getSendTimeout();
         int sent = 0;
-        for (int i = 0; i < pending.size(); i++) {
+        for (int i = 0; i < inFlight.size(); i++) {
             PendingEvent event = pending.get(i);
             try {
                 inFlight.get(i).get(timeout.toMillis(), TimeUnit.MILLISECONDS);

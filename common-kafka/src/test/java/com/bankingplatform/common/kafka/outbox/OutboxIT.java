@@ -299,6 +299,44 @@ class OutboxIT {
         }
 
         @Test
+        @DisplayName("a send that throws on the calling thread is handled, not escaped")
+        void synchronousRefusalIsHandled() {
+            // send() blocks for cluster metadata and throws here when
+            // max.block.ms expires — which this platform sets to one second.
+            // Uncaught, it escapes the tick, rolls back the rows already
+            // marked sent for every other key, and records no attempt against
+            // the row that caused it. The live stack found this; the tests
+            // did not, because a mock only ever returned a failed future.
+            queue(accountCreated(70L), accountCreated(70L));
+            kafka.throwSynchronously();
+
+            int sent = relay.sendPending();
+
+            assertThat(sent).isZero();
+            assertThat(pendingCount()).isEqualTo(2);
+            Integer attempts = jdbc.queryForObject(
+                    "SELECT attempts FROM outbox_event ORDER BY id LIMIT 1", Integer.class);
+            assertThat(attempts).as("the attempt is recorded rather than lost").isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a tick that fails outright does not stop the relay")
+        void aFailedTickDoesNotKillTheScheduler() {
+            queue(accountCreated(71L));
+            kafka.throwSynchronously();
+
+            // relay() is what the scheduler calls. If it throws, Spring logs
+            // it and the fixed-delay task still runs again — but the tick has
+            // rolled back, so swallowing it here is what keeps a failing relay
+            // distinguishable from an idle one.
+            relay.relay();
+
+            kafka.stopThrowing();
+            relay.relay();
+            assertThat(pendingCount()).isZero();
+        }
+
+        @Test
         @DisplayName("one stalled key does not stall the others")
         void failureIsPerKey() {
             queue(accountCreated(40L), accountCreated(41L));
@@ -490,6 +528,7 @@ class OutboxIT {
         private final AtomicInteger seen = new AtomicInteger();
         private int failFromIndex = Integer.MAX_VALUE;
         private String failingKey;
+        private volatile boolean throwOnCall;
 
         void failFrom(int index) {
             this.failFromIndex = index;
@@ -499,11 +538,23 @@ class OutboxIT {
             this.failingKey = key;
         }
 
+        /** As the real client does when it cannot reach the cluster in time. */
+        void throwSynchronously() {
+            this.throwOnCall = true;
+        }
+
+        void stopThrowing() {
+            this.throwOnCall = false;
+        }
+
         @SuppressWarnings("unchecked")
         KafkaTemplate<String, byte[]> template() {
             KafkaTemplate<String, byte[]> template = mock(KafkaTemplate.class);
             when(template.send(anyString(), anyString(), any(byte[].class)))
                     .thenAnswer(invocation -> {
+                        if (throwOnCall) {
+                            throw new org.springframework.kafka.KafkaException("Send failed");
+                        }
                         String topic = invocation.getArgument(0);
                         String key = invocation.getArgument(1);
                         byte[] value = invocation.getArgument(2);

@@ -426,6 +426,15 @@ so one poisoned aggregate does not stall the service. The reason is stored on
 the row, and the log moves from warning to error once a row has failed enough
 times to count as stalled rather than unlucky.
 
+`KafkaTemplate.send` is not purely asynchronous: it blocks while the client
+waits for cluster metadata and throws on the calling thread when
+`max.block.ms` expires, which this platform sets to one second. That is caught
+and turned into a failed send like any other. Uncaught it would escape the
+tick, roll back the rows already marked sent for every other key, and record
+no attempt against the row that caused it — which is exactly what it did the
+first time the relay ran against the live stack, while every test passed,
+because a mocked template only ever returned a failed future.
+
 A send that succeeds but whose row is not marked — the relay dies in between —
 is sent again next tick. The outbox is at-least-once; consumers claim the
 event id, which is what makes the duplicate harmless. The two halves of this
