@@ -13,11 +13,13 @@ import com.bankingplatform.payment.repository.PaymentRepository;
 import com.bankingplatform.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,8 +32,17 @@ public class PaymentServiceImpl implements PaymentService {
     private final AuditLogRepository auditLogRepository;
     private final PaymentMapper paymentMapper;
     private final PaymentEventProducer eventProducer;
+
     private final TransactionClient transactionClient;
     private final AccountClient accountClient;
+
+    /**
+     * How long a payment may sit in PROCESSING before another worker assumes
+     * the one that claimed it is gone. Long enough that a slow payment is not
+     * taken away from a worker still running it.
+     */
+    @Value("${payments.scheduler.stalled-after-minutes:15}")
+    private int stalledAfterMinutes;
 
     @Override
     @Transactional
@@ -107,44 +118,96 @@ public class PaymentServiceImpl implements PaymentService {
         return paymentMapper.toResponse(paymentRepository.save(payment));
     }
 
+    /**
+     * Takes ownership of due payments, and of any a dead worker left behind.
+     *
+     * <p>Two steps, both inside this one transaction. The rows are locked
+     * with {@code SKIP LOCKED}, so a second replica takes different work
+     * rather than the same work or waiting for it; then their status is
+     * changed, which is the half of the claim that outlives this
+     * transaction. Locking alone would not do: each payment is processed in
+     * a transaction of its own, and the lock is gone the moment the claim
+     * commits.
+     *
+     * <p>Stalled payments are picked up in the same pass. A claim survives
+     * the worker that made it, which is the point of writing it down and
+     * also the risk -- without this, a payment claimed by a process that then
+     * died would sit in PROCESSING forever. Re-running one is safe: the
+     * transfer carries an idempotency key derived from the payment
+     * reference, so a second attempt is a replay rather than a second
+     * movement of money.
+     */
     @Override
     @Transactional
-    public void processScheduledPayments() {
-        List<Payment> due = paymentRepository.findDueScheduledPayments(LocalDateTime.now());
-        if (due.isEmpty()) return;
+    public List<Long> claimScheduledPayments(int limit) {
+        List<Long> ids = new ArrayList<>(
+                paymentRepository.lockDueScheduledPayments(LocalDateTime.now(), limit));
 
-        log.info("Processing {} scheduled payments", due.size());
-        for (Payment payment : due) {
-            // Resolved once, before the attempt, and reused by whichever event
-            // is published. Doing it in the catch block meant that when
-            // account-service was the thing that had failed, every failed
-            // payment paid a full Feign read timeout again on the way out,
-            // while this batch transaction held its row locks open.
-            Long payerUserId = ownerOf(payment.getPayerAccountId());
-            try {
-                payment.setStatus(PaymentStatus.PROCESSING);
-                paymentRepository.save(payment);
-
-                executePayment(payment, payerUserId);
-                payment.setStatus(PaymentStatus.COMPLETED);
-                payment.setProcessedAt(LocalDateTime.now());
-
-                if (payment.isRecurring() && payment.getRecurrencePattern() != null) {
-                    LocalDate nextDate = calculateNextDate(LocalDate.now(), payment.getRecurrencePattern());
-                    boolean withinEndDate = payment.getEndDate() == null || !nextDate.isAfter(payment.getEndDate());
-                    if (withinEndDate) {
-                        createNextOccurrence(payment, nextDate);
-                    }
-                }
-            } catch (Exception e) {
-                payment.setStatus(PaymentStatus.FAILED);
-                payment.setFailureReason(e.getMessage());
-                log.error("Scheduled payment {} failed: {}", payment.getPaymentRef(), e.getMessage());
-                eventProducer.publishPaymentFailed(payment.getId(), payment.getPaymentRef(),
-                        payment.getPayerAccountId(), payerUserId);
+        int remaining = limit - ids.size();
+        if (remaining > 0) {
+            LocalDateTime cutoff = LocalDateTime.now().minusMinutes(stalledAfterMinutes);
+            List<Long> stalled = paymentRepository.lockStalledPayments(cutoff, remaining);
+            if (!stalled.isEmpty()) {
+                log.warn("Re-claiming {} payments left PROCESSING for more than {} minutes",
+                        stalled.size(), stalledAfterMinutes);
+                ids.addAll(stalled);
             }
-            paymentRepository.save(payment);
         }
+
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        paymentRepository.claim(ids, LocalDateTime.now());
+        return ids;
+    }
+
+    /**
+     * Processes one payment this worker has already claimed.
+     *
+     * <p>Its own transaction, so a payment that fails takes nothing else down
+     * with it. The previous version ran the whole batch in one transaction:
+     * an exception escaping the per-payment catch rolled back the bookkeeping
+     * for every payment already handled, while the transfers those payments
+     * had performed in another service stood.
+     */
+    @Override
+    @Transactional
+    public void processClaimedPayment(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found: " + paymentId));
+
+        // Resolved once, before the attempt, and reused by whichever event is
+        // published. Doing it in the catch block meant that when
+        // account-service was the thing that had failed, every failed payment
+        // paid a full Feign read timeout again on the way out.
+        Long payerUserId = ownerOf(payment.getPayerAccountId());
+        try {
+            executePayment(payment, payerUserId);
+            payment.setStatus(PaymentStatus.COMPLETED);
+            payment.setProcessedAt(LocalDateTime.now());
+
+            if (payment.isRecurring() && payment.getRecurrencePattern() != null) {
+                LocalDate nextDate = calculateNextDate(LocalDate.now(), payment.getRecurrencePattern());
+                boolean withinEndDate = payment.getEndDate() == null || !nextDate.isAfter(payment.getEndDate());
+                if (withinEndDate) {
+                    // Created in the same transaction as the payment that
+                    // begets it. Two workers processing one payment would
+                    // otherwise each schedule the next occurrence, and the
+                    // customer would be billed twice next month -- which the
+                    // transfer's idempotency key does not protect against,
+                    // because the two occurrences are genuinely different
+                    // payments.
+                    createNextOccurrence(payment, nextDate);
+                }
+            }
+        } catch (Exception e) {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason(e.getMessage());
+            log.error("Scheduled payment {} failed: {}", payment.getPaymentRef(), e.getMessage());
+            eventProducer.publishPaymentFailed(payment.getId(), payment.getPaymentRef(),
+                    payment.getPayerAccountId(), payerUserId);
+        }
+        paymentRepository.save(payment);
     }
 
     private Payment executePayment(Payment payment) {
