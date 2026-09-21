@@ -7,7 +7,7 @@ import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -31,7 +31,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class CreditCardEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishTransactionCompleted(Long cardId, Long userId, String ref, String type,
                                             BigDecimal amount, BigDecimal availableCredit) {
@@ -49,12 +49,15 @@ public class CreditCardEventProducer {
         log.info("Published CREDIT_CARD_STATEMENT_GENERATED: cardId={}, statementId={}", cardId, statementId);
     }
 
+    /**
+     * Records the event in the outbox, in the caller's transaction.
+     *
+     * <p>Card transactions are the other route into a credit score, and the
+     * statement event is the only thing that tells a customer a statement
+     * exists. Both used to depend on a send whose failure was logged and
+     * forgotten.
+     */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.CREDIT_CARD_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.CREDIT_CARD_EVENTS, event);
     }
 }

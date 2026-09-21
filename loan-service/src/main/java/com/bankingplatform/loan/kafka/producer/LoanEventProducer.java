@@ -7,7 +7,7 @@ import com.bankingplatform.common.events.LoanRepaymentMade;
 import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -28,7 +28,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class LoanEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishLoanDisbursed(Long loanId, Long userId, BigDecimal principal, Long accountId) {
         send(LoanDisbursed.of(loanId, userId, principal, accountId));
@@ -46,12 +46,15 @@ public class LoanEventProducer {
         log.info("Published LOAN_PAID_OFF: loanId={}", loanId);
     }
 
+    /**
+     * Records the event in the outbox, in the caller's transaction.
+     *
+     * <p>A repayment that is recorded and never announced leaves the customer
+     * uncredited: {@code user-service} raises a credit score on this event,
+     * and it is the only route by which an on-time repayment ever does. A
+     * disbursement that is not announced is money lent and nothing said.
+     */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.LOAN_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.LOAN_EVENTS, event);
     }
 }

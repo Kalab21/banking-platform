@@ -6,7 +6,7 @@ import com.bankingplatform.common.events.PaymentFailed;
 import com.bankingplatform.common.events.Topics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -26,7 +26,7 @@ import java.math.BigDecimal;
 @Slf4j
 public class PaymentEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishPaymentCompleted(Long paymentId, String ref, Long payerAccountId, Long userId,
                                         Long payeeAccountId, BigDecimal amount, String type) {
@@ -39,12 +39,17 @@ public class PaymentEventProducer {
         log.warn("Published PAYMENT_FAILED: ref={}", ref);
     }
 
+    /**
+     * Records the event in the outbox, in the caller's transaction.
+     *
+     * <p>A payment that has moved money and a receipt that was never sent are
+     * the same bug as a lost balance update, with a customer on the end of
+     * it. The failure event matters as much: repeated failed payments are the
+     * signal one of the fraud rules exists for, and a rule that never fires
+     * because the event was dropped is indistinguishable from a rule that
+     * found nothing.
+     */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.PAYMENT_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.PAYMENT_EVENTS, event);
     }
 }
