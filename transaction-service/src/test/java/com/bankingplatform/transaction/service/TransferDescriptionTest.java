@@ -52,8 +52,11 @@ class TransferDescriptionTest {
     private static final long TO_ID = 69L;
 
     private TransactionServiceImpl service() {
+        // The attempt recorder is mocked: what this test is about is the
+        // description a transfer writes, not the durable record of it.
         return new TransactionServiceImpl(
-                transactionRepository, auditLogRepository, transactionMapper, eventProducer, accountClient);
+                transactionRepository, auditLogRepository, transactionMapper, eventProducer,
+                Mockito.mock(TransferAttemptRecorder.class), accountClient);
     }
 
     private static AccountResponse account(long id, String number) {

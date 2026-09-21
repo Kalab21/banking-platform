@@ -3,6 +3,7 @@ package com.bankingplatform.transaction.client;
 import com.bankingplatform.transaction.dto.AccountResponse;
 import com.bankingplatform.transaction.exception.AccountCallTimeoutException;
 import com.bankingplatform.transaction.dto.BalanceUpdateRequest;
+import com.bankingplatform.transaction.dto.MovementStatusResponse;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.openfeign.FallbackFactory;
@@ -43,6 +44,14 @@ public class AccountClientFallbackFactory implements FallbackFactory<AccountClie
             @Override
             public AccountResponse updateBalance(Long id, String idempotencyKey,
                                                  BalanceUpdateRequest request) {
+                throw rethrow(cause);
+            }
+
+            @Override
+            public MovementStatusResponse movementStatus(String idempotencyKey) {
+                // Reconciliation treats this as "ask again later" rather than
+                // "nothing happened": account-service being unreachable is
+                // usually why the attempt is unsettled in the first place.
                 throw rethrow(cause);
             }
         };

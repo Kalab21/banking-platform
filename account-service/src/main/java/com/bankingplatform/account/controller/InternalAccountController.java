@@ -2,9 +2,12 @@ package com.bankingplatform.account.controller;
 
 import com.bankingplatform.account.dto.AccountResponse;
 import com.bankingplatform.account.dto.BalanceUpdateRequest;
+import com.bankingplatform.account.dto.MovementStatusResponse;
 import com.bankingplatform.account.model.AccountStatus;
 import com.bankingplatform.account.service.AccountService;
 import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStatus;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -47,6 +50,7 @@ public class InternalAccountController {
 
     private final AccountService accountService;
     private final IdempotencyGuard idempotency;
+    private final IdempotencyStore idempotencyStore;
 
     private static final String BALANCE = "BALANCE";
 
@@ -93,6 +97,38 @@ public class InternalAccountController {
                 // replay answering 201 would be inventing a resource.
                 HttpStatus.OK,
                 () -> accountService.updateBalance(id, request));
+    }
+
+    /**
+     * Whether a balance movement was applied, by the key it was sent under.
+     *
+     * <p>The answer a caller cannot work out for itself. A transfer whose
+     * debit timed out does not know whether the money left; this service
+     * does, because the idempotency record is written by the same transaction
+     * that moved the balance.
+     *
+     * <p>{@code NOT_FOUND} is a real answer and not an error: it means the
+     * request never arrived here, so nothing was applied and the caller is
+     * free to send it.
+     *
+     * <p>Read-only, and deliberately so. It reports what happened; deciding
+     * what to do about a half-applied transfer is not this endpoint's
+     * business, and is not something the platform does automatically.
+     */
+    @GetMapping("/movements/{idempotencyKey}")
+    @Operation(summary = "Whether a balance movement was applied (service-to-service only)")
+    public ResponseEntity<MovementStatusResponse> movementStatus(@PathVariable String idempotencyKey) {
+        return ResponseEntity.ok(idempotencyStore.find(idempotencyKey)
+                .map(record -> MovementStatusResponse.builder()
+                        .idempotencyKey(idempotencyKey)
+                        .applied(record.status() == IdempotencyStatus.COMPLETED)
+                        .status(record.status().name())
+                        .build())
+                .orElseGet(() -> MovementStatusResponse.builder()
+                        .idempotencyKey(idempotencyKey)
+                        .applied(false)
+                        .status("NOT_FOUND")
+                        .build()));
     }
 
     @PutMapping("/{id}/status")

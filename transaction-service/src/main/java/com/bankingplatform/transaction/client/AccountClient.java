@@ -3,6 +3,7 @@ package com.bankingplatform.transaction.client;
 import com.bankingplatform.transaction.config.FeignConfig;
 import com.bankingplatform.transaction.dto.AccountResponse;
 import com.bankingplatform.transaction.dto.BalanceUpdateRequest;
+import com.bankingplatform.transaction.dto.MovementStatusResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,6 +32,16 @@ public interface AccountClient {
      * transaction or payment reference this movement belongs to, because
      * that reference is generated once and survives a retry.
      */
+    /**
+     * Whether a movement was applied, by the key it was sent under.
+     *
+     * <p>The question this service cannot answer for itself: a debit that
+     * timed out leaves no local evidence of whether the money moved.
+     * account-service answers from the same record that moved it.
+     */
+    @GetMapping("/internal/accounts/movements/{idempotencyKey}")
+    MovementStatusResponse movementStatus(@PathVariable String idempotencyKey);
+
     @PutMapping("/internal/accounts/{id}/balance")
     AccountResponse updateBalance(@PathVariable Long id,
                                   @RequestHeader("Idempotency-Key") String idempotencyKey,

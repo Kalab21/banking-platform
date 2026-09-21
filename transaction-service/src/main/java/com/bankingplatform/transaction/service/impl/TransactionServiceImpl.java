@@ -5,6 +5,7 @@ import com.bankingplatform.transaction.dto.*;
 import com.bankingplatform.transaction.exception.ResourceNotFoundException;
 import com.bankingplatform.transaction.exception.TransactionException;
 import com.bankingplatform.transaction.exception.TransferPartiallyAppliedException;
+import com.bankingplatform.transaction.service.TransferAttemptRecorder;
 import com.bankingplatform.transaction.kafka.producer.TransactionEventProducer;
 import com.bankingplatform.transaction.mapper.TransactionMapper;
 import com.bankingplatform.transaction.model.AuditLog;
@@ -31,6 +32,7 @@ public class TransactionServiceImpl implements TransactionService {
     private final AuditLogRepository auditLogRepository;
     private final TransactionMapper transactionMapper;
     private final TransactionEventProducer eventProducer;
+    private final TransferAttemptRecorder attemptRecorder;
     private final AccountClient accountClient;
 
     @Override
@@ -116,7 +118,17 @@ public class TransactionServiceImpl implements TransactionService {
         String debitRef = generateRef();
         String creditRef = generateRef();
 
-        // Debit source
+        // Recorded before anything is applied, and in a transaction of its
+        // own, so it survives the rollback of this one. The case worth
+        // recording is precisely the failure that would otherwise erase the
+        // record along with everything else.
+        Long attemptId = attemptRecorder.started(debitRef, creditRef, request,
+                request.getCurrency() != null ? request.getCurrency() : "USD");
+
+        // Debit source. If this throws, the attempt stays STARTED -- a refusal
+        // means the debit did not land, a timeout says nothing either way, and
+        // that is exactly the state reconciliation resolves by asking
+        // account-service what became of this key.
         AccountResponse fromAccount = accountClient.updateBalance(
                 request.getFromAccountId(),
                 balanceKey(debitRef),
@@ -125,6 +137,7 @@ public class TransactionServiceImpl implements TransactionService {
                         .operation("DEBIT")
                         .build()
         );
+        attemptRecorder.debited(attemptId);
 
         // Credit destination.
         //
@@ -148,6 +161,11 @@ public class TransactionServiceImpl implements TransactionService {
         } catch (RuntimeException creditFailure) {
             log.error("Transfer from account {} to account {} debited the source but the credit failed",
                     request.getFromAccountId(), request.getToAccountId(), creditFailure);
+            // Committed separately, so it outlives the rollback this throw
+            // causes. Without it the only evidence is a balance that is short
+            // and an idempotency row marked UNKNOWN, neither of which names
+            // the accounts or the amount.
+            attemptRecorder.creditFailed(attemptId, creditFailure.getMessage());
             throw new TransferPartiallyAppliedException(
                     "The debit was applied but the credit did not complete, and it has not been "
                             + "reversed. This transfer needs reconciliation before it is reissued.",
@@ -185,6 +203,8 @@ public class TransactionServiceImpl implements TransactionService {
         eventProducer.publishTransferCompleted(debitRef, creditRef,
                 request.getFromAccountId(), fromAccount.getUserId(),
                 request.getToAccountId(), request.getAmount());
+
+        attemptRecorder.completed(attemptId);
 
         return TransferResponse.builder()
                 .debit(transactionMapper.toResponse(debit))
