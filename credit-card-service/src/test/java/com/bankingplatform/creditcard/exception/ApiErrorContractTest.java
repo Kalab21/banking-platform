@@ -1,5 +1,10 @@
 package com.bankingplatform.creditcard.exception;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
+import com.bankingplatform.creditcard.idempotency.CardOutcomeClassifier;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.bankingplatform.creditcard.controller.CreditCardController;
 import com.bankingplatform.creditcard.service.CreditCardService;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +40,7 @@ class ApiErrorContractTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders
-                .standaloneSetup(new CreditCardController(Mockito.mock(CreditCardService.class)))
+                .standaloneSetup(new CreditCardController(Mockito.mock(CreditCardService.class), passThroughIdempotency()))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -109,5 +114,18 @@ class ApiErrorContractTest {
                     .andExpect(jsonPath("$.message").value(not(containsString("Exception"))))
                     .andExpect(jsonPath("$.message").value(not(containsString("com.bankingplatform"))));
         }
+    }
+
+    /**
+     * An idempotency guard whose store always hands out the key, so these
+     * tests exercise authorization rather than replay. The idempotency rules
+     * themselves are covered by CardIdempotencyIT.
+     */
+    private static IdempotencyGuard passThroughIdempotency() {
+        IdempotencyStore store = Mockito.mock(IdempotencyStore.class);
+        Mockito.when(store.claim(Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(java.util.Optional.empty());
+        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()),
+                new CardOutcomeClassifier());
     }
 }

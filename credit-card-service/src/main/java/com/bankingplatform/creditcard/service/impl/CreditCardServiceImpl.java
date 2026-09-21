@@ -105,7 +105,7 @@ public class CreditCardServiceImpl implements CreditCardService {
 
     @Override
     public CreditCardTransactionResponse purchase(Long cardId, PurchaseRequest request) {
-        CreditCard card = findCard(cardId);
+        CreditCard card = findCardForUpdate(cardId);
         requireActive(card);
         requireSufficientCredit(card, request.getAmount());
 
@@ -125,7 +125,7 @@ public class CreditCardServiceImpl implements CreditCardService {
 
     @Override
     public CreditCardTransactionResponse cashAdvance(Long cardId, CashAdvanceRequest request) {
-        CreditCard card = findCard(cardId);
+        CreditCard card = findCardForUpdate(cardId);
         requireActive(card);
 
         BigDecimal fee = request.getAmount().multiply(CASH_ADVANCE_FEE_RATE).setScale(2, RoundingMode.HALF_UP);
@@ -150,7 +150,7 @@ public class CreditCardServiceImpl implements CreditCardService {
 
     @Override
     public CreditCardTransactionResponse makePayment(Long cardId, CardPaymentRequest request) {
-        CreditCard card = findCard(cardId);
+        CreditCard card = findCardForUpdate(cardId);
 
         BigDecimal payAmount = request.getAmount().min(card.getCurrentBalance());
         if (payAmount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -196,7 +196,7 @@ public class CreditCardServiceImpl implements CreditCardService {
 
     @Override
     public CreditCardStatementResponse generateStatement(Long cardId) {
-        CreditCard card = findCard(cardId);
+        CreditCard card = findCardForUpdate(cardId);
         LocalDate today = LocalDate.now();
 
         if (statementRepository.existsByCreditCardIdAndStatementDate(cardId, today)) {
@@ -257,10 +257,29 @@ public class CreditCardServiceImpl implements CreditCardService {
                 .toList();
     }
 
+    /**
+     * Daily interest on every card carrying a balance.
+     *
+     * <p>Each card is re-read under its own lock rather than charged from the
+     * list. The unlocked list is a snapshot: a purchase landing between the
+     * scan and the write would be overwritten by an interest charge computed
+     * from a balance that is no longer current, and the purchase would vanish
+     * from the balance while staying in the transaction history.
+     *
+     * <p>The locks are held to the end of the batch, because this runs in one
+     * transaction. On this platform's scale that is fine; a real portfolio
+     * would page the scan and commit per card, which is a change to how the
+     * job is driven rather than to the arithmetic here.
+     */
     @Override
     public void chargeInterest() {
-        List<CreditCard> activeCards = cardRepository.findByStatus(CardStatus.ACTIVE);
-        for (CreditCard card : activeCards) {
+        List<Long> activeCardIds = cardRepository.findByStatus(CardStatus.ACTIVE).stream()
+                .map(CreditCard::getId)
+                .toList();
+
+        int charged = 0;
+        for (Long cardId : activeCardIds) {
+            CreditCard card = findCardForUpdate(cardId);
             if (card.getCurrentBalance().compareTo(BigDecimal.ZERO) <= 0) continue;
 
             BigDecimal interestCharge = card.getCurrentBalance()
@@ -277,14 +296,27 @@ public class CreditCardServiceImpl implements CreditCardService {
             cardRepository.save(card);
             saveTx(card, CreditCardTransactionType.INTEREST_CHARGE,
                     interestCharge, "Daily interest charge", null, null);
+            charged++;
         }
-        log.info("Charged daily interest on {} active cards", activeCards.size());
+        log.info("Charged daily interest on {} of {} active cards", charged, activeCardIds.size());
     }
 
     // --- helpers ---
 
     private CreditCard findCard(Long cardId) {
         return cardRepository.findById(cardId)
+                .orElseThrow(() -> new ResourceNotFoundException("Credit card not found: " + cardId));
+    }
+
+    /**
+     * The card, locked for the rest of the transaction.
+     *
+     * <p>Used by every path that changes a balance. The read, the credit-limit
+     * check and the write have to be one atomic act, and an unlocked read
+     * makes them three — see {@code CreditCardRepository#findByIdForUpdate}.
+     */
+    private CreditCard findCardForUpdate(Long cardId) {
+        return cardRepository.findByIdForUpdate(cardId)
                 .orElseThrow(() -> new ResourceNotFoundException("Credit card not found: " + cardId));
     }
 

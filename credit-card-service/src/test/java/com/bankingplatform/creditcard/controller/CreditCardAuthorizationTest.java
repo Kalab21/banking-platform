@@ -1,5 +1,10 @@
 package com.bankingplatform.creditcard.controller;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
+import com.bankingplatform.creditcard.idempotency.CardOutcomeClassifier;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.bankingplatform.common.security.CallerIdentityArgumentResolver;
 import com.bankingplatform.common.security.CallerIdentityExceptionHandler;
 import com.bankingplatform.common.security.CallerIdentityHeaders;
@@ -57,7 +62,7 @@ class CreditCardAuthorizationTest {
         creditCardService = Mockito.mock(CreditCardService.class);
 
         mvc = MockMvcBuilders
-                .standaloneSetup(new CreditCardController(creditCardService))
+                .standaloneSetup(new CreditCardController(creditCardService, passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver(),
                         new PageableHandlerMethodArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler())
@@ -229,5 +234,18 @@ class CreditCardAuthorizationTest {
 
             verify(creditCardService, never()).createCard(any());
         }
+    }
+
+    /**
+     * An idempotency guard whose store always hands out the key, so these
+     * tests exercise authorization rather than replay. The idempotency rules
+     * themselves are covered by CardIdempotencyIT.
+     */
+    private static IdempotencyGuard passThroughIdempotency() {
+        IdempotencyStore store = Mockito.mock(IdempotencyStore.class);
+        Mockito.when(store.claim(Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(java.util.Optional.empty());
+        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()),
+                new CardOutcomeClassifier());
     }
 }
