@@ -88,7 +88,7 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public LoanResponse disburseLoan(Long loanId, DisburseRequest request) {
-        Loan loan = findLoan(loanId);
+        Loan loan = findLoanForUpdate(loanId);
         if (loan.getStatus() != LoanStatus.PENDING) {
             throw new LoanNotActiveException("Loan not in PENDING state: " + loan.getStatus());
         }
@@ -118,13 +118,17 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public LoanRepaymentResponse makeRepayment(Long loanId, LoanRepaymentRequest request) {
-        Loan loan = findLoan(loanId);
+        Loan loan = findLoanForUpdate(loanId);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
 
-        // Next unpaid schedule entry
-        List<AmortizationSchedule> pending = scheduleRepository.findByLoanIdAndStatus(loanId, ScheduleStatus.PENDING);
+        // The next unpaid instalment, in payment order. The ordering used to
+        // be whatever PostgreSQL returned, which decided the interest and
+        // principal split and the payment number on the repayment record.
+        List<AmortizationSchedule> pending =
+                scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(
+                        loanId, ScheduleStatus.PENDING);
         if (pending.isEmpty()) {
             throw new IllegalStateException("No pending payments found");
         }
@@ -152,7 +156,9 @@ public class LoanServiceImpl implements LoanService {
         scheduleRepository.save(nextDue);
 
         // Advance next payment date
-        List<AmortizationSchedule> remaining = scheduleRepository.findByLoanIdAndStatus(loanId, ScheduleStatus.PENDING);
+        List<AmortizationSchedule> remaining =
+                scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(
+                        loanId, ScheduleStatus.PENDING);
         if (remaining.isEmpty()) {
             loan.setStatus(LoanStatus.PAID_OFF);
             loan.setNextPaymentDate(null);
@@ -183,7 +189,7 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public LoanRepaymentResponse earlyPayoff(Long loanId, LoanRepaymentRequest request) {
-        Loan loan = findLoan(loanId);
+        Loan loan = findLoanForUpdate(loanId);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -202,7 +208,7 @@ public class LoanServiceImpl implements LoanService {
         }
 
         // Mark all remaining schedule entries PAID
-        scheduleRepository.findByLoanIdAndStatus(loanId, ScheduleStatus.PENDING).forEach(s -> {
+        scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(loanId, ScheduleStatus.PENDING).forEach(s -> {
             s.setStatus(ScheduleStatus.PAID);
             s.setPaidAt(LocalDateTime.now());
         });
@@ -245,7 +251,7 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal accruedInterest = loan.getRemainingBalance().multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
         BigDecimal payoffAmount = loan.getRemainingBalance().add(accruedInterest);
 
-        int remaining = (int) scheduleRepository.findByLoanIdAndStatus(loanId, ScheduleStatus.PENDING).size();
+        int remaining = (int) scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(loanId, ScheduleStatus.PENDING).size();
 
         PayoffQuoteResponse quote = new PayoffQuoteResponse();
         quote.setLoanId(loanId);
@@ -274,6 +280,18 @@ public class LoanServiceImpl implements LoanService {
 
     private Loan findLoan(Long loanId) {
         return loanRepository.findById(loanId)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan not found: " + loanId));
+    }
+
+    /**
+     * The loan, locked for the rest of the transaction.
+     *
+     * <p>Used by every path that changes a balance or an instalment. Picking
+     * the next unpaid instalment, doing the arithmetic and writing both back
+     * have to be one atomic act; an unlocked read makes them three.
+     */
+    private Loan findLoanForUpdate(Long loanId) {
+        return loanRepository.findByIdForUpdate(loanId)
                 .orElseThrow(() -> new ResourceNotFoundException("Loan not found: " + loanId));
     }
 

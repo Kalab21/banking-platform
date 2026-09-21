@@ -16,6 +16,17 @@ public class Loan {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Optimistic locking, behind the pessimistic lock the money paths take.
+     *
+     * <p>Those paths read the loan {@code FOR UPDATE}, so they do not rely on
+     * this. It is here for the ones that do not: a future method that reads a
+     * loan, changes it and saves it without taking the lock fails on the
+     * version rather than quietly overwriting a concurrent repayment.
+     */
+    @Version
+    private Long version;
+
     @Column(nullable = false)
     private Long userId;
 

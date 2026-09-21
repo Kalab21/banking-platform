@@ -1,5 +1,6 @@
 package com.bankingplatform.loan.exception;
 
+import com.bankingplatform.common.idempotency.IdempotencyException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -19,6 +20,27 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /**
+     * The idempotency rules refused the request.
+     *
+     * <p>The statuses are part of the endpoint's contract rather than an
+     * implementation detail: a client has to be able to tell "you sent this
+     * wrong" from "this key is already spent" from "we do not know what
+     * happened last time", because only the first is safe to correct and
+     * resend.
+     */
+    @ExceptionHandler(IdempotencyException.class)
+    public ResponseEntity<Map<String, Object>> handleIdempotency(IdempotencyException ex) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        if (ex.getRetryAfterSeconds() != null) {
+            response = response.header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return response.body(Map.of(
+                "status", ex.getStatus().value(),
+                "message", ex.getMessage(),
+                "timestamp", LocalDateTime.now().toString()));
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(ResourceNotFoundException ex) {

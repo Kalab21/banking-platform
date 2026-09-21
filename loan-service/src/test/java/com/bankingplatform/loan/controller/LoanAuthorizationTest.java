@@ -1,5 +1,10 @@
 package com.bankingplatform.loan.controller;
 
+import com.bankingplatform.loan.dto.response.LoanRepaymentResponse;
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
+import com.bankingplatform.loan.idempotency.LoanOutcomeClassifier;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.bankingplatform.common.security.CallerIdentityArgumentResolver;
 import com.bankingplatform.common.security.CallerIdentityExceptionHandler;
 import com.bankingplatform.common.security.CallerIdentityHeaders;
@@ -57,7 +62,7 @@ class LoanAuthorizationTest {
         loanService = Mockito.mock(LoanService.class);
 
         mvc = MockMvcBuilders
-                .standaloneSetup(new LoanController(loanService))
+                .standaloneSetup(new LoanController(loanService, passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler())
                 .build();
@@ -237,8 +242,16 @@ class LoanAuthorizationTest {
         @DisplayName("a customer may repay their own loan")
         void ownRepaymentAllowed() throws Exception {
             loanBelongsTo(CUSTOMER_A);
+            // The guard reads the payment reference off the result to record
+            // against the key, so the service has to return something.
+            LoanRepaymentResponse receipt = new LoanRepaymentResponse();
+            receipt.setPaymentRef("repay-authorization-test");
+            when(loanService.makeRepayment(anyLong(), any())).thenReturn(receipt);
 
+            // Money movement now requires an Idempotency-Key, so a permitted
+            // request has to carry one to get as far as the service.
             mvc.perform(as(post("/api/loans/{id}/repay", LOAN_OF_A), CUSTOMER_A, "CUSTOMER")
+                            .header(IdempotencyGuard.HEADER, "loan-repay-authorization-test")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(repayment()))
                     .andExpect(status().isCreated());
@@ -263,5 +276,18 @@ class LoanAuthorizationTest {
 
             verify(loanService, never()).createLoan(any());
         }
+    }
+
+    /**
+     * An idempotency guard whose store always hands out the key, so these
+     * tests exercise authorization rather than replay. The idempotency rules
+     * themselves are covered by LoanIdempotencyIT.
+     */
+    private static IdempotencyGuard passThroughIdempotency() {
+        IdempotencyStore store = Mockito.mock(IdempotencyStore.class);
+        Mockito.when(store.claim(Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(java.util.Optional.empty());
+        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()),
+                new LoanOutcomeClassifier());
     }
 }

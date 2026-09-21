@@ -1,5 +1,9 @@
 package com.bankingplatform.loan.controller;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import io.swagger.v3.oas.annotations.Parameter;
+import org.springframework.web.bind.annotation.RequestHeader;
+import java.util.Map;
 import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
@@ -24,6 +28,7 @@ import java.util.List;
 public class LoanController {
 
     private final LoanService loanService;
+    private final IdempotencyGuard idempotency;
 
     /**
      * A loan's owner comes from the stored loan, never from the request.
@@ -36,6 +41,13 @@ public class LoanController {
     private Long ownerOf(Long loanId) {
         return loanService.getLoan(loanId).getUserId();
     }
+
+    private static final String REPAYMENT = "REPAYMENT";
+    private static final String PAYOFF = "PAYOFF";
+
+    private static final String KEY_DESCRIPTION =
+            "Opaque client-generated value naming this logical operation. Reuse it to retry the "
+                    + "same operation safely; use a new one for a new operation.";
 
     private void requireOwnsLoan(CallerIdentity caller, Long loanId) {
         AccessGuard.requireOwnerOrStaff(caller, ownerOf(loanId));
@@ -87,18 +99,30 @@ public class LoanController {
     @Operation(summary = "Make a regular repayment")
     public ResponseEntity<LoanRepaymentResponse> makeRepayment(@PathVariable Long loanId,
                                                                 @Valid @RequestBody LoanRepaymentRequest request,
+                                                                @Parameter(description = KEY_DESCRIPTION)
+                                                                @RequestHeader(name = IdempotencyGuard.HEADER,
+                                                                        required = false) String idempotencyKey,
                                                                 CallerIdentity caller) {
+        // Ownership first, then the guard. A refused request must neither
+        // claim a key nor leave a cached result behind it.
         requireOwnsLoan(caller, loanId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(loanService.makeRepayment(loanId, request));
+        return idempotency.execute(idempotencyKey, REPAYMENT, caller, keyed(loanId, request),
+                LoanRepaymentResponse.class, LoanRepaymentResponse::getPaymentRef,
+                () -> loanService.makeRepayment(loanId, request));
     }
 
     @PostMapping("/{loanId}/payoff")
     @Operation(summary = "Early payoff — pay off remaining balance")
     public ResponseEntity<LoanRepaymentResponse> earlyPayoff(@PathVariable Long loanId,
                                                               @Valid @RequestBody LoanRepaymentRequest request,
+                                                              @Parameter(description = KEY_DESCRIPTION)
+                                                              @RequestHeader(name = IdempotencyGuard.HEADER,
+                                                                      required = false) String idempotencyKey,
                                                               CallerIdentity caller) {
         requireOwnsLoan(caller, loanId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(loanService.earlyPayoff(loanId, request));
+        return idempotency.execute(idempotencyKey, PAYOFF, caller, keyed(loanId, request),
+                LoanRepaymentResponse.class, LoanRepaymentResponse::getPaymentRef,
+                () -> loanService.earlyPayoff(loanId, request));
     }
 
     @GetMapping("/{loanId}/repayments")
@@ -115,5 +139,17 @@ public class LoanController {
                                                               CallerIdentity caller) {
         requireOwnsLoan(caller, loanId);
         return ResponseEntity.ok(loanService.getPayoffQuote(loanId));
+    }
+
+    /**
+     * The request as fingerprinted: the body plus the loan it is against.
+     *
+     * <p>The loan id is a path variable, so a fingerprint over the body alone
+     * would make the same repayment on two different loans look like one
+     * request. A replay would then be served the first loan's receipt and the
+     * second loan would never be paid.
+     */
+    private Map<String, Object> keyed(Long loanId, Object request) {
+        return Map.of("loanId", loanId, "request", request);
     }
 }
