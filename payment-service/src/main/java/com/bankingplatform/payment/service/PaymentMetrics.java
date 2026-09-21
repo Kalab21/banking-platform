@@ -1,7 +1,7 @@
 package com.bankingplatform.payment.service;
 
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -37,10 +37,20 @@ public class PaymentMetrics {
     public PaymentMetrics(JdbcTemplate jdbc, MeterRegistry registry) {
         this.jdbc = jdbc;
 
-        registry.gauge("banking.payments.stuck", Tags.empty(), this,
-                metrics -> metrics.count(STUCK_PROCESSING));
-        registry.gauge("banking.payments.overdue", Tags.empty(), this,
-                metrics -> metrics.count(OVERDUE));
+        // Registered with a strong reference on purpose. The shorthand
+        // MeterRegistry.gauge(name, tags, obj, fn) keeps a *weak* reference to
+        // the object it measures, so the moment nothing else holds that object
+        // the gauge reports NaN rather than disappearing -- an alert that
+        // silently stops firing, which is the worst way for a metric to fail.
+        // It survives here only because Spring holds the bean, which is luck
+        // rather than design; a test that built one without keeping it is what
+        // exposed it.
+        Gauge.builder("banking.payments.stuck", this, metrics -> metrics.count(STUCK_PROCESSING))
+                .strongReference(true)
+                .register(registry);
+        Gauge.builder("banking.payments.overdue", this, metrics -> metrics.count(OVERDUE))
+                .strongReference(true)
+                .register(registry);
     }
 
     private double count(String sql) {
