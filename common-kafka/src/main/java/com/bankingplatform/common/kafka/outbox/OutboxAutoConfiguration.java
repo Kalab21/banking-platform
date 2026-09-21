@@ -17,6 +17,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -92,10 +93,11 @@ public class OutboxAutoConfiguration {
      */
     @Bean
     @ConditionalOnClass(MeterRegistry.class)
-    @ConditionalOnBean({JdbcTemplate.class, MeterRegistry.class})
+    @ConditionalOnBean(JdbcTemplate.class)
     @ConditionalOnMissingBean(OutboxMetrics.class)
-    public OutboxMetrics outboxMetrics(JdbcTemplate jdbcTemplate, MeterRegistry registry) {
-        return new OutboxMetrics(jdbcTemplate, registry);
+    public OutboxMetrics outboxMetrics(JdbcTemplate jdbcTemplate,
+                                       ObjectProvider<MeterRegistry> registries) {
+        return new OutboxMetrics(jdbcTemplate, registries);
     }
 
     /**

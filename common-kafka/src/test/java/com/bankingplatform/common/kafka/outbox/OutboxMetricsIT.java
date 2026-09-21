@@ -1,6 +1,7 @@
 package com.bankingplatform.common.kafka.outbox;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +66,7 @@ class OutboxMetricsIT {
     void empty() {
         jdbc.update("DELETE FROM outbox_event");
         registry = new SimpleMeterRegistry();
-        new OutboxMetrics(jdbc, registry);
+        new OutboxMetrics(jdbc, providerOf(registry));
     }
 
     private void row(String id, String createdAt, boolean sent, int attempts) {
@@ -135,9 +136,21 @@ class OutboxMetricsIT {
         elsewhere.execute("SET search_path TO no_outbox");
 
         MeterRegistry isolated = new SimpleMeterRegistry();
-        new OutboxMetrics(elsewhere, isolated);
+        new OutboxMetrics(elsewhere, providerOf(isolated));
 
         assertThat(isolated.get("banking.outbox.pending").gauge().value()).isZero();
         elsewhere.execute("SET search_path TO public");
+    }
+
+    /** The registry as a provider, which is how the auto-configuration passes it. */
+    private static ObjectProvider<MeterRegistry> providerOf(MeterRegistry registry) {
+        return new StubProvider(registry);
+    }
+
+    private record StubProvider(MeterRegistry registry) implements ObjectProvider<MeterRegistry> {
+        @Override public MeterRegistry getObject() { return registry; }
+        @Override public MeterRegistry getObject(Object... args) { return registry; }
+        @Override public MeterRegistry getIfAvailable() { return registry; }
+        @Override public MeterRegistry getIfUnique() { return registry; }
     }
 }

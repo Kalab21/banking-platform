@@ -1,6 +1,7 @@
 package com.bankingplatform.common.idempotency;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import io.micrometer.core.instrument.Tags;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -35,8 +36,20 @@ public class IdempotencyMetrics {
     private final JdbcTemplate jdbc;
     private volatile Boolean tablePresent;
 
-    public IdempotencyMetrics(JdbcTemplate jdbc, MeterRegistry registry) {
+    /**
+     * Takes the registry through an {@link ObjectProvider} rather than as a
+     * required bean, for the reason documented on {@code OutboxMetrics}: a
+     * {@code @ConditionalOnBean} here is evaluated before Boot has registered
+     * the registry and silently skips the bean. These gauges were missing
+     * from every running service until a scrape of the live stack showed it.
+     */
+    public IdempotencyMetrics(JdbcTemplate jdbc, ObjectProvider<MeterRegistry> registries) {
         this.jdbc = jdbc;
+
+        MeterRegistry registry = registries.getIfAvailable();
+        if (registry == null) {
+            return;
+        }
 
         registry.gauge("banking.idempotency.unknown", Tags.empty(), this,
                 metrics -> metrics.count(UNKNOWN_OUTCOMES));

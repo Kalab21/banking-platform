@@ -2,6 +2,7 @@ package com.bankingplatform.common.kafka.outbox;
 
 import com.bankingplatform.common.kafka.TablePresence;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import io.micrometer.core.instrument.Tags;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -51,9 +52,29 @@ public class OutboxMetrics {
     private final JdbcTemplate jdbc;
     private final TablePresence outboxTable;
 
-    public OutboxMetrics(JdbcTemplate jdbc, MeterRegistry registry) {
+    /**
+     * Takes the registry through an {@link ObjectProvider} rather than as a
+     * required bean.
+     *
+     * <p>{@code @ConditionalOnBean(MeterRegistry.class)} looked equivalent
+     * and is not: auto-configurations are sorted by class name before
+     * ordering metadata applies, so a condition in a
+     * {@code com.bankingplatform} class is evaluated before Boot has
+     * registered the registry, finds nothing, and silently skips the bean.
+     * That is the fourth time this trap has caught something in this
+     * codebase. A provider is resolved when the bean is built rather than
+     * when the condition is read, so it does not depend on ordering at all.
+     */
+    public OutboxMetrics(JdbcTemplate jdbc, ObjectProvider<MeterRegistry> registries) {
         this.jdbc = jdbc;
         this.outboxTable = new TablePresence(jdbc, "outbox_event");
+
+        MeterRegistry registry = registries.getIfAvailable();
+        if (registry == null) {
+            // A service with no metrics stack. Nothing to report to, and
+            // nothing to fail about.
+            return;
+        }
 
         registry.gauge("banking.outbox.pending", Tags.empty(), this,
                 metrics -> metrics.count(PENDING));

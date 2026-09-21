@@ -2,6 +2,7 @@ package com.bankingplatform.common.idempotency;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -68,10 +69,11 @@ public class IdempotencyAutoConfiguration {
      */
     @Bean
     @ConditionalOnClass(MeterRegistry.class)
-    @ConditionalOnBean({JdbcTemplate.class, MeterRegistry.class})
+    @ConditionalOnBean(JdbcTemplate.class)
     @ConditionalOnMissingBean(IdempotencyMetrics.class)
-    public IdempotencyMetrics idempotencyMetrics(JdbcTemplate jdbcTemplate, MeterRegistry registry) {
-        return new IdempotencyMetrics(jdbcTemplate, registry);
+    public IdempotencyMetrics idempotencyMetrics(JdbcTemplate jdbcTemplate,
+                                                 ObjectProvider<MeterRegistry> registries) {
+        return new IdempotencyMetrics(jdbcTemplate, registries);
     }
 
     /**

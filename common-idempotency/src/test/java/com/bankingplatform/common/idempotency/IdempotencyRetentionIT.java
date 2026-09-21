@@ -1,6 +1,7 @@
 package com.bankingplatform.common.idempotency;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,7 +67,7 @@ class IdempotencyRetentionIT {
     void empty() {
         jdbc.update("DELETE FROM idempotency_record");
         registry = new SimpleMeterRegistry();
-        new IdempotencyMetrics(jdbc, registry);
+        new IdempotencyMetrics(jdbc, providerOf(registry));
     }
 
     private void record(String key, String status, String age) {
@@ -159,5 +160,17 @@ class IdempotencyRetentionIT {
         record("running", "IN_PROGRESS", "1 minute");
 
         assertThat(registry.get("banking.idempotency.abandoned").gauge().value()).isEqualTo(1);
+    }
+
+    /** The registry as a provider, which is how the auto-configuration passes it. */
+    private static ObjectProvider<MeterRegistry> providerOf(MeterRegistry registry) {
+        return new StubProvider(registry);
+    }
+
+    private record StubProvider(MeterRegistry registry) implements ObjectProvider<MeterRegistry> {
+        @Override public MeterRegistry getObject() { return registry; }
+        @Override public MeterRegistry getObject(Object... args) { return registry; }
+        @Override public MeterRegistry getIfAvailable() { return registry; }
+        @Override public MeterRegistry getIfUnique() { return registry; }
     }
 }
