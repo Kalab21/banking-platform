@@ -222,8 +222,20 @@ cd frontend && npm run test:e2e
 
 # live — requires the full stack
 docker compose up -d && ./scripts/seed-demo.sh
-cd frontend && E2E_USERNAME=<printed> E2E_PASSWORD=<printed> npm run test:e2e:live
+cd frontend && E2E_NO_SERVER=1 E2E_BASE_URL=http://127.0.0.1:3000   E2E_USERNAME=<printed> E2E_PASSWORD=<printed> npm run test:e2e:live
 ```
+
+`E2E_NO_SERVER` and `E2E_BASE_URL` are not optional, and leaving them out fails
+in a way that looks like a product bug. The `webServer` block in
+`playwright.config.ts` is written for the offline suite: it starts Next with
+`API_GATEWAY_URL` pointing at a port nothing listens on, deliberately, so that
+an unstubbed call fails loudly rather than silently reaching a real service.
+`reuseExistingServer` means the live suite is meant to attach to a server that
+is already running with a real gateway behind it — the one the stack itself
+serves on port 3000. Without these variables Playwright starts the offline
+server instead, every backend call fails, and the console reports "We could not
+reach your accounts just now" on screen after screen while the stack behind it
+is perfectly healthy.
 
 ## Authorization tests
 
