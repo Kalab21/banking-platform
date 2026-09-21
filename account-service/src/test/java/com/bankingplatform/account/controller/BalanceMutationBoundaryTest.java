@@ -66,7 +66,8 @@ class BalanceMutationBoundaryTest {
     }
 
     private MockMvc internalApi() {
-        return MockMvcBuilders.standaloneSetup(new InternalAccountController(accountService, passThroughIdempotency())).build();
+        return MockMvcBuilders.standaloneSetup(new InternalAccountController(accountService, passThroughIdempotency(),
+                            Mockito.mock(IdempotencyStore.class))).build();
     }
 
     @Nested
