@@ -44,6 +44,20 @@ That is a real availability cost, taken deliberately: the alternative is
 removing the only limit on guessing one account's password at exactly the
 moment the platform cannot observe it.
 
+**It fails closed on corrupted state too**, which is the less obvious half. A
+counter that is not a number, or one that is negative, is a value this service
+did not write, and the only safe answer to "how many failures has this account
+had?" is to stop rather than to guess. Answering zero — which is what the
+first version did, reasoning that bad data should not cause a permanent
+lockout — made the throttle removable by anyone who could corrupt the key. The
+reasoning was wrong in a way worth naming: the alternative to a permanent
+lockout is not "let them through", it is "fail closed until the key expires",
+which the TTL guarantees anyway.
+
+The expiry is treated differently from the count on purpose. It decides only
+what the caller is told to wait, so an unreadable one degrades rather than
+refusing — but upwards, to the full window, never to none.
+
 ## Authentication
 
 `user-service` issues a JWT on login, signed HS256. The gateway validates the
