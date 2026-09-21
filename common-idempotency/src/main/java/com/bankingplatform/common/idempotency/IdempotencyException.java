@@ -1,6 +1,5 @@
-package com.bankingplatform.transaction.exception;
+package com.bankingplatform.common.idempotency;
 
-import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
 /**
@@ -11,7 +10,6 @@ import org.springframework.http.HttpStatus;
  * client has to be able to tell "you sent this wrong" from "this key is already
  * spent" from "we do not know what happened last time".
  */
-@Getter
 public class IdempotencyException extends RuntimeException {
 
     private final HttpStatus status;
@@ -21,6 +19,14 @@ public class IdempotencyException extends RuntimeException {
         super(message);
         this.status = status;
         this.retryAfterSeconds = retryAfterSeconds;
+    }
+
+    public HttpStatus getStatus() {
+        return status;
+    }
+
+    public Integer getRetryAfterSeconds() {
+        return retryAfterSeconds;
     }
 
     /** No key on an endpoint that requires one. */

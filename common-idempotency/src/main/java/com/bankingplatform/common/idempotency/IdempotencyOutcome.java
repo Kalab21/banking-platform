@@ -1,6 +1,4 @@
-package com.bankingplatform.transaction.idempotency;
-
-import com.bankingplatform.transaction.model.IdempotencyStatus;
+package com.bankingplatform.common.idempotency;
 
 /**
  * A read-only view of one idempotency record.

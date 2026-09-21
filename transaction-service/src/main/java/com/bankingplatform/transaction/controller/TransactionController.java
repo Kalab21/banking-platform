@@ -2,7 +2,7 @@ package com.bankingplatform.transaction.controller;
 
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.transaction.dto.*;
-import com.bankingplatform.transaction.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;

@@ -1,5 +1,6 @@
 package com.bankingplatform.transaction.exception;
 
+import com.bankingplatform.common.idempotency.IdempotencyException;
 import com.bankingplatform.common.observability.LogSafe;
 import feign.FeignException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;

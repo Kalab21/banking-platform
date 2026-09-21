@@ -1,4 +1,4 @@
-package com.bankingplatform.transaction.idempotency;
+package com.bankingplatform.common.idempotency;
 
 import com.bankingplatform.common.security.CallerIdentity;
 import com.fasterxml.jackson.core.type.TypeReference;

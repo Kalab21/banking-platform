@@ -13,7 +13,7 @@ package com.bankingplatform.transaction.exception;
  * is honesty: the caller is told the transfer is in an inconsistent state
  * rather than being handed the credit leg's error as though the debit had never
  * happened, and the idempotency record is resolved as
- * {@link com.bankingplatform.transaction.model.IdempotencyStatus#UNKNOWN} so a
+ * {@link com.bankingplatform.common.idempotency.IdempotencyStatus#UNKNOWN} so a
  * retry cannot debit the source a second time.
  */
 public class TransferPartiallyAppliedException extends RuntimeException {

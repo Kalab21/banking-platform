@@ -1,5 +1,8 @@
 package com.bankingplatform.transaction.idempotency;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
+import com.bankingplatform.common.idempotency.IdempotencyOutcome;
 import com.bankingplatform.common.security.CallerIdentityArgumentResolver;
 import com.bankingplatform.common.security.CallerIdentityExceptionHandler;
 import com.bankingplatform.common.security.CallerIdentityHeaders;
@@ -10,7 +13,7 @@ import com.bankingplatform.transaction.dto.TransactionResponse;
 import com.bankingplatform.transaction.exception.AccountCallTimeoutException;
 import com.bankingplatform.transaction.exception.GlobalExceptionHandler;
 import com.bankingplatform.transaction.exception.TransferPartiallyAppliedException;
-import com.bankingplatform.transaction.model.IdempotencyStatus;
+import com.bankingplatform.common.idempotency.IdempotencyStatus;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -90,7 +93,7 @@ class TransactionIdempotencyTest {
                 .standaloneSetup(new TransactionController(
                         transactionService,
                         new AccountOwnershipVerifier(accountClient),
-                        new IdempotencyGuard(store, mapper)))
+                        new IdempotencyGuard(store, mapper, new TransactionOutcomeClassifier())))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler(), new GlobalExceptionHandler())
                 .build();
