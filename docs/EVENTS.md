@@ -480,12 +480,14 @@ every second, and the failures worth reading would be buried in it.
 
 ## What this does not solve
 
-Publishing is reliable for `account-service`, `transaction-service` and
-`application-service` — see "Publishing what actually happened" below. The
-remaining producers (`payment-service`, `loan-service`,
-`credit-card-service`, `integration-service` and the fraud alert) still call
-`kafkaTemplate.send` directly and can still lose an event; migrating them is
-separate work.
+Publishing is reliable. Every producer on the platform writes its event to a
+transactional outbox in the same transaction as the change — see "Publishing
+what actually happened" below.
+
+What remains unsolved is compensation *across* services: a transfer that
+debits one service and fails in another is still surfaced as unknown and
+reconciled rather than rolled back. The outbox makes the event reliable, not
+the transfer atomic.
 
 Consumers are idempotent. Every handler with a durable effect claims the event
 id in the same transaction as its work — see "Surviving redelivery" above.

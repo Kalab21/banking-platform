@@ -5,7 +5,7 @@ import com.bankingplatform.common.events.Topics;
 import com.bankingplatform.common.events.UserLifecycleEvents;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class UserEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     public void publishKycApproved(Long userId) {
         send(UserLifecycleEvents.KycApproved.of(userId));
@@ -49,13 +49,17 @@ public class UserEventProducer {
         send(UserLifecycleEvents.TwoFactorDisabled.of(userId));
     }
 
+    /**
+     * Records the event in the outbox, in the caller's transaction.
+     *
+     * <p>These four events are the whole of what tells a customer that their
+     * identity checks or their second factor changed. This topic had four
+     * consumers and no producer at all until recently; having added the
+     * producer, publishing it on a send whose failure was logged and
+     * forgotten would be a quieter version of the same bug.
+     */
     private void send(DomainEvent event) {
-        try {
-            kafkaTemplate.send(Topics.USER_EVENTS, event.partitionKey(), event);
-            log.info("Published {} for user {}", event.eventType(), event.partitionKey());
-        } catch (Exception e) {
-            log.warn("Kafka unavailable — {} not published for key {}: {}",
-                    event.eventType(), event.partitionKey(), e.getMessage());
-        }
+        outbox.publish(Topics.USER_EVENTS, event);
+        log.info("Recorded {} for user {}", event.eventType(), event.partitionKey());
     }
 }

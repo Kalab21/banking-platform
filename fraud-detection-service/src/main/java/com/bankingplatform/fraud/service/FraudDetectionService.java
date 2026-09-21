@@ -16,7 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.bankingplatform.common.kafka.outbox.OutboxPublisher;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -34,7 +34,7 @@ public class FraudDetectionService {
     private final FraudRulesAuditRepository auditRepo;
     private final StringRedisTemplate redisTemplate;
     private final AccountClient accountClient;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxPublisher outbox;
 
     @Value("${fraud.rules.high-amount-threshold:10000}")
     private BigDecimal highAmountThreshold;
@@ -241,22 +241,26 @@ public class FraudDetectionService {
     }
 
     /**
-     * Publishes the alert.
+     * Records the alert in the outbox, in the caller's transaction.
      *
      * <p>Nothing consumes {@code fraud-alert-events} today; that is recorded
      * in {@code docs/EVENTS.md} rather than resolved by inventing a consumer.
+     * It is still written reliably — an alert that was raised and never
+     * announced is the one record a review queue or an audit trail cannot be
+     * given after the fact.
      *
-     * <p>The record is keyed by account now. It was sent with no key at all,
-     * so alerts round-robined across partitions and two alerts on one account
+     * <p>The caller's transaction is the listener's: this runs inside the
+     * consumer that is processing the transaction event, alongside the
+     * processed-event claim. So the alert row, the claim and the publication
+     * all commit together, and a redelivery reproduces none of them twice.
+     *
+     * <p>The record is keyed by account. It was sent with no key at all, so
+     * alerts round-robined across partitions and two alerts on one account
      * could reach any future consumer out of order.
      */
     private void publishFraudAlert(FraudAlert alert) {
         FraudAlertCreated event = FraudAlertCreated.of(alert.getId(), alert.getAccountId(),
                 alert.getUserId(), alert.getAlertType(), alert.getRiskScore());
-        try {
-            kafkaTemplate.send(Topics.FRAUD_ALERT_EVENTS, event.partitionKey(), event);
-        } catch (Exception e) {
-            log.error("Failed to publish fraud alert event: {}", e.getMessage());
-        }
+        outbox.publish(Topics.FRAUD_ALERT_EVENTS, event);
     }
 }
