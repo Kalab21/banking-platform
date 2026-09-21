@@ -34,13 +34,6 @@ spring:
         spring.json.add.type.headers: false
         max.block.ms: 1000
         request.timeout.ms: 1000
-    consumer:
-      group-id: transaction-service
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "com.bankingplatform.common.events"
 
   cloud:
     openfeign:

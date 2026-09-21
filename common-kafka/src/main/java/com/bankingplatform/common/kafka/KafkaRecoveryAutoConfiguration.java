@@ -26,7 +26,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.support.KafkaUtils;
 import org.springframework.kafka.support.serializer.DeserializationException;
 import org.springframework.util.backoff.BackOff;
@@ -121,8 +124,11 @@ public class KafkaRecoveryAutoConfiguration implements DisposableBean {
     @Bean
     @ConditionalOnBean(ConsumerFactory.class)
     @ConditionalOnMissingBean(DeserializerWrappingCheck.class)
-    DeserializerWrappingCheck deserializerWrappingCheck(ConsumerFactory<?, ?> consumerFactory) {
-        return new DeserializerWrappingCheck(consumerFactory);
+    DeserializerWrappingCheck deserializerWrappingCheck(
+            ConsumerFactory<?, ?> consumerFactory,
+            ObjectProvider<KafkaListenerEndpointRegistry> registries,
+            ObjectProvider<MessageListenerContainer> containers) {
+        return new DeserializerWrappingCheck(consumerFactory, registries, containers);
     }
 
     @Bean
