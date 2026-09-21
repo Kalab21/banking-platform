@@ -241,7 +241,7 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("credits the nominated account and activates the loan")
         void disbursesAndActivates() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.PENDING, "10000.00")));
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.PENDING, "10000.00")));
             when(loanRepository.save(any(Loan.class))).thenAnswer(i -> i.getArgument(0));
 
             DisburseRequest request = new DisburseRequest();
@@ -261,7 +261,7 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("refuses to disburse a loan that is not pending")
         void refusesNonPendingLoan() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
 
             DisburseRequest request = new DisburseRequest();
             request.setDisbursementAccountId(ACCOUNT_ID);
@@ -286,8 +286,8 @@ class LoanServiceImplTest {
         void allocatesInterestBeforePrincipal() {
             AmortizationSchedule due = scheduleEntry(1, "860.66", "810.66", "50.00");
 
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(due), List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -306,8 +306,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("reduces the outstanding balance by the principal portion only")
         void reducesBalanceByPrincipalOnly() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(scheduleEntry(1, "860.66", "810.66", "50.00")),
                                 List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
@@ -325,8 +325,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("debits the nominated source account for the amount paid")
         void debitsSourceAccount() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(scheduleEntry(1, "860.66", "810.66", "50.00")),
                                 List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
@@ -339,8 +339,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("leaves the source account untouched when no account is supplied")
         void skipsDebitWhenNoSourceAccount() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(scheduleEntry(1, "860.66", "810.66", "50.00")),
                                 List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
@@ -355,8 +355,8 @@ class LoanServiceImplTest {
         void underpaymentMarksInstalmentPartial() {
             AmortizationSchedule due = scheduleEntry(1, "860.66", "810.66", "50.00");
 
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(due), List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -376,8 +376,8 @@ class LoanServiceImplTest {
         void fullPaymentMarksInstalmentPaid() {
             AmortizationSchedule due = scheduleEntry(1, "860.66", "810.66", "50.00");
 
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(due), List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -389,8 +389,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("closes the loan once the final instalment clears the schedule")
         void finalInstalmentClosesLoan() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "856.38")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "856.38")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(scheduleEntry(12, "860.66", "856.38", "4.28")), List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -410,8 +410,8 @@ class LoanServiceImplTest {
         void advancesNextPaymentDate() {
             AmortizationSchedule next = scheduleEntry(2, "860.66", "814.71", "45.95");
 
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(scheduleEntry(1, "860.66", "810.66", "50.00")), List.of(next));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -425,8 +425,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("never accepts more than the balance plus the interest currently due")
         void overpaymentIsCappedAtPayoffAmount() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "500.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "500.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(scheduleEntry(12, "502.50", "500.00", "2.50")), List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -440,7 +440,7 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("refuses repayment on a loan that is not active")
         void refusesRepaymentOnInactiveLoan() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.PENDING, "10000.00")));
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.PENDING, "10000.00")));
 
             assertThatThrownBy(() -> loanService.makeRepayment(LOAN_ID, repaymentRequest("860.66", ACCOUNT_ID)))
                     .isInstanceOf(LoanNotActiveException.class)
@@ -452,8 +452,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("fails when the schedule holds nothing left to pay")
         void failsWhenNothingLeftToPay() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
 
             assertThatThrownBy(() -> loanService.makeRepayment(LOAN_ID, repaymentRequest("860.66", ACCOUNT_ID)))
                     .isInstanceOf(IllegalStateException.class)
@@ -470,8 +470,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("settles the outstanding balance plus one period of accrued interest")
         void settlesBalancePlusAccruedInterest() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
@@ -488,8 +488,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("closes the loan and clears the outstanding balance")
         void closesTheLoan() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
@@ -509,8 +509,8 @@ class LoanServiceImplTest {
             AmortizationSchedule eleven = scheduleEntry(11, "860.66", "856.38", "4.28");
             AmortizationSchedule twelve = scheduleEntry(12, "860.66", "860.66", "0.00");
 
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(eleven, twelve));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -524,7 +524,7 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("refuses early payoff on a loan that is not active")
         void refusesPayoffOnInactiveLoan() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.PAID_OFF, "0.00")));
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.PAID_OFF, "0.00")));
 
             assertThatThrownBy(() -> loanService.earlyPayoff(LOAN_ID, repaymentRequest("100.00", ACCOUNT_ID)))
                     .isInstanceOf(LoanNotActiveException.class)
@@ -544,8 +544,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("records the settled principal, the accrued interest and the total on the payoff record")
         void payoffRecordReportsPrincipalAndInterestSeparately() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
@@ -576,8 +576,8 @@ class LoanServiceImplTest {
         @Test
         @DisplayName("still reports the settled principal when no source account is debited")
         void payoffRecordIsCorrectWithoutSourceAccount() {
-            when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
+            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
             loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", null));
@@ -600,7 +600,7 @@ class LoanServiceImplTest {
         @DisplayName("quotes the balance, the accrued interest and the instalments still outstanding")
         void quotesSettlementFigures() {
             when(loanRepository.findById(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findByLoanIdAndStatus(LOAN_ID, ScheduleStatus.PENDING))
+            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
                     .thenReturn(List.of(
                             scheduleEntry(11, "860.66", "856.38", "4.28"),
                             scheduleEntry(12, "860.66", "860.66", "0.00")));

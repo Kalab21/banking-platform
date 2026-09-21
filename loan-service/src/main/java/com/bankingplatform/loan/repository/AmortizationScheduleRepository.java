@@ -16,5 +16,17 @@ public interface AmortizationScheduleRepository extends JpaRepository<Amortizati
     @Query("SELECT s FROM AmortizationSchedule s WHERE s.status = 'PENDING' AND s.dueDate <= :date")
     List<AmortizationSchedule> findDuePayments(LocalDate date);
 
-    List<AmortizationSchedule> findByLoanIdAndStatus(Long loanId, ScheduleStatus status);
+    /**
+     * Instalments in the order they fall due.
+     *
+     * <p>The ordering is the point. The caller takes the first element as
+     * "the next unpaid payment", and this query had no ORDER BY at all -- so
+     * which instalment a repayment was applied to came down to whatever order
+     * PostgreSQL happened to return rows in. That decides the interest and
+     * principal split and the payment number recorded against the repayment,
+     * so an arbitrary choice there is an arbitrary allocation of the
+     * customer's money.
+     */
+    List<AmortizationSchedule> findByLoanIdAndStatusOrderByPaymentNumberAsc(
+            Long loanId, ScheduleStatus status);
 }
