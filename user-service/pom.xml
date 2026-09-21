@@ -38,6 +38,14 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Failed sign-in attempts are counted per account in Redis: the
+             counter is transient, wants a TTL, and has to be shared across
+             every replica. An in-process map resets on restart and is
+             defeated by spreading attempts across instances. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>

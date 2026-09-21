@@ -1,9 +1,9 @@
 package com.bankingplatform.common.kafka.outbox;
 
 import com.bankingplatform.common.kafka.TablePresence;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
-import io.micrometer.core.instrument.Tags;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -76,12 +76,23 @@ public class OutboxMetrics {
             return;
         }
 
-        registry.gauge("banking.outbox.pending", Tags.empty(), this,
-                metrics -> metrics.count(PENDING));
-        registry.gauge("banking.outbox.oldest.age.seconds", Tags.empty(), this,
-                metrics -> metrics.count(OLDEST_AGE_SECONDS));
-        registry.gauge("banking.outbox.failing", Tags.empty(), this,
-                metrics -> metrics.count(FAILING));
+        // Registered with a strong reference on purpose. The shorthand
+        // MeterRegistry.gauge(name, tags, obj, fn) keeps a *weak* reference to
+        // the object it measures, so the moment nothing else holds that object
+        // the gauge reports NaN rather than disappearing -- an alert that
+        // silently stops firing, which is the worst way for a metric to fail.
+        // It survives here only because Spring holds the bean, which is luck
+        // rather than design; a test that built one without keeping it is what
+        // exposed it.
+        Gauge.builder("banking.outbox.pending", this, metrics -> metrics.count(PENDING))
+                .strongReference(true)
+                .register(registry);
+        Gauge.builder("banking.outbox.oldest.age.seconds", this, metrics -> metrics.count(OLDEST_AGE_SECONDS))
+                .strongReference(true)
+                .register(registry);
+        Gauge.builder("banking.outbox.failing", this, metrics -> metrics.count(FAILING))
+                .strongReference(true)
+                .register(registry);
     }
 
     /**

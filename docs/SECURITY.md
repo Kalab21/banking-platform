@@ -5,6 +5,59 @@ How a request is authenticated, how it is authorised, and what is not covered.
 This is a portfolio project. It handles no real money and holds no real customer
 data, and it makes no regulatory or certification claims.
 
+
+## Guessing one account's password
+
+The gateway rate-limits by IP. That stops one noisy source and does not see a
+distributed attempt on a single username: many quiet sources working through
+one account look like ordinary traffic to it.
+
+Failed sign-ins are therefore also counted per account, in Redis — shared
+across replicas, with a TTL, because an in-process counter resets on restart
+and is defeated by spreading attempts across instances.
+
+- **The key is a SHA-256 of the submitted username**, never the username.
+  Anyone reading a shared Redis keyspace would otherwise see a list of the
+  accounts under attack. The digest is of what was typed, so an attempt
+  against a name that does not exist is still counted and nothing here
+  distinguishes registered names from unregistered ones.
+- **The increment and its expiry are one script**, so a crash between them
+  cannot leave a key with no TTL — an account locked out permanently by an
+  infrastructure hiccup.
+- **The check reads the count and the remaining TTL together**, so the two
+  describe the same moment. Read separately, the key can expire in between and
+  the caller is told to wait a full window for a block that has already
+  lifted.
+- **The refusal says nothing about the account.** 429 with `Retry-After`, and
+  wording about the attempts rather than the account: "this account is locked"
+  would confirm the username exists to someone guessing names.
+
+The counting follows the credential rather than the request. A correct
+password with the second factor still outstanding is neither a failure nor a
+success — it is not counted, and it does not clear the counter, because
+counting it would lock a two-factor customer out for doing what the form asked
+and clearing it would let a guesser reset the count by stopping one step
+short. A wrong code is counted: it is the second half of a guess.
+
+**Sign-in fails closed if Redis is unavailable** — 503, and nobody signs in.
+That is a real availability cost, taken deliberately: the alternative is
+removing the only limit on guessing one account's password at exactly the
+moment the platform cannot observe it.
+
+**It fails closed on corrupted state too**, which is the less obvious half. A
+counter that is not a number, or one that is negative, is a value this service
+did not write, and the only safe answer to "how many failures has this account
+had?" is to stop rather than to guess. Answering zero — which is what the
+first version did, reasoning that bad data should not cause a permanent
+lockout — made the throttle removable by anyone who could corrupt the key. The
+reasoning was wrong in a way worth naming: the alternative to a permanent
+lockout is not "let them through", it is "fail closed until the key expires",
+which the TTL guarantees anyway.
+
+The expiry is treated differently from the count on purpose. It decides only
+what the caller is told to wait, so an unreadable one degrades rather than
+refusing — but upwards, to the full window, never to none.
+
 ## Authentication
 
 `user-service` issues a JWT on login, signed HS256. The gateway validates the

@@ -1,8 +1,8 @@
 package com.bankingplatform.common.idempotency;
 
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
-import io.micrometer.core.instrument.Tags;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -51,10 +51,20 @@ public class IdempotencyMetrics {
             return;
         }
 
-        registry.gauge("banking.idempotency.unknown", Tags.empty(), this,
-                metrics -> metrics.count(UNKNOWN_OUTCOMES));
-        registry.gauge("banking.idempotency.abandoned", Tags.empty(), this,
-                metrics -> metrics.count(ABANDONED_CLAIMS));
+        // Registered with a strong reference on purpose. The shorthand
+        // MeterRegistry.gauge(name, tags, obj, fn) keeps a *weak* reference to
+        // the object it measures, so the moment nothing else holds that object
+        // the gauge reports NaN rather than disappearing -- an alert that
+        // silently stops firing, which is the worst way for a metric to fail.
+        // It survives here only because Spring holds the bean, which is luck
+        // rather than design; a test that built one without keeping it is what
+        // exposed it.
+        Gauge.builder("banking.idempotency.unknown", this, metrics -> metrics.count(UNKNOWN_OUTCOMES))
+                .strongReference(true)
+                .register(registry);
+        Gauge.builder("banking.idempotency.abandoned", this, metrics -> metrics.count(ABANDONED_CLAIMS))
+                .strongReference(true)
+                .register(registry);
     }
 
     /**

@@ -1,6 +1,6 @@
 # Testing
 
-962 automated tests run in CI: 680 backend (554 unit and web-slice, 126
+990 automated tests run in CI: 708 backend (569 unit and web-slice, 139
 integration against a real PostgreSQL and an embedded Kafka broker), 213
 frontend unit/component and 69 offline end-to-end. A further 34 live-stack
 Playwright scenarios and a PowerShell full-stack suite run on demand and are not
@@ -74,7 +74,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 554 unit + 126 integration = 680
+mvn -B --no-transfer-progress clean verify   # backend: 569 unit + 139 integration = 708
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
@@ -222,8 +222,20 @@ cd frontend && npm run test:e2e
 
 # live — requires the full stack
 docker compose up -d && ./scripts/seed-demo.sh
-cd frontend && E2E_USERNAME=<printed> E2E_PASSWORD=<printed> npm run test:e2e:live
+cd frontend && E2E_NO_SERVER=1 E2E_BASE_URL=http://127.0.0.1:3000   E2E_USERNAME=<printed> E2E_PASSWORD=<printed> npm run test:e2e:live
 ```
+
+`E2E_NO_SERVER` and `E2E_BASE_URL` are not optional, and leaving them out fails
+in a way that looks like a product bug. The `webServer` block in
+`playwright.config.ts` is written for the offline suite: it starts Next with
+`API_GATEWAY_URL` pointing at a port nothing listens on, deliberately, so that
+an unstubbed call fails loudly rather than silently reaching a real service.
+`reuseExistingServer` means the live suite is meant to attach to a server that
+is already running with a real gateway behind it — the one the stack itself
+serves on port 3000. Without these variables Playwright starts the offline
+server instead, every backend call fails, and the console reports "We could not
+reach your accounts just now" on screen after screen while the stack behind it
+is perfectly healthy.
 
 ## Authorization tests
 

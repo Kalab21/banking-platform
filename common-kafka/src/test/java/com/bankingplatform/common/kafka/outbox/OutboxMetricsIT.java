@@ -37,6 +37,8 @@ class OutboxMetricsIT {
     private static DataSource dataSource;
 
     private MeterRegistry registry;
+    @SuppressWarnings("unused") // held so the gauges it registered stay readable
+    private OutboxMetrics metrics;
 
     @BeforeAll
     static void schema() {
@@ -66,7 +68,10 @@ class OutboxMetricsIT {
     void empty() {
         jdbc.update("DELETE FROM outbox_event");
         registry = new SimpleMeterRegistry();
-        new OutboxMetrics(jdbc, providerOf(registry));
+        // Held in a field. The first version of this test discarded it, and
+        // the gauge read NaN once the garbage collector got to it -- which is
+        // how the weak reference in MeterRegistry.gauge was found.
+        metrics = new OutboxMetrics(jdbc, providerOf(registry));
     }
 
     private void row(String id, String createdAt, boolean sent, int attempts) {
