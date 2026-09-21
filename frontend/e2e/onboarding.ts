@@ -1,4 +1,4 @@
-import { expect, type Page, Locator } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 /**
  * Driving the onboarding wizard from a test.
@@ -54,40 +54,42 @@ export function syntheticApplicant(overrides: Partial<OnboardingIdentity> = {}):
   };
 }
 
-/**
- * Fills a field and checks the value survived.
- *
- * <p>The wizard advances on `goNext`, which is entirely synchronous: it
- * validates React state and sets the next step. So a step that refuses to
- * advance means React never received what was typed.
- *
- * That is what happens on the very first page load of a run. Playwright can
- * fill an input before React has hydrated; the DOM shows the value, no React
- * handler exists to observe it, and when hydration completes React re-renders
- * the controlled input from its own empty state and wipes it. Validation then
- * fails on fields the browser is visibly showing as filled — which is exactly
- * how it looked in the three runs where the first test failed here and every
- * later test using the same helper passed.
- *
- * Reading the value back and refilling is the fix that does not require the
- * page to announce its own hydration.
- */
-async function fillStable(field: Locator, value: string): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    await field.fill(value);
-    await field.page().waitForTimeout(100);
-    if ((await field.inputValue()) === value) return;
-  }
-  throw new Error(`Field never kept its value after 10 attempts: ${value}`);
+export async function fillAccountStep(page: Page, who: OnboardingIdentity): Promise<void> {
+  await page.getByLabel("Username").fill(who.username);
+  await page.getByLabel("Email address").fill(who.email);
+  await page.getByLabel("Password", { exact: true }).fill(who.password);
+  await page.getByLabel("Confirm password").fill(who.password);
 }
 
-export async function fillAccountStep(page: Page, who: OnboardingIdentity): Promise<void> {
-  // The first step of the first test in a run is the one that races
-  // hydration, so this is where the value is read back.
-  await fillStable(page.getByLabel("Username"), who.username);
-  await fillStable(page.getByLabel("Email address"), who.email);
-  await fillStable(page.getByLabel("Password", { exact: true }), who.password);
-  await fillStable(page.getByLabel("Confirm password"), who.password);
+/**
+ * Fills the first step and gets past it, retrying if it did not take.
+ *
+ * <p>On the very first page load of a run, Playwright can fill the inputs
+ * before React has hydrated. The DOM holds the values and React's state does
+ * not, so `goNext` — which is entirely synchronous and validates state —
+ * refuses to advance, on a form the browser is visibly showing as filled.
+ *
+ * The failure snapshot says it exactly: the password box contains
+ * `Northbank2026` while the live requirements counter next to it still reads
+ * "0 of 4 password requirements met". That counter is rendered from React
+ * state, so it is the half that never received the input.
+ *
+ * Reading the value back off the input does not catch this — that reads the
+ * DOM, which is the half that is correct. So the check is whether the step
+ * actually advanced, and the remedy is to type it again once React is there.
+ */
+async function fillAccountStepAndAdvance(page: Page, who: OnboardingIdentity): Promise<void> {
+  const nextHeading = page.getByRole("heading", { name: "About you" });
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await fillAccountStep(page, who);
+    await next(page);
+    try {
+      await expect(nextHeading).toBeVisible({ timeout: 5000 });
+      return;
+    } catch (notAdvanced) {
+      if (attempt === 3) throw notAdvanced;
+    }
+  }
 }
 
 export async function fillPersonalStep(page: Page, who: OnboardingIdentity): Promise<void> {
@@ -118,9 +120,7 @@ export async function completeWizardToReview(
   page: Page,
   who: OnboardingIdentity,
 ): Promise<void> {
-  await fillAccountStep(page, who);
-  await next(page);
-  await expect(page.getByRole("heading", { name: "About you" })).toBeVisible();
+  await fillAccountStepAndAdvance(page, who);
 
   await fillPersonalStep(page, who);
   await next(page);
