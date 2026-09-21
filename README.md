@@ -13,7 +13,7 @@ across Spring Boot services and a Next.js customer console.
 **Core stack:** Java 17 · Spring Boot · Kafka · PostgreSQL · Redis · Next.js · React ·
 TypeScript · Docker · AWS/Terraform
 
-**Engineering proof:** 13 backend processes · 990 CI tests · idempotent money movement ·
+**Engineering proof:** 13 backend processes · 1010 CI tests · idempotent money movement ·
 concurrency-safe balances · resource-level authorization · responsive customer banking UX
 
 > Portfolio demonstration using synthetic data. No real money and no production,
@@ -135,7 +135,7 @@ Ports, databases and Kafka topics are also listed in
 | **Data** | PostgreSQL 16, database per service, Flyway migrations, `ddl-auto: validate`; Redis 7 for rate limits, velocity counters and read-model cache |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, Brave tracing to Zipkin, `X-Request-Id` correlation |
-| **Testing** | 990 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
+| **Testing** | 1010 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 <details>
@@ -260,14 +260,14 @@ remaining hardening candidates, including findings this project has not fixed �
 
 | Evidence | Result |
 |---|---:|
-| Backend — unit, web-slice and Testcontainers integration | 708 |
+| Backend — unit, web-slice and Testcontainers integration | 728 |
 | Frontend unit and component | 213 |
 | Offline Playwright (production build, no backend) | 69 |
-| **CI total** | **990** |
+| **CI total** | **1010** |
 | Live Playwright against the running stack — on demand | 34 scenarios |
 | PowerShell full-stack suite — on demand | 73 / 73 |
 
-The backend total is 569 unit and web-slice tests plus 139 integration tests that run
+The backend total is 589 unit and web-slice tests plus 139 integration tests that run
 `@DataJpaTest` against a real PostgreSQL 16 container, so entity and migration drift fails
 the build and the concurrency and idempotency guarantees are proved against the database
 that enforces them. The live Playwright and PowerShell suites need all 13 backend processes
@@ -275,7 +275,7 @@ running, so they are triggered on demand rather than on every push, and are not 
 the CI total. Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 569 unit + 139 integration = 708
+mvn -B --no-transfer-progress clean verify   # backend: 589 unit + 139 integration = 728
 cd frontend && npm run test                  # frontend: 213 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
