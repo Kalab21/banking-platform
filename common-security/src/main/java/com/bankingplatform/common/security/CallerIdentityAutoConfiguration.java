@@ -25,6 +25,20 @@ public class CallerIdentityAutoConfiguration {
         return new CallerIdentityArgumentResolver();
     }
 
+    /**
+     * Publishes the caller on the request thread for audit attribution.
+     *
+     * <p>Separate from the argument resolver on purpose: the resolver refuses
+     * a request that needs an identity and has none, and this must not. The
+     * internal endpoints carry no identity by design, and a filter that
+     * rejected them for the sake of a log field would break them.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public CallerContextFilter callerContextFilter() {
+        return new CallerContextFilter();
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public CallerIdentityExceptionHandler callerIdentityExceptionHandler() {

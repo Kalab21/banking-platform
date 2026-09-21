@@ -1,5 +1,6 @@
 package com.bankingplatform.payment.service.impl;
 
+import com.bankingplatform.common.security.CallerContext;
 import com.bankingplatform.payment.client.AccountClient;
 import com.bankingplatform.payment.client.TransactionClient;
 import com.bankingplatform.payment.dto.*;
@@ -78,7 +79,7 @@ public class PaymentServiceImpl implements PaymentService {
             saved = paymentRepository.save(saved);
         }
 
-        audit("PAYMENT", saved.getId(), "CREATED", null, "ref=" + saved.getPaymentRef());
+        audit("PAYMENT", saved.getId(), "CREATED", "ref=" + saved.getPaymentRef());
         return paymentMapper.toResponse(saved);
     }
 
@@ -114,7 +115,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new PaymentException("Cannot cancel payment in status: " + payment.getStatus());
         }
         payment.setStatus(PaymentStatus.CANCELLED);
-        audit("PAYMENT", id, "CANCELLED", null, "ref=" + payment.getPaymentRef());
+        audit("PAYMENT", id, "CANCELLED", "ref=" + payment.getPaymentRef());
         return paymentMapper.toResponse(paymentRepository.save(payment));
     }
 
@@ -314,12 +315,27 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found: " + id));
     }
 
-    private void audit(String entityType, Long entityId, String action, Long performedBy, String details) {
+    /**
+     * Records who did this, not only what was done.
+     *
+     * <p>The actor comes from the request rather than from an argument.
+     * Several call sites used to pass the <em>subject</em> of the change --
+     * the account holder, the applicant -- which reads correctly right up
+     * until a member of staff acts on a customer's behalf, and then the audit
+     * row names the customer as having done it themselves.
+     *
+     * <p>{@code actorType} is always set. A scheduled job or a Kafka listener
+     * has no caller and is recorded as {@code SYSTEM}, so a null
+     * {@code performedBy} beside it means "no user was involved" rather than
+     * "the attribution was lost".
+     */
+    private void audit(String entityType, Long entityId, String action, String details) {
         auditLogRepository.save(AuditLog.builder()
                 .entityType(entityType)
                 .entityId(entityId)
                 .action(action)
-                .performedBy(performedBy)
+                .performedBy(CallerContext.userId().orElse(null))
+                .actorType(CallerContext.actor())
                 .details(details)
                 .build());
     }

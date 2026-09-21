@@ -1,5 +1,6 @@
 package com.bankingplatform.transaction.service.impl;
 
+import com.bankingplatform.common.security.CallerContext;
 import com.bankingplatform.transaction.client.AccountClient;
 import com.bankingplatform.transaction.dto.*;
 import com.bankingplatform.transaction.exception.ResourceNotFoundException;
@@ -62,7 +63,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .build();
 
         Transaction saved = transactionRepository.save(tx);
-        audit("TRANSACTION", saved.getId(), "DEPOSIT", null,
+        audit("TRANSACTION", saved.getId(), "DEPOSIT",
                 "Account " + request.getAccountId() + " amount=" + request.getAmount());
         eventProducer.publishTransactionCreated(saved.getId(), saved.getAccountId(),
                 account.getUserId(), saved.getType().name(), saved.getAmount(),
@@ -95,7 +96,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .build();
 
         Transaction saved = transactionRepository.save(tx);
-        audit("TRANSACTION", saved.getId(), "WITHDRAWAL", null,
+        audit("TRANSACTION", saved.getId(), "WITHDRAWAL",
                 "Account " + request.getAccountId() + " amount=" + request.getAmount());
         eventProducer.publishTransactionCreated(saved.getId(), saved.getAccountId(),
                 account.getUserId(), saved.getType().name(), saved.getAmount(),
@@ -197,7 +198,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .relatedTransactionRef(debitRef)
                 .build());
 
-        audit("TRANSACTION", debit.getId(), "TRANSFER_OUT", null,
+        audit("TRANSACTION", debit.getId(), "TRANSFER_OUT",
                 "From " + request.getFromAccountId() + " to " + request.getToAccountId() + " amount=" + request.getAmount());
 
         eventProducer.publishTransferCompleted(debitRef, creditRef,
@@ -267,12 +268,27 @@ public class TransactionServiceImpl implements TransactionService {
         return ref;
     }
 
-    private void audit(String entityType, Long entityId, String action, Long performedBy, String details) {
+    /**
+     * Records who did this, not only what was done.
+     *
+     * <p>The actor comes from the request rather than from an argument.
+     * Several call sites used to pass the <em>subject</em> of the change --
+     * the account holder, the applicant -- which reads correctly right up
+     * until a member of staff acts on a customer's behalf, and then the audit
+     * row names the customer as having done it themselves.
+     *
+     * <p>{@code actorType} is always set. A scheduled job or a Kafka listener
+     * has no caller and is recorded as {@code SYSTEM}, so a null
+     * {@code performedBy} beside it means "no user was involved" rather than
+     * "the attribution was lost".
+     */
+    private void audit(String entityType, Long entityId, String action, String details) {
         auditLogRepository.save(AuditLog.builder()
                 .entityType(entityType)
                 .entityId(entityId)
                 .action(action)
-                .performedBy(performedBy)
+                .performedBy(CallerContext.userId().orElse(null))
+                .actorType(CallerContext.actor())
                 .details(details)
                 .build());
     }

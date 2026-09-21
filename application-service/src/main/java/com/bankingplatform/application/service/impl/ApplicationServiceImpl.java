@@ -1,5 +1,6 @@
 package com.bankingplatform.application.service.impl;
 
+import com.bankingplatform.common.security.CallerContext;
 import com.bankingplatform.application.client.AccountClient;
 import com.bankingplatform.application.client.UserClient;
 import com.bankingplatform.application.dto.*;
@@ -98,7 +99,7 @@ public class ApplicationServiceImpl implements ApplicationService {
             saved.setStatus(ApplicationStatus.DISBURSED);
             applicationRepository.save(saved);
 
-            audit("APPLICATION", saved.getId(), "AUTO_APPROVED", request.getUserId(),
+            audit("APPLICATION", saved.getId(), "AUTO_APPROVED",
                     "Type: " + request.getApplicationType() + ", ProductId: " + productId);
             eventProducer.publishApplicationApproved(saved.getId(), request.getUserId(),
                     request.getApplicationType().name(), productId,
@@ -111,7 +112,7 @@ public class ApplicationServiceImpl implements ApplicationService {
             application.setReviewerNotes("Auto-rejected: credit score " + creditScore + " below minimum " + minScore);
 
             Application saved = applicationRepository.save(application);
-            audit("APPLICATION", saved.getId(), "AUTO_REJECTED", request.getUserId(),
+            audit("APPLICATION", saved.getId(), "AUTO_REJECTED",
                     "Type: " + request.getApplicationType() + ", Score: " + creditScore);
             eventProducer.publishApplicationRejected(saved.getId(), request.getUserId(),
                     request.getApplicationType().name(), "Credit score below minimum");
@@ -162,13 +163,13 @@ public class ApplicationServiceImpl implements ApplicationService {
             application.setProductId(productId);
             application.setStatus(ApplicationStatus.DISBURSED);
 
-            audit("APPLICATION", id, "MANUAL_APPROVED", null,
+            audit("APPLICATION", id, "MANUAL_APPROVED",
                     "ProductId: " + productId);
             eventProducer.publishApplicationApproved(id, application.getUserId(),
                     application.getApplicationType().name(), productId,
                     application.getCreditScoreAtApply(), application.getRequestedAmount());
         } else if (request.getStatus() == ApplicationStatus.REJECTED) {
-            audit("APPLICATION", id, "MANUAL_REJECTED", null, request.getReviewerNotes());
+            audit("APPLICATION", id, "MANUAL_REJECTED", request.getReviewerNotes());
             eventProducer.publishApplicationRejected(id, application.getUserId(),
                     application.getApplicationType().name(),
                     request.getReviewerNotes() != null ? request.getReviewerNotes() : "Manual rejection");
@@ -191,7 +192,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
 
         application.setStatus(ApplicationStatus.CANCELLED);
-        audit("APPLICATION", id, "CANCELLED", userId, "User-initiated cancellation");
+        audit("APPLICATION", id, "CANCELLED", "User-initiated cancellation for user " + userId);
         return applicationMapper.toResponse(applicationRepository.save(application));
     }
 
@@ -225,12 +226,27 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Application not found with id: " + id));
     }
 
-    private void audit(String entityType, Long entityId, String action, Long performedBy, String details) {
+    /**
+     * Records who did this, not only what was done.
+     *
+     * <p>The actor comes from the request rather than from an argument.
+     * Several call sites used to pass the <em>subject</em> of the change --
+     * the account holder, the applicant -- which reads correctly right up
+     * until a member of staff acts on a customer's behalf, and then the audit
+     * row names the customer as having done it themselves.
+     *
+     * <p>{@code actorType} is always set. A scheduled job or a Kafka listener
+     * has no caller and is recorded as {@code SYSTEM}, so a null
+     * {@code performedBy} beside it means "no user was involved" rather than
+     * "the attribution was lost".
+     */
+    private void audit(String entityType, Long entityId, String action, String details) {
         auditLogRepository.save(AuditLog.builder()
                 .entityType(entityType)
                 .entityId(entityId)
                 .action(action)
-                .performedBy(performedBy)
+                .performedBy(CallerContext.userId().orElse(null))
+                .actorType(CallerContext.actor())
                 .details(details)
                 .build());
     }
