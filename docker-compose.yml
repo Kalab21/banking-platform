@@ -179,6 +179,13 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Failed sign-in attempts are counted per account here, so this
+      # service needs the same Redis the gateway already uses for its
+      # per-IP limit.
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:8081/actuator/health/readiness || exit 1"]
       interval: 15s

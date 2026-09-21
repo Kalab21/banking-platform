@@ -1,5 +1,6 @@
 package com.bankingplatform.user.service.impl;
 
+import com.bankingplatform.user.security.LoginAttemptService;
 import com.bankingplatform.user.config.JwtUtil;
 import com.bankingplatform.user.dto.RegisterRequest;
 import com.bankingplatform.user.dto.UserResponse;
@@ -94,7 +95,8 @@ class OnboardingPersistenceTest {
                 passwordEncoder,
                 jwtUtil,
                 mock(AuthenticationManager.class),
-                mock(TwoFactorService.class));
+                mock(TwoFactorService.class),
+                mock(LoginAttemptService.class));
     }
 
     /** A completed wizard, with the two fields that arrive un-normalised. */

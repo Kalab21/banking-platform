@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -24,6 +25,41 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /**
+     * Too many failed sign-in attempts against one account.
+     *
+     * <p>429 with Retry-After, and wording that describes the attempts rather
+     * than the account: a message saying "this account is locked" would
+     * confirm the username exists to anyone guessing names.
+     */
+    @ExceptionHandler(LoginThrottledException.class)
+    public ResponseEntity<ErrorResponse> handleThrottled(LoginThrottledException ex,
+                                                         HttpServletRequest req) {
+        ResponseEntity<ErrorResponse> refusal = build(HttpStatus.TOO_MANY_REQUESTS,
+                "Too many sign-in attempts. Try again later.", req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(refusal.getBody());
+    }
+
+    /**
+     * The sign-in attempt store could not be evaluated.
+     *
+     * <p>Sign-in fails closed rather than skipping the check. That is a real
+     * availability cost -- nobody signs in while Redis is down -- taken
+     * deliberately, because the alternative is removing the only limit on
+     * guessing a single account's password at exactly the moment the platform
+     * cannot observe it.
+     *
+     * <p>The response names nothing about the store.
+     */
+    @ExceptionHandler(ThrottleStoreUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleThrottleStore(HttpServletRequest req) {
+        log.error("Sign-in refused: the attempt store could not be evaluated");
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "Sign-in is temporarily unavailable. Please try again shortly.", req.getRequestURI());
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex, HttpServletRequest req) {

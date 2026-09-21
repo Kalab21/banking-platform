@@ -1,5 +1,7 @@
 package com.bankingplatform.user.service.impl;
 
+import org.springframework.security.core.AuthenticationException;
+import com.bankingplatform.user.security.LoginAttemptService;
 import com.bankingplatform.user.config.JwtUtil;
 import com.bankingplatform.user.model.CustomerIdentity;
 import com.bankingplatform.user.model.IdentityStatus;
@@ -36,6 +38,7 @@ public class UserServiceImpl implements UserService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final TwoFactorService twoFactorService;
+    private final LoginAttemptService loginAttemptService;
 
     @Override
     @Transactional
@@ -81,20 +84,44 @@ public class UserServiceImpl implements UserService {
                 .build();
     }
 
+    /**
+     * Sign-in, with both halves of the credential counted against the account.
+     *
+     * <p>The gateway rate-limits by IP, which does not see a distributed
+     * attempt on one username: many quiet sources working through a single
+     * account look like ordinary traffic to it. Failures are therefore also
+     * counted per account here.
+     */
     @Override
     public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
-        );
+        String username = request.getUsername();
 
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.getUsername()));
+        // Checked before authenticating, so a blocked account costs nothing to
+        // refuse and the refusal never adds to the count that caused it.
+        loginAttemptService.assertNotThrottled(username);
+
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, request.getPassword())
+            );
+        } catch (AuthenticationException wrongPassword) {
+            loginAttemptService.recordFailure(username);
+            throw wrongPassword;
+        }
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
 
         // Password accepted. If the account carries a second factor, no session is
         // issued until a valid TOTP code is presented.
         if (user.isTwoFactorEnabled()) {
             String code = request.getTotpCode();
             if (code == null || code.isBlank()) {
+                // Neither a failure nor a success: the customer has done
+                // exactly what the form asked. Counting it would lock a
+                // two-factor user out of their own account, and clearing the
+                // counter here would let a guesser reset it at will by
+                // stopping one step short.
                 return AuthResponse.builder()
                         .twoFactorRequired(true)
                         .userId(user.getId())
@@ -102,9 +129,15 @@ public class UserServiceImpl implements UserService {
                         .build();
             }
             if (!twoFactorService.verifyCode(user.getId(), code)) {
+                // A wrong code is the second half of a guess, so it counts.
+                loginAttemptService.recordFailure(username);
                 throw new BadCredentialsException("Invalid authentication code");
             }
         }
+
+        // The whole credential has been presented. Only now is the count
+        // cleared.
+        loginAttemptService.clear(username);
 
         UserDetails userDetails = buildUserDetails(user);
         String token = jwtUtil.generateToken(userDetails, user.getId());

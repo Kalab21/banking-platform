@@ -1,5 +1,6 @@
 package com.bankingplatform.user.service.impl;
 
+import com.bankingplatform.user.security.LoginAttemptService;
 import com.bankingplatform.user.config.JwtUtil;
 import com.bankingplatform.user.dto.AuthResponse;
 import com.bankingplatform.user.dto.LoginRequest;
@@ -56,6 +57,7 @@ class LoginTwoFactorTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private AuthenticationManager authenticationManager;
     @Mock private TwoFactorService twoFactorService;
+    @Mock private LoginAttemptService loginAttemptService;
 
     @InjectMocks private UserServiceImpl userService;
 
