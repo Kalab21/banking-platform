@@ -1,5 +1,6 @@
 package com.bankingplatform.transaction.controller;
 
+import com.bankingplatform.transaction.idempotency.TransactionOutcomeClassifier;
 import com.bankingplatform.common.security.CallerIdentityArgumentResolver;
 import com.bankingplatform.common.security.CallerIdentityExceptionHandler;
 import com.bankingplatform.common.security.CallerIdentityHeaders;
@@ -7,8 +8,8 @@ import com.bankingplatform.transaction.client.AccountClient;
 import com.bankingplatform.transaction.dto.AccountResponse;
 import com.bankingplatform.transaction.dto.TransactionResponse;
 import com.bankingplatform.transaction.dto.TransferResponse;
-import com.bankingplatform.transaction.idempotency.IdempotencyGuard;
-import com.bankingplatform.transaction.idempotency.IdempotencyStore;
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
 import com.bankingplatform.transaction.security.AccountOwnershipVerifier;
 import com.bankingplatform.transaction.service.TransactionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -102,7 +103,8 @@ class TransactionAuthorizationTest {
     private static IdempotencyGuard passThroughIdempotency() {
         IdempotencyStore store = Mockito.mock(IdempotencyStore.class);
         when(store.claim(any(), any(), any())).thenReturn(Optional.empty());
-        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()));
+        return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()),
+                new TransactionOutcomeClassifier());
     }
 
     private static TransferResponse transferResponse() {

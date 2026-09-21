@@ -23,6 +23,7 @@
         <module>common-security</module>
         <module>common-events</module>
         <module>common-kafka</module>
+        <module>common-idempotency</module>
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>user-service</module>

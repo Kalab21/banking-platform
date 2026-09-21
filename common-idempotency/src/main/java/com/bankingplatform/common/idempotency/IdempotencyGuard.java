@@ -1,23 +1,13 @@
-package com.bankingplatform.transaction.idempotency;
+package com.bankingplatform.common.idempotency;
 
 import com.bankingplatform.common.security.CallerIdentity;
-import com.bankingplatform.transaction.exception.AccountCallTimeoutException;
-import com.bankingplatform.transaction.exception.IdempotencyException;
-import com.bankingplatform.transaction.exception.ResourceNotFoundException;
-import com.bankingplatform.transaction.exception.TransactionException;
-import com.bankingplatform.transaction.exception.TransferPartiallyAppliedException;
-import com.bankingplatform.transaction.model.IdempotencyStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import feign.FeignException;
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 import java.util.function.Function;
@@ -29,12 +19,16 @@ import java.util.regex.Pattern;
  *
  * <p>The sequence is: claim the key in a committed transaction of its own, then
  * execute, then record the verdict. Claiming first is what makes a concurrent
- * duplicate lose — it finds the claim and never calls the account service.
+ * duplicate lose — it finds the claim and never performs the operation.
  *
  * <p>Ordering against authorization matters and is the controller's job: the
  * ownership check runs before this guard is entered, so a refused request
  * neither claims a key nor leaves a cached result. A caller can no more reach
- * another customer's account through an idempotency key than without one.
+ * another customer's money through an idempotency key than without one.
+ *
+ * <p>What a failure implies about the balance is the one thing this cannot
+ * decide for itself, so it asks an {@link OutcomeClassifier} the owning
+ * service supplies. See that type for why the default answer is "unknown".
  *
  * <h2>What a replay returns</h2>
  * <ul>
@@ -49,10 +43,9 @@ import java.util.regex.Pattern;
  *       409 with {@code Retry-After}.</li>
  * </ul>
  */
-@Component
-@RequiredArgsConstructor
-@Slf4j
 public class IdempotencyGuard {
+
+    private static final Logger log = LoggerFactory.getLogger(IdempotencyGuard.class);
 
     public static final String HEADER = "Idempotency-Key";
 
@@ -81,6 +74,14 @@ public class IdempotencyGuard {
 
     private final IdempotencyStore store;
     private final ObjectMapper objectMapper;
+    private final OutcomeClassifier classifier;
+
+    public IdempotencyGuard(IdempotencyStore store, ObjectMapper objectMapper,
+                            OutcomeClassifier classifier) {
+        this.store = store;
+        this.objectMapper = objectMapper;
+        this.classifier = classifier;
+    }
 
     /**
      * @param rawKey       the {@code Idempotency-Key} header, possibly absent
@@ -138,7 +139,7 @@ public class IdempotencyGuard {
         try {
             result = action.get();
         } catch (RuntimeException failure) {
-            if (movedNoMoney(failure)) {
+            if (classifier.movedNoMoney(failure)) {
                 store.markFailed(key);
             } else {
                 store.markUnknown(key);
@@ -151,44 +152,6 @@ public class IdempotencyGuard {
         // report money that never moved.
         store.complete(key, HttpStatus.CREATED.value(), serialise(result), reference.apply(result));
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
-    }
-
-    /**
-     * Whether a failure is known to have left every balance untouched.
-     *
-     * <p>Answers "no" by default. Being wrong in that direction spends an
-     * idempotency key that could have been retried; being wrong in the other
-     * direction retries a debit that already happened.
-     */
-    private boolean movedNoMoney(RuntimeException failure) {
-        Throwable cause = failure;
-        if (failure instanceof NoFallbackAvailableException && failure.getCause() != null) {
-            cause = failure.getCause();
-        }
-
-        // The debit landed and the credit did not. Money moved, by definition.
-        if (cause instanceof TransferPartiallyAppliedException) {
-            return false;
-        }
-        // The circuit was open, so the call never left this service.
-        if (cause instanceof CallNotPermittedException) {
-            return true;
-        }
-        // The call left and the answer did not come back.
-        if (cause instanceof AccountCallTimeoutException) {
-            return false;
-        }
-        // Refused here, before the account service was called at all.
-        if (cause instanceof TransactionException || cause instanceof ResourceNotFoundException) {
-            return true;
-        }
-        if (cause instanceof FeignException feign) {
-            // A 4xx is the account service declining — insufficient funds, a
-            // frozen account, an unknown id. It declined instead of applying.
-            // A 5xx says nothing about whether the balance changed.
-            return feign.status() >= 400 && feign.status() < 500;
-        }
-        return false;
     }
 
     private <T> ResponseEntity<T> replay(IdempotencyOutcome record, String key,

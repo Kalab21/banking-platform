@@ -1,20 +1,19 @@
 package com.bankingplatform.transaction.idempotency;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import com.bankingplatform.common.idempotency.IdempotencyStore;
+import com.bankingplatform.common.idempotency.IdempotencyOutcome;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.common.security.Role;
 import com.bankingplatform.transaction.dto.TransactionResponse;
 import com.bankingplatform.transaction.dto.TransferRequest;
 import com.bankingplatform.transaction.dto.TransferResponse;
 import com.bankingplatform.transaction.exception.AccountCallTimeoutException;
-import com.bankingplatform.transaction.exception.IdempotencyException;
+import com.bankingplatform.common.idempotency.IdempotencyException;
 import com.bankingplatform.transaction.exception.TransactionException;
-import com.bankingplatform.transaction.model.IdempotencyRecord;
-import com.bankingplatform.transaction.model.IdempotencyStatus;
-import com.bankingplatform.transaction.repository.IdempotencyRecordRepository;
+import com.bankingplatform.common.idempotency.IdempotencyStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,21 +23,19 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.orm.jpa.EntityManagerHolder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -99,22 +96,24 @@ class IdempotentMoneyMovementIT {
     static class GuardUnderTest {
 
         @Bean
-        IdempotencyStore idempotencyStore(IdempotencyRecordRepository repository) {
-            return new IdempotencyStore(repository);
+        IdempotencyStore idempotencyStore(JdbcTemplate jdbcTemplate) {
+            return new IdempotencyStore(jdbcTemplate);
         }
 
         @Bean
         IdempotencyGuard idempotencyGuard(IdempotencyStore store) {
-            return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()));
+            // The real classifier, not a stand-in: which failures count as
+            // having moved no money is what several of these tests are about.
+            return new IdempotencyGuard(store, new ObjectMapper().registerModule(new JavaTimeModule()),
+                    new TransactionOutcomeClassifier());
         }
     }
 
     private static final CallerIdentity CALLER = new CallerIdentity(7L, "customer7", Role.CUSTOMER);
 
     @Autowired private IdempotencyGuard guard;
-    @Autowired private IdempotencyRecordRepository repository;
     @Autowired private IdempotencyStore store;
-    @Autowired private EntityManagerFactory entityManagerFactory;
+    @Autowired private JdbcTemplate jdbc;
 
     // ------------------------------------------------------------- fixtures
 
@@ -214,9 +213,9 @@ class IdempotentMoneyMovementIT {
         }
 
         // One key, one row, one recorded outcome.
-        assertThat(repository.findByIdempotencyKey(key))
+        assertThat(store.find(key))
                 .get()
-                .extracting(IdempotencyRecord::getStatus, IdempotencyRecord::getResultRef)
+                .extracting(IdempotencyOutcome::status, IdempotencyOutcome::resultRef)
                 .containsExactly(IdempotencyStatus.COMPLETED, "debit-1");
     }
 
@@ -270,9 +269,9 @@ class IdempotentMoneyMovementIT {
             throw new TransactionException("Cannot transfer to the same account");
         })).isInstanceOf(TransactionException.class);
 
-        assertThat(repository.findByIdempotencyKey(key))
+        assertThat(store.find(key))
                 .get()
-                .extracting(IdempotencyRecord::getStatus)
+                .extracting(IdempotencyOutcome::status)
                 .isEqualTo(IdempotencyStatus.FAILED);
 
         // Nothing was applied, so the client may correct course and retry under
@@ -281,9 +280,9 @@ class IdempotentMoneyMovementIT {
 
         assertThat(retry.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(ledger.executions).hasValue(1);
-        assertThat(repository.findByIdempotencyKey(key))
+        assertThat(store.find(key))
                 .get()
-                .extracting(IdempotencyRecord::getStatus)
+                .extracting(IdempotencyOutcome::status)
                 .isEqualTo(IdempotencyStatus.COMPLETED);
     }
 
@@ -300,9 +299,9 @@ class IdempotentMoneyMovementIT {
             throw new AccountCallTimeoutException("The account service did not respond in time");
         })).isInstanceOf(AccountCallTimeoutException.class);
 
-        assertThat(repository.findByIdempotencyKey(key))
+        assertThat(store.find(key))
                 .get()
-                .extracting(IdempotencyRecord::getStatus)
+                .extracting(IdempotencyOutcome::status)
                 .isEqualTo(IdempotencyStatus.UNKNOWN);
 
         assertThatThrownBy(() -> run(key, request, () -> ledger.apply(request.getAmount())))
@@ -319,93 +318,75 @@ class IdempotentMoneyMovementIT {
     @DisplayName("the database, not the application, enforces one row per key")
     void uniqueConstraintIsEnforcedByTheDatabase() {
         String key = newKey();
-        repository.saveAndFlush(IdempotencyRecord.builder()
-                .idempotencyKey(key).operation("TRANSFER").requestHash("a".repeat(64))
-                .status(IdempotencyStatus.COMPLETED).build());
+        insertRecord(key, "a".repeat(64), "COMPLETED");
 
         // The check-then-insert in IdempotencyStore is an optimisation. This is
         // the part that actually makes a duplicate impossible.
-        assertThatThrownBy(() -> repository.saveAndFlush(IdempotencyRecord.builder()
-                .idempotencyKey(key).operation("TRANSFER").requestHash("b".repeat(64))
-                .status(IdempotencyStatus.IN_PROGRESS).build()))
+        assertThatThrownBy(() -> insertRecord(key, "b".repeat(64), "IN_PROGRESS"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    private void insertRecord(String key, String hash, String status) {
+        jdbc.update("""
+                INSERT INTO idempotency_record
+                    (idempotency_key, operation, request_hash, status, created_at, updated_at)
+                VALUES (?, 'TRANSFER', ?, ?, now(), now())
+                """, key, hash, status);
+    }
+
     @Test
-    @DisplayName("a duplicate polling inside an open-in-view request sees the original settle")
+    @DisplayName("a duplicate waiting on a key sees a settlement made by another thread")
     void pollingSeesASettlementFromAnotherRequest() throws Exception {
         String key = newKey();
         assertThat(store.claim(key, "TRANSFER", "f".repeat(64))).isEmpty();
 
-        // open-in-view binds one EntityManager to the request thread for the
-        // whole request, and the guard's own REQUIRES_NEW transactions reuse it
-        // rather than opening their own. That is the condition under which the
-        // wait loop has to keep working.
-        EntityManager requestScoped = entityManagerFactory.createEntityManager();
-        TransactionSynchronizationManager.bindResource(
-                entityManagerFactory, new EntityManagerHolder(requestScoped));
-        try {
-            // Prime the context with the entity, which is what an entity-based
-            // read of the claim used to do and what made every later poll
-            // stale.
-            IdempotencyRecord managed = entityQuery(requestScoped, key);
-            assertThat(managed.getStatus()).isEqualTo(IdempotencyStatus.IN_PROGRESS);
+        assertThat(store.find(key)).get()
+                .extracting(IdempotencyOutcome::status)
+                .isEqualTo(IdempotencyStatus.IN_PROGRESS);
 
-            assertThat(store.find(key)).get()
-                    .extracting(IdempotencyOutcome::status)
-                    .isEqualTo(IdempotencyStatus.IN_PROGRESS);
+        // The original settles on its own thread, as a real duplicate's
+        // original does.
+        Thread original = new Thread(() -> store.complete(
+                key, 201, "{\"debit\":{\"transactionRef\":\"settled\"}}", "settled"));
+        original.start();
+        original.join(30_000);
 
-            // The original settles on its own thread, as it does in a real
-            // duplicate: this request's persistence context is never told.
-            Thread original = new Thread(() -> store.complete(
-                    key, 201, "{\"debit\":{\"transactionRef\":\"settled\"}}", "settled"));
-            original.start();
-            original.join(30_000);
-
-            // Reading the entity here still answers from the persistence
-            // context, which is why the store reads a projection instead. This
-            // assertion is the trap, kept visible on purpose: it is what the
-            // wait loop used to be doing.
-            assertThat(entityQuery(requestScoped, key).getStatus())
-                    .isEqualTo(IdempotencyStatus.IN_PROGRESS);
-
-            // The store must see the settlement regardless, or a duplicate
-            // waits out its whole budget and is told to retry something that
-            // has already finished.
-            assertThat(store.find(key)).get()
-                    .extracting(IdempotencyOutcome::status, IdempotencyOutcome::resultRef)
-                    .containsExactly(IdempotencyStatus.COMPLETED, "settled");
-        } finally {
-            TransactionSynchronizationManager.unbindResource(entityManagerFactory);
-            requestScoped.close();
-        }
-    }
-
-    private static IdempotencyRecord entityQuery(EntityManager entityManager, String key) {
-        return entityManager.createQuery(
-                        "SELECT r FROM IdempotencyRecord r WHERE r.idempotencyKey = :key",
-                        IdempotencyRecord.class)
-                .setParameter("key", key)
-                .getSingleResult();
+        // This used to be a failure mode worth a test of its own. The store
+        // read the record as a JPA entity, and with open-in-view one
+        // persistence context spanned the whole request -- so a duplicate
+        // polling for the original's verdict was handed the same stale
+        // IN_PROGRESS every time, waited out its budget, and was told to retry
+        // something that had already finished. Reading through JDBC takes the
+        // persistence context off this path, so each read is of what is
+        // committed.
+        assertThat(store.find(key)).get()
+                .extracting(IdempotencyOutcome::status, IdempotencyOutcome::resultRef)
+                .containsExactly(IdempotencyStatus.COMPLETED, "settled");
     }
 
     @Test
-    @DisplayName("the migrations apply to an empty database and match the entity mapping")
-    void schemaMatchesTheEntity() {
-        // ddl-auto: validate means the context would not have started if the
-        // entity and the migration disagreed. Storing and reading a row proves
-        // the columns behave as declared.
+    @DisplayName("the migration holds every column the shared store writes")
+    void schemaHoldsWhatTheStoreWrites() {
+        // Against this service's own migration, applied by Flyway to an empty
+        // database -- so the shared store and the table each service ships
+        // cannot drift apart without this failing.
         String key = newKey();
-        repository.saveAndFlush(IdempotencyRecord.builder()
-                .idempotencyKey(key).operation("DEPOSIT").requestHash("c".repeat(64))
-                .status(IdempotencyStatus.COMPLETED).responseStatus(201)
-                .responseBody("{\"transactionRef\":\"abc\"}").resultRef("abc").build());
+        assertThat(store.claim(key, "DEPOSIT", "c".repeat(64))).isEmpty();
+        store.complete(key, 201, "{\"transactionRef\":\"abc\"}", "abc");
 
-        Optional<IdempotencyRecord> stored = repository.findByIdempotencyKey(key);
-        assertThat(stored).get().satisfies(record -> {
-            assertThat(record.getCreatedAt()).isNotNull();
-            assertThat(record.getUpdatedAt()).isNotNull();
-            assertThat(record.getResponseBody()).isEqualTo("{\"transactionRef\":\"abc\"}");
+        assertThat(store.find(key)).get().satisfies(record -> {
+            assertThat(record.operation()).isEqualTo("DEPOSIT");
+            assertThat(record.requestHash()).isEqualTo("c".repeat(64));
+            assertThat(record.status()).isEqualTo(IdempotencyStatus.COMPLETED);
+            assertThat(record.responseStatus()).isEqualTo(201);
+            assertThat(record.responseBody()).isEqualTo("{\"transactionRef\":\"abc\"}");
+            assertThat(record.resultRef()).isEqualTo("abc");
         });
+
+        // Defaulted by the table rather than by Java, so worth reading back.
+        assertThat(jdbc.queryForObject(
+                "SELECT created_at IS NOT NULL AND updated_at IS NOT NULL "
+                        + "FROM idempotency_record WHERE idempotency_key = ?",
+                Boolean.class, key)).isTrue();
     }
 }

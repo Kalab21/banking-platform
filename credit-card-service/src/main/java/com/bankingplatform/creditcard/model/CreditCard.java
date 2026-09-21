@@ -16,6 +16,17 @@ public class CreditCard {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Optimistic locking, behind the pessimistic lock the money paths take.
+     *
+     * <p>Those paths read the card {@code FOR UPDATE}, so they do not rely on
+     * this. It is here for the ones that do not: a future method that reads a
+     * card, changes it and saves it without taking the lock will fail on the
+     * version rather than quietly overwrite a concurrent balance change.
+     */
+    @Version
+    private Long version;
+
     @Column(nullable = false, unique = true, length = 16)
     private String cardNumber;
 

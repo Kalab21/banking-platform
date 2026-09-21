@@ -1,4 +1,4 @@
-package com.bankingplatform.transaction.model;
+package com.bankingplatform.common.idempotency;
 
 /**
  * The lifecycle of one idempotent money-movement attempt.

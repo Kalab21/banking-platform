@@ -1,5 +1,9 @@
 package com.bankingplatform.creditcard.controller;
 
+import java.util.Map;
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+import io.swagger.v3.oas.annotations.Parameter;
+import org.springframework.web.bind.annotation.RequestHeader;
 import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.creditcard.dto.request.*;
@@ -25,6 +29,7 @@ import java.util.List;
 public class CreditCardController {
 
     private final CreditCardService creditCardService;
+    private final IdempotencyGuard idempotency;
 
     /**
      * A card owner comes from the stored card, never from the request.
@@ -34,6 +39,14 @@ public class CreditCardController {
      * first and authorises against that, so guessing an id reaches a 403
      * rather than another customer balance, limit and statement history.
      */
+    private static final String PURCHASE = "PURCHASE";
+    private static final String CASH_ADVANCE = "CASH_ADVANCE";
+    private static final String CARD_PAYMENT = "CARD_PAYMENT";
+
+    private static final String KEY_DESCRIPTION =
+            "Opaque client-generated value naming this logical operation. Reuse it to retry the "
+                    + "same operation safely; use a new one for a new operation.";
+
     private void requireOwnsCard(CallerIdentity caller, Long cardId) {
         AccessGuard.requireOwnerOrStaff(caller, creditCardService.getCard(cardId).getUserId());
     }
@@ -76,27 +89,44 @@ public class CreditCardController {
     @Operation(summary = "Make a purchase")
     public ResponseEntity<CreditCardTransactionResponse> purchase(@PathVariable Long cardId,
                                                                    @Valid @RequestBody PurchaseRequest request,
+                                                                   @Parameter(description = KEY_DESCRIPTION)
+                                                                   @RequestHeader(name = IdempotencyGuard.HEADER,
+                                                                           required = false) String idempotencyKey,
                                                                    CallerIdentity caller) {
+        // Ownership first, then the guard. A refused request must neither
+        // claim a key nor leave a cached result behind it.
         requireOwnsCard(caller, cardId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(creditCardService.purchase(cardId, request));
+        return idempotency.execute(idempotencyKey, PURCHASE, caller, keyed(cardId, request),
+                CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
+                () -> creditCardService.purchase(cardId, request));
     }
 
     @PostMapping("/{cardId}/cash-advance")
     @Operation(summary = "Take a cash advance")
     public ResponseEntity<CreditCardTransactionResponse> cashAdvance(@PathVariable Long cardId,
                                                                       @Valid @RequestBody CashAdvanceRequest request,
+                                                                      @Parameter(description = KEY_DESCRIPTION)
+                                                                      @RequestHeader(name = IdempotencyGuard.HEADER,
+                                                                              required = false) String idempotencyKey,
                                                                       CallerIdentity caller) {
         requireOwnsCard(caller, cardId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(creditCardService.cashAdvance(cardId, request));
+        return idempotency.execute(idempotencyKey, CASH_ADVANCE, caller, keyed(cardId, request),
+                CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
+                () -> creditCardService.cashAdvance(cardId, request));
     }
 
     @PostMapping("/{cardId}/payment")
     @Operation(summary = "Make a payment against balance")
     public ResponseEntity<CreditCardTransactionResponse> makePayment(@PathVariable Long cardId,
                                                                       @Valid @RequestBody CardPaymentRequest request,
+                                                                      @Parameter(description = KEY_DESCRIPTION)
+                                                                      @RequestHeader(name = IdempotencyGuard.HEADER,
+                                                                              required = false) String idempotencyKey,
                                                                       CallerIdentity caller) {
         requireOwnsCard(caller, cardId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(creditCardService.makePayment(cardId, request));
+        return idempotency.execute(idempotencyKey, CARD_PAYMENT, caller, keyed(cardId, request),
+                CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
+                () -> creditCardService.makePayment(cardId, request));
     }
 
     @GetMapping("/{cardId}/transactions")
@@ -134,5 +164,17 @@ public class CreditCardController {
                                                                            CallerIdentity caller) {
         requireOwnsCard(caller, cardId);
         return ResponseEntity.ok(creditCardService.getStatements(cardId));
+    }
+
+    /**
+     * The request as fingerprinted: the body plus the card it is against.
+     *
+     * <p>The card id is a path variable, so a fingerprint over the body
+     * alone would make the same purchase on two different cards look like
+     * one request. A replay would then be served the first card's stored
+     * response and the second card would never be charged.
+     */
+    private Map<String, Object> keyed(Long cardId, Object request) {
+        return Map.of("cardId", cardId, "request", request);
     }
 }
