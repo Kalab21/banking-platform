@@ -1,5 +1,7 @@
 package com.bankingplatform.user.security;
 
+import com.bankingplatform.user.exception.ThrottleStoreUnavailableException;
+import org.junit.jupiter.api.Nested;
 import com.bankingplatform.user.exception.LoginThrottledException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -20,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -200,6 +203,81 @@ class RedisLoginAttemptServiceIT {
             String value = redis.opsForValue().get(key);
             assertThat(value).isEqualTo("1");
             assertThat(value).doesNotContain(PASSWORD).doesNotContain(TOTP_CODE);
+        }
+    }
+
+    @Nested
+    @DisplayName("when the stored state is not what this service writes")
+    class CorruptedState {
+
+        /** Writes a raw value under the real key, as only an intruder or a bug would. */
+        private void poison(String value) throws Exception {
+            redis.opsForValue().set("auth:attempts:" + digestOf(USERNAME), value,
+                    Duration.ofMinutes(15));
+        }
+
+        @Test
+        @DisplayName("a counter that is not a number refuses the sign-in rather than allowing it")
+        void aMalformedCounterFailsClosed() throws Exception {
+            // This is the case that used to answer "no attempts" and let the
+            // sign-in through. Anyone able to put a junk value in the key
+            // could switch off the limit that exists to stop password
+            // guessing -- so corrupted state must stop a sign-in, not pass it.
+            poison("not-a-number");
+
+            assertThatThrownBy(() -> attempts.assertNotThrottled(USERNAME))
+                    .isInstanceOf(ThrottleStoreUnavailableException.class);
+        }
+
+        @Test
+        @DisplayName("a negative counter is refused too, not treated as room to spare")
+        void aNegativeCounterFailsClosed() throws Exception {
+            // Parses cleanly and is still impossible. Left alone it passes the
+            // comparison and silently disables the limit -- the same bypass
+            // wearing a number.
+            poison("-1");
+
+            assertThatThrownBy(() -> attempts.assertNotThrottled(USERNAME))
+                    .isInstanceOf(ThrottleStoreUnavailableException.class);
+        }
+
+        @Test
+        @DisplayName("a corrupted counter never reports itself as a throttle")
+        void aMalformedCounterIsNotAThrottleVerdict() throws Exception {
+            // The refusal has to say "cannot evaluate", not "too many
+            // attempts": the second claims a count that was never read, and
+            // carries a Retry-After computed from nothing.
+            poison("garbage");
+
+            assertThatThrownBy(() -> attempts.assertNotThrottled(USERNAME))
+                    .isNotInstanceOf(LoginThrottledException.class);
+        }
+
+        @Test
+        @DisplayName("an unreadable expiry still blocks, and waits the full window")
+        void anUnreadableExpiryDegradesUpwards() throws Exception {
+            // A bad TTL decides only what the caller is told to wait, so it
+            // degrades rather than refusing -- but upwards, to the longest
+            // wait, never to none. A key with no expiry at all reports -1
+            // from PTTL, which is the closest this can be driven from outside.
+            redis.opsForValue().set("auth:attempts:" + digestOf(USERNAME), "5");
+
+            assertThatThrownBy(() -> attempts.assertNotThrottled(USERNAME))
+                    .isInstanceOf(LoginThrottledException.class)
+                    .satisfies(thrown -> assertThat(
+                            ((LoginThrottledException) thrown).getRetryAfterSeconds())
+                            .as("falls back to the full window rather than to zero")
+                            .isEqualTo(Duration.ofMinutes(15).toSeconds()));
+        }
+
+        @Test
+        @DisplayName("a count below the limit still passes, so the guard has not become a blanket refusal")
+        void goodStateStillWorks() {
+            // The counterpart to the tests above: failing closed on nonsense
+            // must not mean failing closed on everything.
+            attempts.recordFailure(USERNAME);
+
+            assertThatCode(() -> attempts.assertNotThrottled(USERNAME)).doesNotThrowAnyException();
         }
     }
 }

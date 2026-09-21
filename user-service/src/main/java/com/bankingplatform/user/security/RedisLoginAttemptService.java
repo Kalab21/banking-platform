@@ -96,20 +96,8 @@ public class RedisLoginAttemptService implements LoginAttemptService {
             return;
         }
 
-        String raw = String.valueOf(state.get(0));
-        Long ttlMillis = state.size() > 1 && state.get(1) != null
-                ? Long.valueOf(String.valueOf(state.get(1)))
-                : null;
-
-        int attempts;
-        try {
-            attempts = Integer.parseInt(raw);
-        } catch (NumberFormatException malformed) {
-            // A value this service did not write. Treat it as no attempts
-            // rather than as a permanent lockout.
-            log.warn("Discarding a malformed sign-in attempt counter");
-            return;
-        }
+        int attempts = attemptsFrom(state.get(0));
+        Long ttlMillis = state.size() > 1 ? ttlFrom(state.get(1)) : null;
 
         if (attempts >= policy.getMaxAttempts()) {
             throw new LoginThrottledException(retryAfterSeconds(ttlMillis));
@@ -132,6 +120,74 @@ public class RedisLoginAttemptService implements LoginAttemptService {
             redis.delete(keyFor(username));
         } catch (RuntimeException failure) {
             throw unavailable(failure);
+        }
+    }
+
+    /**
+     * The attempt count, or a refusal to sign in at all.
+     *
+     * <p>Anything this service did not write is a state it cannot evaluate,
+     * and the only safe answer to "how many failures has this account had?"
+     * is to stop rather than to guess.
+     *
+     * <p>This used to answer zero and let the sign-in proceed, on the
+     * reasoning that a bad value should not cause a permanent lockout. That
+     * reasoning was wrong in a way worth naming: the alternative to a
+     * permanent lockout is not "let them through", it is "fail closed until
+     * the key expires", which the TTL guarantees anyway. Answering zero made
+     * the throttle removable by anyone who could put a junk value in the
+     * key -- the counter that exists to stop password guessing, switched off
+     * by corrupting it.
+     *
+     * <p>A parseable but impossible value is treated the same way. A negative
+     * count would pass the comparison below and silently disable the limit,
+     * which is the same bypass wearing a number.
+     */
+    private int attemptsFrom(Object rawCount) {
+        String raw = String.valueOf(rawCount);
+        int attempts;
+        try {
+            attempts = Integer.parseInt(raw.trim());
+        } catch (NumberFormatException malformed) {
+            log.error("Sign-in attempt counter is not a number; refusing to evaluate it");
+            throw new ThrottleStoreUnavailableException(
+                    "Sign-in attempt counter could not be read", malformed);
+        }
+        if (attempts < 0) {
+            log.error("Sign-in attempt counter is negative; refusing to evaluate it");
+            throw new ThrottleStoreUnavailableException(
+                    "Sign-in attempt counter could not be read", null);
+        }
+        return attempts;
+    }
+
+    /**
+     * The remaining block, in milliseconds, or null when it cannot be read.
+     *
+     * <p>Unlike the count, a bad TTL is not a reason to refuse a sign-in: it
+     * only decides what the caller is told to wait, and
+     * {@link #retryAfterSeconds} already falls back to the full window. So
+     * this degrades rather than throws -- but it degrades <em>upwards</em>,
+     * to the longest wait, never to none.
+     *
+     * <p>Redis returns this as a Long today. It was parsed straight through
+     * {@code Long.valueOf(String.valueOf(...))} with nothing catching a
+     * malformed value, so a client library that ever handed back something
+     * else turned a throttle check into an uncaught NumberFormatException on
+     * the sign-in path.
+     */
+    private Long ttlFrom(Object rawTtl) {
+        if (rawTtl == null) {
+            return null;
+        }
+        if (rawTtl instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.valueOf(String.valueOf(rawTtl).trim());
+        } catch (NumberFormatException malformed) {
+            log.warn("Sign-in block has an unreadable expiry; using the full window");
+            return null;
         }
     }
 
