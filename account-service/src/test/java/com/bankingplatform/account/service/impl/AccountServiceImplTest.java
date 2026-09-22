@@ -115,7 +115,6 @@ class AccountServiceImplTest {
             CreateAccountRequest request = new CreateAccountRequest();
             request.setUserId(USER_ID);
             request.setAccountType(AccountType.CHECKING);
-            request.setInitialDeposit(new BigDecimal("100.00"));
             request.setOverdraftLimit(BigDecimal.ZERO);
             return request;
         }

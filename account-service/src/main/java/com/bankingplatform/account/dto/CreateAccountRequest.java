@@ -18,10 +18,6 @@ public class CreateAccountRequest {
 
     private String currency = "USD";
 
-    /** Zero is valid: an account may be opened empty and funded later. */
-    @PositiveOrZero
-    private BigDecimal initialDeposit = BigDecimal.ZERO;
-
     /** Zero is valid and is the norm for savings accounts, which have no overdraft. */
     @PositiveOrZero
     private BigDecimal overdraftLimit = BigDecimal.ZERO;

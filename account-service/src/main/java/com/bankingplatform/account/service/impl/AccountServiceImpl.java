@@ -64,7 +64,7 @@ public class AccountServiceImpl implements AccountService {
                 .accountNumber(generateAccountNumber())
                 .userId(request.getUserId())
                 .accountType(request.getAccountType())
-                .balance(request.getInitialDeposit())
+                .balance(BigDecimal.ZERO)
                 .currency(request.getCurrency() != null ? request.getCurrency() : "USD")
                 .overdraftLimit(request.getOverdraftLimit())
                 .build();

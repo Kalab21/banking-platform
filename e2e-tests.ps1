@@ -207,8 +207,19 @@ Assert "Account created (productId set)" ($ACCOUNT_ID -and $ACCOUNT_ID -gt 0)
 $acct = Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN
 Assert "Account is ACTIVE" ($acct.status -eq "ACTIVE")
 Assert "Account type is CHECKING" ($acct.accountType -eq "CHECKING")
-Assert "Initial balance = 500.00" ($acct.balance -eq 500.00)
+# An application is a request, not a deposit. This one asked for 500.00 and the
+# account still opens empty: the requested amount describes what the customer
+# wants, and nothing about it is a payment into the account.
+Assert "Account opens at 0.00" ([decimal]$acct.balance -eq 0)
+Assert "requestedAmount did not become a balance" ([decimal]$acct.balance -ne 500.00)
 Write-Host "  AccountId=$ACCOUNT_ID  Balance=$($acct.balance)"
+
+# Fund it the way a customer would, so the flows below have money to move.
+$fund = Post "$GW/api/transactions/deposit" @{ accountId=$ACCOUNT_ID; amount=500.00; description="Opening deposit" } $TOKEN
+Assert "Opening deposit accepted" ($fund -ne $null)
+$acctFunded = Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN
+Assert "Balance after opening deposit = 500.00" ([decimal]$acctFunded.balance -eq 500.00)
+Write-Host "  Funded balance=$($acctFunded.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 4: Overdraft ===" -ForegroundColor Cyan
