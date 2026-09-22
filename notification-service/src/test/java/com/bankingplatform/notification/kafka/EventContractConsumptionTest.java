@@ -189,7 +189,7 @@ class EventContractConsumptionTest {
         @DisplayName("approval and loan events still notify")
         void approvalsAndLoans() throws Exception {
             consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
-                    7L, 42L, "PERSONAL_LOAN", 8L, 720, new BigDecimal("10000"))));
+                    7L, 42L, "PERSONAL_LOAN", 8L, 720, new BigDecimal("10000"), new BigDecimal("10000"))));
             consumer.onLoanEvent(overTheWire(LoanDisbursed.of(8L, 42L, new BigDecimal("10000"), 3L)));
             consumer.onLoanEvent(overTheWire(LoanPaidOff.of(8L, 42L)));
 

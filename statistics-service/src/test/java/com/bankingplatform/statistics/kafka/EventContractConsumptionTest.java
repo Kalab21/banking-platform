@@ -87,7 +87,7 @@ class EventContractConsumptionTest {
     @DisplayName("decided applications are still counted")
     void decisionsCounted() throws Exception {
         consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
-                7L, 42L, "CREDIT_CARD", 8L, 700, new BigDecimal("5000"))));
+                7L, 42L, "CREDIT_CARD", 8L, 700, new BigDecimal("5000"), null)));
         consumer.onApplicationEvent(overTheWire(ApplicationRejected.of(9L, 42L, "CREDIT_CARD", "low")));
 
         verify(statisticsService).onApplicationApproved();
