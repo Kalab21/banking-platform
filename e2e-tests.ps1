@@ -275,12 +275,30 @@ if ($ccApp.status -eq "REJECTED") {
         "$GW/api/applications/$CC_APP_ID/review" $TOKEN 403 `
         @{ decision="APPROVE"; reviewerNotes="Manual E2E approval" }
 } else {
-    # A credit product is created by credit-card-service from the approval
-    # event, and this service has not heard back yet, so PROVISIONING is as
-    # far as the application may honestly claim to have got.
-    Assert "Application reached provisioning" ($ccApp.status -eq "PROVISIONING")
-    Assert "No product id is claimed before confirmation" ($null -eq $ccApp.productId)
-    Assert "No manual review needed" $true
+    # An approval is an offer, not a card. Nothing is created until the
+    # customer accepts the terms they were shown.
+    Assert "Application reached an offer" ($ccApp.status -eq "OFFERED")
+    Assert "No product id is claimed before acceptance" ($null -eq $ccApp.productId)
+
+    $ccOffer = Get "$GW/api/applications/$CC_APP_ID/offers" $TOKEN
+    Assert "An offer was made" ((CountOf $ccOffer) -gt 0)
+    $ccTerms = @($ccOffer)[0]
+    Assert "The offer names a tier" ($null -ne $ccTerms.cardTier)
+    Assert "The offer names a limit" ($null -ne $ccTerms.creditLimit)
+    Assert "The offer names an APR" ($null -ne $ccTerms.apr)
+    Write-Host "  Offered: $($ccTerms.cardTier) limit $($ccTerms.creditLimit) at $($ccTerms.apr)%"
+
+    # A customer accepts the offer as made. There is no body, because there is
+    # nothing about it for them to change.
+    $ccAccepted = Post "$GW/api/applications/$CC_APP_ID/offer/accept" $null $TOKEN
+    Assert "Customer accepts the card offer" ($ccAccepted -and $ccAccepted.status -eq "ACCEPTED")
+
+    # Accepting twice must not issue a second card.
+    $ccAgain = Post "$GW/api/applications/$CC_APP_ID/offer/accept" $null $TOKEN
+    Assert "Accepting twice is idempotent" ($ccAgain -and $ccAgain.status -eq "ACCEPTED")
+
+    $ccAfter = Get "$GW/api/applications/$CC_APP_ID" $TOKEN
+    Assert "Application reached provisioning after acceptance" ($ccAfter.status -eq "PROVISIONING")
 }
 
 # The card is created by a Kafka consumer, so this waits for the fact rather
@@ -337,7 +355,27 @@ if ($loanApp.status -eq "REJECTED") {
         "$GW/api/applications/$LOAN_APP_ID/review" $TOKEN 403 `
         @{ decision="APPROVE"; reviewerNotes="Manual E2E approval"; approvedAmount=10000.00 }
 } else {
-    Assert "Loan application reached provisioning" ($loanApp.status -eq "PROVISIONING")
+    Assert "Loan application reached an offer" ($loanApp.status -eq "OFFERED")
+
+    $loanOffers = Get "$GW/api/applications/$LOAN_APP_ID/offers" $TOKEN
+    Assert "A loan offer was made" ((CountOf $loanOffers) -gt 0)
+    $loanTerms = @($loanOffers)[0]
+    Write-Host "  Offered: $($loanTerms.approvedAmount) over $($loanTerms.termMonths) months at $($loanTerms.apr)%"
+
+    # The term the customer asked for is the term they are offered. This is the
+    # assertion that would have caught a downstream service choosing its own.
+    Assert "The offered term is the requested term" ($loanTerms.termMonths -eq 48)
+    Assert "The offer carries an estimated payment" ($null -ne $loanTerms.monthlyPayment)
+
+    $loanAccepted = Post "$GW/api/applications/$LOAN_APP_ID/offer/accept" $null $TOKEN
+    Assert "Customer accepts the loan offer" ($loanAccepted -and $loanAccepted.status -eq "ACCEPTED")
+
+    # A declined offer cannot be accepted, and an accepted one cannot be declined.
+    Assert-Refused "An accepted offer cannot then be declined" "POST" `
+        "$GW/api/applications/$LOAN_APP_ID/offer/decline" $TOKEN 409
+
+    $loanAfter = Get "$GW/api/applications/$LOAN_APP_ID" $TOKEN
+    Assert "Loan application reached provisioning after acceptance" ($loanAfter.status -eq "PROVISIONING")
 }
 
 $null = Wait-For "loan created via Kafka" {
@@ -351,6 +389,10 @@ if ($loans -and $loans.Count -gt 0) {
     $loan = $loans[0]
     Write-Host "  LoanId=$LOAN_ID  Principal=$($loan.principal)  Rate=$($loan.interestRate)%  MonthlyPayment=$($loan.monthlyPayment)"
     Assert "Loan status = PENDING (not yet disbursed)" ($loan.status -eq "PENDING" -or $loan.status -eq "ACTIVE")
+    # The accepted offer is the source of truth. A downstream service choosing
+    # its own term is how a twelve-month request became a forty-eight month loan.
+    Assert "The loan's term is the offered term" ($loan.termMonths -eq 48)
+    Assert "The loan's principal is the offered amount" ([decimal]$loan.principal -eq 10000.00)
 
     # Disburse loan to checking account
     $disburse = Post "$GW/api/loans/$LOAN_ID/disburse" @{ disbursementAccountId=$ACCOUNT_ID } $TOKEN

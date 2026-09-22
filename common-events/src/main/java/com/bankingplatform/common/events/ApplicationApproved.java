@@ -36,22 +36,44 @@ public record ApplicationApproved(
         Long productId,
         Integer creditScore,
         BigDecimal requestedAmount,
-        BigDecimal approvedAmount) implements DomainEvent {
+        BigDecimal approvedAmount,
+        BigDecimal offeredApr,
+        Integer offeredTermMonths,
+        BigDecimal offeredCreditLimit,
+        String offeredCardTier) implements DomainEvent {
 
     /**
-     * Version 2 added {@code approvedAmount}. Version 1 payloads deserialise
-     * with it null, and a consumer that finds it null falls back to the
-     * requested amount — which is what version 1 meant by the only amount it
-     * carried.
+     * Version 2 added {@code approvedAmount}. Version 3 adds the offered terms:
+     * the rate, the term, and a card's tier and limit.
+     *
+     * <p>Those terms used to be worked out by whichever service consumed this
+     * event, from the credit score it carried — so the term came from a switch
+     * statement in {@code loan-service} that had never seen the application,
+     * and a customer who asked for twelve months was written forty-eight. The
+     * terms the customer accepted now travel with the event, and the consumer
+     * uses them rather than deriving its own.
+     *
+     * <p>Older payloads deserialise with the new fields null, and a consumer
+     * that finds them null falls back to what it did before.
      */
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     public static ApplicationApproved of(Long applicationId, Long userId, String productType,
                                          Long productId, Integer creditScore,
                                          BigDecimal requestedAmount, BigDecimal approvedAmount) {
+        return of(applicationId, userId, productType, productId, creditScore,
+                requestedAmount, approvedAmount, null, null, null, null);
+    }
+
+    public static ApplicationApproved of(Long applicationId, Long userId, String productType,
+                                         Long productId, Integer creditScore,
+                                         BigDecimal requestedAmount, BigDecimal approvedAmount,
+                                         BigDecimal offeredApr, Integer offeredTermMonths,
+                                         BigDecimal offeredCreditLimit, String offeredCardTier) {
         return new ApplicationApproved(EventMeta.newId(), EventTypes.APPLICATION_APPROVED, VERSION,
                 EventMeta.now(), applicationId, userId, productType, productId, creditScore,
-                requestedAmount, approvedAmount);
+                requestedAmount, approvedAmount,
+                offeredApr, offeredTermMonths, offeredCreditLimit, offeredCardTier);
     }
 
     /**

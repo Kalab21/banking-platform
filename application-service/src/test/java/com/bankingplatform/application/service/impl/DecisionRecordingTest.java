@@ -62,6 +62,7 @@ class DecisionRecordingTest {
     @Mock private ApplicationEventProducer eventProducer;
     @Mock private UserClient userClient;
     @Mock private AccountClient accountClient;
+    @Mock private com.bankingplatform.application.service.OfferService offerService;
 
     @Spy private ApplicationRequestValidator validator = new ApplicationRequestValidator();
     @Spy private UnderwritingService underwriting = new UnderwritingService(new UnderwritingPolicy());
@@ -76,6 +77,8 @@ class DecisionRecordingTest {
         user.setKycStatus(kycStatus);
         when(userClient.getUserById(USER_ID)).thenReturn(user);
 
+        when(decisionSnapshotRepository.save(any(DecisionSnapshot.class)))
+                .thenAnswer(i -> i.getArgument(0));
         when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> {
             Application saved = invocation.getArgument(0);
             if (saved.getId() == null) {

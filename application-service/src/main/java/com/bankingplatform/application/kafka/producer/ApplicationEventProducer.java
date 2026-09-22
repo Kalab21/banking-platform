@@ -39,8 +39,22 @@ public class ApplicationEventProducer {
     public void publishApplicationApproved(Long applicationId, Long userId, String productType,
                                            Long productId, Integer creditScore,
                                            BigDecimal requestedAmount, BigDecimal approvedAmount) {
+        publishApplicationApproved(applicationId, userId, productType, productId, creditScore,
+                requestedAmount, approvedAmount, null, null, null, null);
+    }
+
+    /**
+     * Carries the terms the customer accepted, so the service that creates the
+     * product uses them rather than deriving its own from a credit score.
+     */
+    public void publishApplicationApproved(Long applicationId, Long userId, String productType,
+                                           Long productId, Integer creditScore,
+                                           BigDecimal requestedAmount, BigDecimal approvedAmount,
+                                           BigDecimal offeredApr, Integer offeredTermMonths,
+                                           BigDecimal offeredCreditLimit, String offeredCardTier) {
         send(ApplicationApproved.of(applicationId, userId, productType, productId, creditScore,
-                requestedAmount, approvedAmount));
+                requestedAmount, approvedAmount,
+                offeredApr, offeredTermMonths, offeredCreditLimit, offeredCardTier));
         log.info("Published APPLICATION_APPROVED for application {}", applicationId);
     }
 
