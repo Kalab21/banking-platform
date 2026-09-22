@@ -130,6 +130,10 @@ public class CreditCardServiceImpl implements CreditCardService {
     @Override
     public CreditCardTransactionResponse cashAdvance(Long cardId, CashAdvanceRequest request) {
         CreditCard card = findCardForUpdate(cardId);
+
+        // Authorization before business rules, so a refusal never depends on
+        // the state of the attacker's own card.
+        accountOwnership.requireOwnedBy(request.getTargetAccountId(), card.getUserId(), "target");
         requireActive(card);
 
         BigDecimal fee = request.getAmount().multiply(CASH_ADVANCE_FEE_RATE).setScale(2, RoundingMode.HALF_UP);
@@ -143,9 +147,6 @@ public class CreditCardServiceImpl implements CreditCardService {
         String advanceRef = UUID.randomUUID().toString();
 
         // Credit target account
-        // A cash advance is drawn against this customer's card, so it lands in
-        // this customer's account.
-        accountOwnership.requireOwnedBy(request.getTargetAccountId(), card.getUserId(), "target");
         accountClient.credit(request.getTargetAccountId(), "card-" + advanceRef,
                 request.getAmount(), "Cash advance from credit card");
 
@@ -167,6 +168,12 @@ public class CreditCardServiceImpl implements CreditCardService {
     public CreditCardTransactionResponse makePayment(Long cardId, CardPaymentRequest request) {
         CreditCard card = findCardForUpdate(cardId);
 
+        // Authorization before business rules. Checked after them, the refusal
+        // would depend on the state of the attacker's own card: a card with
+        // nothing owing answered "no balance to pay" and never reached the
+        // ownership check at all.
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), card.getUserId(), "source");
+
         BigDecimal payAmount = request.getAmount().min(card.getCurrentBalance());
         if (payAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("No balance to pay");
@@ -175,8 +182,6 @@ public class CreditCardServiceImpl implements CreditCardService {
         String paymentRef = UUID.randomUUID().toString();
 
         if (request.getSourceAccountId() != null) {
-            // Owning the card is not authority over the account paying it off.
-            accountOwnership.requireOwnedBy(request.getSourceAccountId(), card.getUserId(), "source");
             accountClient.debit(request.getSourceAccountId(), "card-" + paymentRef,
                     payAmount, "Credit card payment");
         }

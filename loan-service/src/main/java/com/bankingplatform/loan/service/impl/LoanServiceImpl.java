@@ -97,6 +97,13 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanResponse disburseLoan(Long loanId, DisburseRequest request) {
         Loan loan = findLoanForUpdate(loanId);
+
+        // The money lands in an account the borrower owns, or it does not land.
+        // Checked before the state rules, so a refusal never depends on the
+        // state of the attacker's own loan.
+        accountOwnership.requireOwnedBy(request.getDisbursementAccountId(), loan.getUserId(),
+                "disbursement");
+
         if (loan.getStatus() != LoanStatus.PENDING) {
             throw new LoanNotActiveException("Loan not in PENDING state: " + loan.getStatus());
         }
@@ -104,9 +111,6 @@ public class LoanServiceImpl implements LoanService {
         // Keyed by the loan, because a loan is disbursed once. A retry of the
         // same disbursement carries the same key; there is no second
         // disbursement of one loan for it to collide with.
-        // The money lands in an account the borrower owns, or it does not land.
-        accountOwnership.requireOwnedBy(request.getDisbursementAccountId(), loan.getUserId(),
-                "disbursement");
         accountClient.credit(request.getDisbursementAccountId(),
                 "loan-disburse-" + loanId, loan.getPrincipal(),
                 "Loan disbursement — loanId=" + loanId);
@@ -134,6 +138,10 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanRepaymentResponse makeRepayment(Long loanId, LoanRepaymentRequest request) {
         Loan loan = findLoanForUpdate(loanId);
+
+        // Authorization before business rules, so a refusal never depends on
+        // the state of the attacker's own loan.
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -162,8 +170,6 @@ public class LoanServiceImpl implements LoanService {
         String paymentRef = generateRef();
 
         if (request.getSourceAccountId() != null) {
-            // Owning the loan is not authority over the account paying for it.
-            accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
             accountClient.debit(request.getSourceAccountId(), "loan-" + paymentRef,
                     payAmount, "Loan repayment — loanId=" + loanId);
         }
@@ -212,6 +218,10 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanRepaymentResponse earlyPayoff(Long loanId, LoanRepaymentRequest request) {
         Loan loan = findLoanForUpdate(loanId);
+
+        // Authorization before business rules, so a refusal never depends on
+        // the state of the attacker's own loan.
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -228,7 +238,6 @@ public class LoanServiceImpl implements LoanService {
         String payoffRef = generateRef();
 
         if (request.getSourceAccountId() != null) {
-            accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
             accountClient.debit(request.getSourceAccountId(), "loan-" + payoffRef,
                     payoffAmount, "Early loan payoff — loanId=" + loanId);
         }
