@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import java.util.Map;
 import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
-import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.dto.request.DisburseRequest;
 import com.bankingplatform.loan.dto.request.LoanRepaymentRequest;
 import com.bankingplatform.loan.dto.response.*;
@@ -15,7 +14,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -53,14 +51,19 @@ public class LoanController {
         AccessGuard.requireOwnerOrStaff(caller, ownerOf(loanId));
     }
 
-    @PostMapping
-    @Operation(summary = "Create a new loan")
-    public ResponseEntity<LoanResponse> createLoan(@Valid @RequestBody CreateLoanRequest request,
-                                                   CallerIdentity caller) {
-        // A customer may borrow for themselves; staff may open a loan for anyone.
-        AccessGuard.requireTargetUserAllowed(caller, request.getUserId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(loanService.createLoan(request));
-    }
+    // There is deliberately no endpoint here that creates a loan.
+    //
+    // A loan used to be openable by POSTing one, with the caller stating its
+    // principal, its interest rate and its term. A customer could therefore
+    // lend themselves any amount at any rate, and staff could do the same for
+    // anyone, with nothing recording that a decision had ever been taken.
+    //
+    // Issuance is a consequence of an approved application, not a request a
+    // client makes. ApplicationEventConsumer creates the loan in-process when
+    // application-service publishes an approval, so the only route to a new
+    // loan runs through underwriting and the terms the bank set. Restoring a
+    // create endpoint here — for staff, for seeding, for convenience — reopens
+    // the bypass whatever the role check on it says.
 
     @GetMapping("/{loanId}")
     @Operation(summary = "Get loan by ID")

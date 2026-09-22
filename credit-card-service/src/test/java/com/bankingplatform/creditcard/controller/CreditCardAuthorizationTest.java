@@ -224,13 +224,39 @@ class CreditCardAuthorizationTest {
         }
 
         @Test
+        @DisplayName("a customer cannot issue a card for themselves")
+        void customerCannotCreate() throws Exception {
+            mvc.perform(as(post("/api/credit-cards"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":" + CUSTOMER_A
+                                    + ",\"cardType\":\"PLATINUM\",\"creditLimit\":50000.00,\"apr\":0.99}"))
+                    .andExpect(status().isNotFound());
+
+            verify(creditCardService, never()).createCard(any());
+        }
+
+        @Test
         @DisplayName("a customer cannot issue a card in another customer's name")
         void foreignCreateDenied() throws Exception {
             mvc.perform(as(post("/api/credit-cards"), CUSTOMER_A, "CUSTOMER")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"userId\":" + CUSTOMER_B
                                     + ",\"cardType\":\"STANDARD\",\"creditLimit\":3000.00,\"apr\":21.99}"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound());
+
+            verify(creditCardService, never()).createCard(any());
+        }
+
+        @Test
+        @DisplayName("staff cannot choose a tier, a limit and an APR either")
+        void staffCannotCreate() throws Exception {
+            // Staff review an application and decide an offer. They do not get
+            // a side door into the product with terms of their own choosing.
+            mvc.perform(as(post("/api/credit-cards"), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":" + CUSTOMER_A
+                                    + ",\"cardType\":\"PLATINUM\",\"creditLimit\":50000.00,\"apr\":0.99}"))
+                    .andExpect(status().isNotFound());
 
             verify(creditCardService, never()).createCard(any());
         }

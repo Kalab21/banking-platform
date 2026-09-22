@@ -260,19 +260,53 @@ class LoanAuthorizationTest {
         }
     }
 
+    /**
+     * A loan is issued because an application was approved, never because
+     * somebody asked for one. There is no create endpoint to authorise, which
+     * is a stronger statement than a create endpoint that refuses: a role check
+     * can be widened later by one line, and a route that does not exist cannot.
+     */
     @Nested
-    @DisplayName("opening a loan")
-    class Creating {
+    @DisplayName("issuing a loan directly")
+    class DirectIssuance {
+
+        private static final String TERMS =
+                "{\"userId\":1,\"loanType\":\"PERSONAL_LOAN\",\"principal\":1000.00,"
+                        + "\"interestRate\":6.0,\"termMonths\":12}";
+
+        @Test
+        @DisplayName("a customer cannot open a loan for themselves")
+        void customerCannotCreate() throws Exception {
+            mvc.perform(as(post("/api/loans"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(TERMS))
+                    .andExpect(status().isNotFound());
+
+            verify(loanService, never()).createLoan(any());
+        }
 
         @Test
         @DisplayName("a customer cannot open a loan in another customer's name")
-        void foreignCreateDenied() throws Exception {
+        void customerCannotCreateForAnother() throws Exception {
             mvc.perform(as(post("/api/loans"), CUSTOMER_A, "CUSTOMER")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"userId\":" + CUSTOMER_B
                                     + ",\"loanType\":\"PERSONAL_LOAN\",\"principal\":1000.00,"
                                     + "\"interestRate\":6.0,\"termMonths\":12}"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isNotFound());
+
+            verify(loanService, never()).createLoan(any());
+        }
+
+        @Test
+        @DisplayName("staff cannot choose a principal, a rate and a term either")
+        void staffCannotCreate() throws Exception {
+            // Staff review an application and decide an offer. They do not get
+            // a side door into the product with terms of their own choosing.
+            mvc.perform(as(post("/api/loans"), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(TERMS))
+                    .andExpect(status().isNotFound());
 
             verify(loanService, never()).createLoan(any());
         }
