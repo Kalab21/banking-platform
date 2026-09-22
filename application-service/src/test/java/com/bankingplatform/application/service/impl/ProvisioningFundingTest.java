@@ -37,6 +37,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -220,6 +221,41 @@ class ProvisioningFundingTest {
         assertThatThrownBy(() -> applicationService.review(APPLICATION_ID, review))
                 .isInstanceOf(InvalidApplicationRequestException.class)
                 .hasMessageContaining("cannot exceed the requested amount");
+    }
+
+    @Test
+    @DisplayName("an approval publishes the amount that was approved, not the amount requested")
+    void approvalPublishesTheApprovedAmount() {
+        stubEligibleCustomer();
+
+        Application pending = Application.builder()
+                .id(APPLICATION_ID)
+                .userId(USER_ID)
+                .applicationType(ApplicationType.PERSONAL_LOAN)
+                .requestedAmount(new BigDecimal("10000.00"))
+                .termMonths(48)
+                .currency("USD")
+                .status(ApplicationStatus.UNDER_REVIEW)
+                .build();
+        when(applicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(pending));
+
+        ReviewRequest review = new ReviewRequest();
+        review.setDecision(ReviewDecision.APPROVE);
+        review.setApprovedAmount(new BigDecimal("8000.00"));
+
+        applicationService.review(APPLICATION_ID, review);
+
+        // loan-service builds the loan from this event. Publishing the
+        // requested amount here is what wrote a 10,000 loan against an
+        // 8,000 approval.
+        ArgumentCaptor<BigDecimal> requested = ArgumentCaptor.forClass(BigDecimal.class);
+        ArgumentCaptor<BigDecimal> approved = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(eventProducer).publishApplicationApproved(
+                eq(APPLICATION_ID), eq(USER_ID), eq("PERSONAL_LOAN"), any(),
+                any(), requested.capture(), approved.capture());
+
+        assertThat(requested.getValue()).isEqualByComparingTo(new BigDecimal("10000.00"));
+        assertThat(approved.getValue()).isEqualByComparingTo(new BigDecimal("8000.00"));
     }
 
     @Test

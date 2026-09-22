@@ -94,7 +94,8 @@ class EventContractTest {
                     new BigDecimal("10.00"), new BigDecimal("110.00"))))
                     .isInstanceOf(TransactionCreated.class);
             assertThat(roundTrip(ApplicationApproved.of(1L, 2L, "CREDIT_CARD", 3L, 700,
-                    new BigDecimal("5000")))).isInstanceOf(ApplicationApproved.class);
+                    new BigDecimal("5000"), new BigDecimal("4000"))))
+                    .isInstanceOf(ApplicationApproved.class);
         }
 
         /**
@@ -193,7 +194,7 @@ class EventContractTest {
         @DisplayName("an approval carries what the issuing services need")
         void approvalCarriesIssuanceFields() throws Exception {
             JsonNode json = serialize(ApplicationApproved.of(7L, 2L, "PERSONAL_LOAN", null, 720,
-                    new BigDecimal("10000")));
+                    new BigDecimal("10000"), new BigDecimal("8000")));
 
             assertThat(json.get("applicationId").asLong()).isEqualTo(7L);
             assertThat(json.get("userId").asLong()).isEqualTo(2L);
@@ -247,7 +248,8 @@ class EventContractTest {
                     TransactionCreated.of(1L, "r", 1L, 2L, "DEPOSIT", new BigDecimal("1"), new BigDecimal("2")),
                     TransferCompleted.of("d", "c", 1L, 2L, 3L, new BigDecimal("1")),
                     ApplicationSubmitted.of(1L, 2L, "CREDIT_CARD"),
-                    ApplicationApproved.of(1L, 2L, "CREDIT_CARD", 3L, 700, new BigDecimal("1")),
+                    ApplicationApproved.of(1L, 2L, "CREDIT_CARD", 3L, 700, new BigDecimal("1"),
+                            new BigDecimal("1")),
                     ApplicationRejected.of(1L, 2L, "CREDIT_CARD", "reason"),
             };
 
@@ -292,7 +294,7 @@ class EventContractTest {
         void keyedByApplication() {
             assertThat(ApplicationSubmitted.of(7L, 2L, "CREDIT_CARD").partitionKey()).isEqualTo("7");
             assertThat(ApplicationApproved.of(7L, 2L, "CREDIT_CARD", 3L, 700,
-                    new BigDecimal("1")).partitionKey()).isEqualTo("7");
+                    new BigDecimal("1"), new BigDecimal("1")).partitionKey()).isEqualTo("7");
             assertThat(ApplicationRejected.of(7L, 2L, "CREDIT_CARD", "r").partitionKey()).isEqualTo("7");
         }
     }

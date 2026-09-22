@@ -37,8 +37,10 @@ public class ApplicationEventProducer {
     }
 
     public void publishApplicationApproved(Long applicationId, Long userId, String productType,
-                                           Long productId, Integer creditScore, BigDecimal requestedAmount) {
-        send(ApplicationApproved.of(applicationId, userId, productType, productId, creditScore, requestedAmount));
+                                           Long productId, Integer creditScore,
+                                           BigDecimal requestedAmount, BigDecimal approvedAmount) {
+        send(ApplicationApproved.of(applicationId, userId, productType, productId, creditScore,
+                requestedAmount, approvedAmount));
         log.info("Published APPLICATION_APPROVED for application {}", applicationId);
     }
 

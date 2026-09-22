@@ -84,8 +84,12 @@ public class ApplicationEventConsumer {
         request.setUserId(approved.userId());
         request.setApplicationId(approved.applicationId());
         request.setLoanType(LoanType.valueOf(approved.productType()));
-        request.setPrincipal(approved.requestedAmount() != null
-                ? approved.requestedAmount()
+        // What the bank agreed to lend, not what was asked for. A reviewer may
+        // approve less than the request, and the loan that gets written is the
+        // approved figure or the application did not mean anything.
+        BigDecimal fundable = approved.fundableAmount();
+        request.setPrincipal(fundable != null
+                ? fundable
                 : resolveDefaultPrincipal(approved.productType()));
         request.setInterestRate(resolveRate(approved.productType(), approved.creditScore()));
         request.setTermMonths(resolveTermMonths(approved.productType()));
