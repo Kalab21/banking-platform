@@ -101,6 +101,7 @@ class LoanRepaymentConcurrencyIT {
         service = new LoanServiceImpl(
                 loanRepository, scheduleRepository, repaymentRepository,
                 Mockito.mock(AccountClient.class),
+                Mockito.mock(AccountOwnershipGuard.class),
                 Mockito.mock(LoanEventProducer.class),
                 Mockito.mock(LoanMapper.class),
                 Mockito.mock(AmortizationMapper.class),

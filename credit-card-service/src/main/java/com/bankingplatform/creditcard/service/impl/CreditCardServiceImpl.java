@@ -1,6 +1,7 @@
 package com.bankingplatform.creditcard.service.impl;
 
 import com.bankingplatform.creditcard.client.AccountClient;
+import com.bankingplatform.creditcard.service.AccountOwnershipGuard;
 import com.bankingplatform.creditcard.dto.request.*;
 import com.bankingplatform.creditcard.dto.response.*;
 import com.bankingplatform.creditcard.exception.CardNotActiveException;
@@ -45,6 +46,7 @@ public class CreditCardServiceImpl implements CreditCardService {
     private final CreditCardTransactionRepository txRepository;
     private final CreditCardStatementRepository statementRepository;
     private final AccountClient accountClient;
+    private final AccountOwnershipGuard accountOwnership;
     private final CreditCardEventProducer eventProducer;
     private final CreditCardMapper cardMapper;
     private final CreditCardTransactionMapper txMapper;
@@ -141,6 +143,9 @@ public class CreditCardServiceImpl implements CreditCardService {
         String advanceRef = UUID.randomUUID().toString();
 
         // Credit target account
+        // A cash advance is drawn against this customer's card, so it lands in
+        // this customer's account.
+        accountOwnership.requireOwnedBy(request.getTargetAccountId(), card.getUserId(), "target");
         accountClient.credit(request.getTargetAccountId(), "card-" + advanceRef,
                 request.getAmount(), "Cash advance from credit card");
 
@@ -170,6 +175,8 @@ public class CreditCardServiceImpl implements CreditCardService {
         String paymentRef = UUID.randomUUID().toString();
 
         if (request.getSourceAccountId() != null) {
+            // Owning the card is not authority over the account paying it off.
+            accountOwnership.requireOwnedBy(request.getSourceAccountId(), card.getUserId(), "source");
             accountClient.debit(request.getSourceAccountId(), "card-" + paymentRef,
                     payAmount, "Credit card payment");
         }

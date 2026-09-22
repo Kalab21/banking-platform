@@ -1,6 +1,7 @@
 package com.bankingplatform.loan.service.impl;
 
 import com.bankingplatform.loan.client.AccountClient;
+import com.bankingplatform.loan.service.AccountOwnershipGuard;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.dto.request.DisburseRequest;
 import com.bankingplatform.loan.dto.request.LoanRepaymentRequest;
@@ -40,6 +41,7 @@ public class LoanServiceImpl implements LoanService {
     private final AmortizationScheduleRepository scheduleRepository;
     private final LoanRepaymentRepository repaymentRepository;
     private final AccountClient accountClient;
+    private final AccountOwnershipGuard accountOwnership;
     private final LoanEventProducer eventProducer;
     private final LoanMapper loanMapper;
     private final AmortizationMapper amortizationMapper;
@@ -102,6 +104,9 @@ public class LoanServiceImpl implements LoanService {
         // Keyed by the loan, because a loan is disbursed once. A retry of the
         // same disbursement carries the same key; there is no second
         // disbursement of one loan for it to collide with.
+        // The money lands in an account the borrower owns, or it does not land.
+        accountOwnership.requireOwnedBy(request.getDisbursementAccountId(), loan.getUserId(),
+                "disbursement");
         accountClient.credit(request.getDisbursementAccountId(),
                 "loan-disburse-" + loanId, loan.getPrincipal(),
                 "Loan disbursement — loanId=" + loanId);
@@ -157,6 +162,8 @@ public class LoanServiceImpl implements LoanService {
         String paymentRef = generateRef();
 
         if (request.getSourceAccountId() != null) {
+            // Owning the loan is not authority over the account paying for it.
+            accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
             accountClient.debit(request.getSourceAccountId(), "loan-" + paymentRef,
                     payAmount, "Loan repayment — loanId=" + loanId);
         }
@@ -221,6 +228,7 @@ public class LoanServiceImpl implements LoanService {
         String payoffRef = generateRef();
 
         if (request.getSourceAccountId() != null) {
+            accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
             accountClient.debit(request.getSourceAccountId(), "loan-" + payoffRef,
                     payoffAmount, "Early loan payoff — loanId=" + loanId);
         }

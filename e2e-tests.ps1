@@ -517,6 +517,43 @@ if ($wire -and $wire.transferRef) {
 
 # Second-factor management is self-only: no customer, and no role, manages
 # another account's authenticator.
+# ─────────────────────────────────────────────────────────────────────────────
+# Cross-resource ownership: both sides of a money movement, not just one.
+#
+# Owning a loan is authority over the loan. It is not authority over the account
+# the repayment comes out of. Every write used to check the first and not the
+# second, so a customer could settle their own debt out of an account they had
+# guessed the id of — the victim's balance went down and the attacker's debt
+# went down with it.
+$otherAppBody = @{ userId=$otherAuth.userId; applicationType="CHECKING_ACCOUNT"; currency="USD"; purpose="Second customer checking" }
+$otherApp = Post "$GW/api/applications" $otherAppBody $OTHER_TOKEN
+$VICTIM_ACCOUNT_ID = $otherApp.productId
+if (-not $VICTIM_ACCOUNT_ID) {
+    $otherAccounts = Get "$GW/api/accounts/user/$($otherAuth.userId)" $OTHER_TOKEN
+    if ($otherAccounts -and (CountOf $otherAccounts) -gt 0) { $VICTIM_ACCOUNT_ID = @($otherAccounts)[0].id }
+}
+Assert "A second customer has an account of their own" ($VICTIM_ACCOUNT_ID -and $VICTIM_ACCOUNT_ID -gt 0)
+
+if ($VICTIM_ACCOUNT_ID -and $LOAN_ID) {
+    Assert-Refused "A loan cannot be repaid from someone else's account" "POST" `
+        "$GW/api/loans/$LOAN_ID/repay" $TOKEN 403 `
+        @{ amount=10.00; sourceAccountId=$VICTIM_ACCOUNT_ID }
+
+    Assert-Refused "A loan cannot be paid off from someone else's account" "POST" `
+        "$GW/api/loans/$LOAN_ID/payoff" $TOKEN 403 `
+        @{ amount=10.00; sourceAccountId=$VICTIM_ACCOUNT_ID }
+}
+
+if ($VICTIM_ACCOUNT_ID -and $CARD_ID) {
+    Assert-Refused "A card cannot be paid from someone else's account" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/payment" $TOKEN 403 `
+        @{ amount=10.00; sourceAccountId=$VICTIM_ACCOUNT_ID }
+
+    Assert-Refused "A cash advance cannot be paid into someone else's account" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/cash-advance" $TOKEN 403 `
+        @{ amount=10.00; targetAccountId=$VICTIM_ACCOUNT_ID }
+}
+
 Assert-Refused "Another customer cannot start 2FA enrolment on someone else's account" "POST" `
     "$GW/api/auth/2fa/setup?userId=$USER_ID" $OTHER_TOKEN 403
 

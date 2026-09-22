@@ -3,6 +3,7 @@ package com.bankingplatform.loan.client;
 import com.bankingplatform.loan.config.FeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -22,6 +23,10 @@ public interface AccountClient {
      * reference the movement belongs to, because that reference is generated
      * once and survives a retry.
      */
+    /** Who owns an account, so money is only moved from one the customer owns. */
+    @GetMapping("/internal/accounts/{id}")
+    AccountOwnerView getAccount(@PathVariable Long id);
+
     @PutMapping("/internal/accounts/{id}/balance")
     void updateBalance(@PathVariable Long id,
                        @RequestHeader("Idempotency-Key") String idempotencyKey,

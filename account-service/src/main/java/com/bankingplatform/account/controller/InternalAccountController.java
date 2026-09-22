@@ -131,6 +131,26 @@ public class InternalAccountController {
                         .build()));
     }
 
+    /**
+     * Who owns an account, so a service about to move money can check that the
+     * account belongs to the customer whose product it is settling.
+     *
+     * <p>Without this, {@code loan-service} and {@code credit-card-service} had
+     * no way to ask. They debited whatever account id the caller sent, so a
+     * customer could repay their own loan, or pay down their own card, out of
+     * somebody else's balance — they owned the product, and nothing checked
+     * that they owned the money.
+     *
+     * <p>Returns the whole account rather than just an owner id: the caller
+     * usually wants the currency and the status too, and a second round trip
+     * to fetch them would be worse than one honest read.
+     */
+    @GetMapping("/{id}")
+    @Operation(summary = "Read an account (service-to-service only)")
+    public ResponseEntity<AccountResponse> getAccount(@PathVariable Long id) {
+        return ResponseEntity.ok(accountService.getAccountById(id));
+    }
+
     @PutMapping("/{id}/status")
     @Operation(summary = "Set account status (service-to-service only, e.g. fraud freeze)")
     public ResponseEntity<AccountResponse> updateStatus(@PathVariable Long id,
