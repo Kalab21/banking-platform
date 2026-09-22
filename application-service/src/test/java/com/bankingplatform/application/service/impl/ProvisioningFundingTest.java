@@ -72,6 +72,7 @@ class ProvisioningFundingTest {
     @Mock private ApplicationEventProducer eventProducer;
     @Mock private UserClient userClient;
     @Mock private AccountClient accountClient;
+    @Mock private com.bankingplatform.application.service.OfferService offerService;
 
     /** Real rules, not a stub: the refusals below are the point of the test. */
     @Spy private ApplicationRequestValidator validator = new ApplicationRequestValidator();
@@ -97,6 +98,8 @@ class ProvisioningFundingTest {
         opened.setId(55L);
         when(accountClient.createAccount(any(CreateAccountRequest.class))).thenReturn(opened);
 
+        when(decisionSnapshotRepository.save(any(com.bankingplatform.application.model.DecisionSnapshot.class)))
+                .thenAnswer(i -> i.getArgument(0));
         when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> {
             Application saved = invocation.getArgument(0);
             if (saved.getId() == null) {
@@ -160,8 +163,8 @@ class ProvisioningFundingTest {
     }
 
     @Test
-    @DisplayName("an approved credit application stops at PROVISIONING with no product id")
-    void creditStopsAtProvisioning() {
+    @DisplayName("an approved credit application stops at OFFERED with no product id")
+    void creditStopsAtOffered() {
         stubEligibleCustomer();
 
         CreateApplicationRequest request = submission(ApplicationType.CREDIT_CARD);
@@ -173,9 +176,9 @@ class ProvisioningFundingTest {
         ArgumentCaptor<Application> saved = ArgumentCaptor.forClass(Application.class);
         verify(applicationRepository, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
         Application last = saved.getValue();
-        // The card is created by credit-card-service from the event; this
-        // service has not heard back, so it must not claim otherwise.
-        assertThat(last.getStatus()).isEqualTo(ApplicationStatus.PROVISIONING);
+        // Nothing is created until the customer accepts. The application has
+        // been offered a card, not handed one.
+        assertThat(last.getStatus()).isEqualTo(ApplicationStatus.OFFERED);
         assertThat(last.getProductId()).isNull();
         verify(accountClient, never()).createAccount(any());
     }
@@ -252,17 +255,26 @@ class ProvisioningFundingTest {
 
         applicationService.review(APPLICATION_ID, review);
 
-        // loan-service builds the loan from this event. Publishing the
-        // requested amount here is what wrote a 10,000 loan against an
-        // 8,000 approval.
-        ArgumentCaptor<BigDecimal> requested = ArgumentCaptor.forClass(BigDecimal.class);
-        ArgumentCaptor<BigDecimal> approved = ArgumentCaptor.forClass(BigDecimal.class);
-        verify(eventProducer).publishApplicationApproved(
-                eq(APPLICATION_ID), eq(USER_ID), eq("PERSONAL_LOAN"), any(),
-                any(), requested.capture(), approved.capture());
+        // A reviewer approving 8,000 against a request for 10,000 makes an
+        // offer of 8,000. Nothing is published yet: there is no product until
+        // the customer accepts, and the acceptance is what carries the terms
+        // downstream. That the accepted figure is the one published is pinned
+        // by OfferLifecycleTest.
+        ArgumentCaptor<com.bankingplatform.application.underwriting.OfferedTerms> terms =
+                ArgumentCaptor.forClass(com.bankingplatform.application.underwriting.OfferedTerms.class);
+        ArgumentCaptor<Application> offered = ArgumentCaptor.forClass(Application.class);
+        verify(offerService).offer(offered.capture(), terms.capture(), any());
 
-        assertThat(requested.getValue()).isEqualByComparingTo(new BigDecimal("10000.00"));
-        assertThat(approved.getValue()).isEqualByComparingTo(new BigDecimal("8000.00"));
+        assertThat(offered.getValue().getApprovedAmount())
+                .isEqualByComparingTo(new BigDecimal("8000.00"));
+        assertThat(offered.getValue().getRequestedAmount())
+                .isEqualByComparingTo(new BigDecimal("10000.00"));
+        // Priced by the same policy an automatic approval would have used.
+        assertThat(terms.getValue().apr()).isNotNull();
+        assertThat(terms.getValue().termMonths()).isEqualTo(48);
+
+        verify(eventProducer, never()).publishApplicationApproved(
+                any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

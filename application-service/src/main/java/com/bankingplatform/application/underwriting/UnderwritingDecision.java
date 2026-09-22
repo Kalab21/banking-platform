@@ -17,6 +17,7 @@ import java.util.List;
  * @param dti            debt-to-income as measured, null where not applicable
  * @param ltv            loan-to-value as measured, null where not applicable
  * @param policyVersion  the policy these thresholds came from
+ * @param offeredTerms   what the bank will lend on, null unless approved
  */
 public record UnderwritingDecision(
         Outcome outcome,
@@ -24,7 +25,8 @@ public record UnderwritingDecision(
         BigDecimal approvedAmount,
         BigDecimal dti,
         BigDecimal ltv,
-        String policyVersion) {
+        String policyVersion,
+        OfferedTerms offeredTerms) {
 
     public enum Outcome {
         /** Inside policy on every rule. */

@@ -45,14 +45,16 @@ class ApplicationAuthorizationTest {
     private static final long STAFF = 99L;
 
     private ApplicationService applicationService;
+    private com.bankingplatform.application.service.OfferService offerService;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         applicationService = Mockito.mock(ApplicationService.class);
+        offerService = Mockito.mock(com.bankingplatform.application.service.OfferService.class);
 
         mvc = MockMvcBuilders
-                .standaloneSetup(new ApplicationController(applicationService))
+                .standaloneSetup(new ApplicationController(applicationService, offerService))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler())
                 .build();

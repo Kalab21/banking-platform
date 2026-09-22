@@ -20,6 +20,8 @@ import com.bankingplatform.application.repository.AuditLogRepository;
 import com.bankingplatform.application.repository.DecisionSnapshotRepository;
 import com.bankingplatform.application.service.ApplicationRequestValidator;
 import com.bankingplatform.application.service.ApplicationService;
+import com.bankingplatform.application.service.OfferService;
+import com.bankingplatform.application.underwriting.OfferedTerms;
 import com.bankingplatform.application.underwriting.ReasonCode;
 import com.bankingplatform.application.underwriting.UnderwritingDecision;
 import com.bankingplatform.application.underwriting.UnderwritingService;
@@ -48,6 +50,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final AccountClient accountClient;
     private final ApplicationRequestValidator validator;
     private final UnderwritingService underwriting;
+    private final OfferService offerService;
 
     @Override
     @Transactional
@@ -94,13 +97,15 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         UnderwritingDecision decision =
                 underwriting.decide(submitted, user.getCreditScore(), user.getKycStatus());
-        recordDecision(submitted, decision, DecisionSnapshot.DecidedBy.POLICY, null,
+        DecisionSnapshot snapshot = recordDecision(submitted, decision,
+                DecisionSnapshot.DecidedBy.POLICY, null,
                 user.getCreditScore(), user.getKycStatus());
         submitted.setReviewedAt(LocalDateTime.now());
 
         if (decision.isApproved()) {
             submitted.setApprovedAmount(decision.approvedAmount());
-            return applicationMapper.toResponse(approve(submitted, "AUTO_APPROVED"));
+            return applicationMapper.toResponse(approve(submitted, "AUTO_APPROVED",
+                    decision.offeredTerms(), snapshot.getId()));
         }
 
         if (decision.isReferred()) {
@@ -165,11 +170,18 @@ public class ApplicationServiceImpl implements ApplicationService {
         // round: a person's judgement is the part worth being able to review.
         BigDecimal reviewerApproved = request.getDecision() == ReviewDecision.APPROVE
                 ? approvedAmount(application, request) : null;
-        recordDecision(application,
+        // A reviewer's approval is priced by the same policy as an automatic
+        // one. Staff decide whether to lend and how much; they do not set the
+        // rate by hand, which is the bypass PR #51 closed at the product.
+        OfferedTerms reviewerTerms = request.getDecision() == ReviewDecision.APPROVE
+                ? underwriting.priceOffer(application, application.getCreditScoreAtApply(),
+                        reviewerApproved)
+                : null;
+        DecisionSnapshot reviewSnapshot = recordDecision(application,
                 new UnderwritingDecision(
                         UnderwritingDecision.Outcome.valueOf(request.getDecision().name()),
                         List.of(ReasonCode.MANUAL_REVIEW_REQUIRED),
-                        reviewerApproved, null, null, underwriting.policyVersion()),
+                        reviewerApproved, null, null, underwriting.policyVersion(), reviewerTerms),
                 DecisionSnapshot.DecidedBy.REVIEWER, CallerContext.userId().orElse(null),
                 application.getCreditScoreAtApply(), null);
 
@@ -188,7 +200,8 @@ public class ApplicationServiceImpl implements ApplicationService {
             }
             case APPROVE -> {
                 application.setApprovedAmount(reviewerApproved);
-                return applicationMapper.toResponse(approve(application, "MANUAL_APPROVED"));
+                return applicationMapper.toResponse(approve(application, "MANUAL_APPROVED",
+                        reviewerTerms, reviewSnapshot.getId()));
             }
         }
 
@@ -236,18 +249,24 @@ public class ApplicationServiceImpl implements ApplicationService {
      * product has been asked for. Saying {@code PROVISIONED} here would claim
      * a product exists on the strength of having sent a message.
      */
-    private Application approve(Application application, String auditAction) {
+    private Application approve(Application application, String auditAction,
+                                OfferedTerms terms, Long decisionSnapshotId) {
         ApplicationType type = application.getApplicationType();
 
         if (ApplicationTransitions.isCreditProduct(type)) {
-            // The offer stage does not exist yet, so an approved credit
-            // application passes through the states it will later occupy for
-            // real. Sequencing, not a shortcut worth keeping.
+            // A credit product is offered, not handed over. Nothing is created
+            // and no event is published until the customer accepts, because
+            // until then there is nothing they have agreed to.
             move(application, ApplicationStatus.OFFERED);
-            move(application, ApplicationStatus.ACCEPTED);
+            Application offered = applicationRepository.save(application);
+            offerService.offer(offered, terms, decisionSnapshotId);
+            audit("APPLICATION", offered.getId(), auditAction, "Type: " + type + ", offered");
+            return offered;
         }
-        move(application, ApplicationStatus.PROVISIONING);
 
+        // A deposit account has nothing to offer: no rate, no limit, no term.
+        // It is created here and now.
+        move(application, ApplicationStatus.PROVISIONING);
         Long productId = provisionProduct(application, application.getCurrency());
         if (productId != null) {
             application.setProductId(productId);
@@ -257,10 +276,6 @@ public class ApplicationServiceImpl implements ApplicationService {
         Application saved = applicationRepository.save(application);
         audit("APPLICATION", saved.getId(), auditAction,
                 "Type: " + type + ", ProductId: " + saved.getProductId());
-        // Both figures go out. The product is funded from the approved one:
-        // a reviewer who approves 8,000 against a request for 10,000 has
-        // agreed to lend 8,000, and publishing only the request is how the
-        // loan came to be written for the larger number.
         eventProducer.publishApplicationApproved(saved.getId(), saved.getUserId(),
                 type.name(), saved.getProductId(),
                 saved.getCreditScoreAtApply(), saved.getRequestedAmount(),
@@ -277,10 +292,10 @@ public class ApplicationServiceImpl implements ApplicationService {
      * move, income is restated, debts are paid down. The snapshot is what makes
      * "why was this refused" answerable months later.
      */
-    private void recordDecision(Application application, UnderwritingDecision decision,
-                                DecisionSnapshot.DecidedBy decidedBy, Long reviewerId,
-                                Integer creditScore, String kycStatus) {
-        decisionSnapshotRepository.save(DecisionSnapshot.builder()
+    private DecisionSnapshot recordDecision(Application application, UnderwritingDecision decision,
+                                            DecisionSnapshot.DecidedBy decidedBy, Long reviewerId,
+                                            Integer creditScore, String kycStatus) {
+        return decisionSnapshotRepository.save(DecisionSnapshot.builder()
                 .applicationId(application.getId())
                 .policyVersion(decision.policyVersion())
                 .decidedBy(decidedBy)

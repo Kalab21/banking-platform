@@ -92,6 +92,26 @@ class ApplicationEventContractTest {
     }
 
     @Test
+    @DisplayName("the card takes the offered tier, limit and rate")
+    void usesOfferedTerms() throws Exception {
+        // Derived downstream from a credit score, the card could differ from
+        // the offer the customer was shown and accepted.
+        consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
+                7L, 42L, "CREDIT_CARD", null, 700,
+                null, null,
+                new BigDecimal("14.99"), null, new BigDecimal("10000"), "PLATINUM")));
+
+        ArgumentCaptor<CreateCreditCardRequest> captor =
+                ArgumentCaptor.forClass(CreateCreditCardRequest.class);
+        verify(creditCardService).createCard(captor.capture());
+
+        CreateCreditCardRequest request = captor.getValue();
+        assertThat(request.getCardType().name()).isEqualTo("PLATINUM");
+        assertThat(request.getCreditLimit()).isEqualByComparingTo(new BigDecimal("10000"));
+        assertThat(request.getApr()).isEqualByComparingTo(new BigDecimal("14.99"));
+    }
+
+    @Test
     @DisplayName("an event type this service does not know is ignored")
     void unknownTypeIgnored() throws Exception {
         consumer.onApplicationEvent(mapper.readValue("""

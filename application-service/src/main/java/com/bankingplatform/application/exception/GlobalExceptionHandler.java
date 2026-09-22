@@ -36,6 +36,27 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req.getRequestURI());
     }
 
+    /**
+     * Accepting a declined offer, or one that is not yours, or one that has
+     * already been accepted. All conflicts with the state the offer is in.
+     */
+    @ExceptionHandler(OfferException.class)
+    public ResponseEntity<ErrorResponse> offer(OfferException ex, HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), req.getRequestURI());
+    }
+
+    /**
+     * Two acceptances of one offer racing each other. The loser is told the
+     * offer moved under it rather than being handed a 500.
+     */
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> concurrentChange(
+            org.springframework.orm.ObjectOptimisticLockingFailureException ex,
+            HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT,
+                "This offer was changed by another request; read it again", req.getRequestURI());
+    }
+
     @ExceptionHandler(ApplicationException.class)
     public ResponseEntity<ErrorResponse> handleApplicationEx(ApplicationException ex, HttpServletRequest req) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), req.getRequestURI());

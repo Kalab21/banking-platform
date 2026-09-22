@@ -85,6 +85,20 @@ public class UnderwritingPolicy {
         private List<Integer> termsMonths = new ArrayList<>();
 
         /**
+         * APR bands, best rate first. The first band whose minimum score the
+         * applicant meets is the rate offered. Empty for a product that is not
+         * priced by rate.
+         */
+        private List<Band> aprBands = new ArrayList<>();
+
+        /**
+         * Credit-card tiers and limits, best first. The first band the
+         * applicant meets decides tier and limit together, because a tier with
+         * someone else's limit is not a product Northbank offers.
+         */
+        private List<CardBand> cardBands = new ArrayList<>();
+
+        /**
          * Whether an <em>unfinished</em> identity check holds this product back.
          *
          * <p>Off everywhere today, and deliberately so. A customer registers
@@ -166,9 +180,122 @@ public class UnderwritingPolicy {
             this.requiresVerifiedKyc = requiresVerifiedKyc;
         }
 
+        public List<Band> getAprBands() {
+            return aprBands;
+        }
+
+        public void setAprBands(List<Band> aprBands) {
+            this.aprBands = aprBands;
+        }
+
+        public List<CardBand> getCardBands() {
+            return cardBands;
+        }
+
+        public void setCardBands(List<CardBand> cardBands) {
+            this.cardBands = cardBands;
+        }
+
+        /** The rate for this score, or null when the product is not rate-priced. */
+        public BigDecimal aprFor(int creditScore) {
+            return aprBands.stream()
+                    .filter(band -> creditScore >= band.getMinCreditScore())
+                    .map(Band::getApr)
+                    .findFirst()
+                    .orElse(aprBands.isEmpty() ? null : aprBands.get(aprBands.size() - 1).getApr());
+        }
+
+        /** The tier and limit for this score, or null for a product without them. */
+        public CardBand cardBandFor(int creditScore) {
+            return cardBands.stream()
+                    .filter(band -> creditScore >= band.getMinCreditScore())
+                    .findFirst()
+                    .orElse(cardBands.isEmpty() ? null : cardBands.get(cardBands.size() - 1));
+        }
+
         /** A product that lends nothing has no amount, term, DTI or LTV rules. */
         boolean isLending() {
             return maxAmount != null || !termsMonths.isEmpty() || maxDti != null;
+        }
+    }
+
+    /** One rate band: meet the score, get the rate. */
+    public static class Band {
+        private int minCreditScore;
+        private BigDecimal apr;
+
+        public Band() {
+        }
+
+        public Band(int minCreditScore, String apr) {
+            this.minCreditScore = minCreditScore;
+            this.apr = new BigDecimal(apr);
+        }
+
+        public int getMinCreditScore() {
+            return minCreditScore;
+        }
+
+        public void setMinCreditScore(int minCreditScore) {
+            this.minCreditScore = minCreditScore;
+        }
+
+        public BigDecimal getApr() {
+            return apr;
+        }
+
+        public void setApr(BigDecimal apr) {
+            this.apr = apr;
+        }
+    }
+
+    /** One card band: tier, limit and rate move together. */
+    public static class CardBand {
+        private int minCreditScore;
+        private String tier;
+        private BigDecimal creditLimit;
+        private BigDecimal apr;
+
+        public CardBand() {
+        }
+
+        public CardBand(int minCreditScore, String tier, String creditLimit, String apr) {
+            this.minCreditScore = minCreditScore;
+            this.tier = tier;
+            this.creditLimit = new BigDecimal(creditLimit);
+            this.apr = new BigDecimal(apr);
+        }
+
+        public int getMinCreditScore() {
+            return minCreditScore;
+        }
+
+        public void setMinCreditScore(int minCreditScore) {
+            this.minCreditScore = minCreditScore;
+        }
+
+        public String getTier() {
+            return tier;
+        }
+
+        public void setTier(String tier) {
+            this.tier = tier;
+        }
+
+        public BigDecimal getCreditLimit() {
+            return creditLimit;
+        }
+
+        public void setCreditLimit(BigDecimal creditLimit) {
+            this.creditLimit = creditLimit;
+        }
+
+        public BigDecimal getApr() {
+            return apr;
+        }
+
+        public void setApr(BigDecimal apr) {
+            this.apr = apr;
         }
     }
 
@@ -188,6 +315,13 @@ public class UnderwritingPolicy {
         card.setReferBelowCreditScore(680);
         card.setMaxDti(new BigDecimal("0.45"));
         card.setReferAboveDti(new BigDecimal("0.40"));
+        // Tier, limit and rate move together: a tier carrying someone else's
+        // limit is not a product Northbank offers.
+        card.setCardBands(List.of(
+                new CardBand(800, "PLATINUM", "10000", "14.99"),
+                new CardBand(720, "GOLD", "5000", "18.99"),
+                new CardBand(680, "STANDARD", "3000", "21.99"),
+                new CardBand(0, "STANDARD", "1000", "24.99")));
         map.put(ApplicationType.CREDIT_CARD, card);
 
         ProductRules personal = new ProductRules();
@@ -197,6 +331,9 @@ public class UnderwritingPolicy {
         personal.setReferAboveDti(new BigDecimal("0.38"));
         personal.setMaxAmount(new BigDecimal("50000"));
         personal.setTermsMonths(List.of(12, 24, 36, 48, 60));
+        personal.setAprBands(List.of(
+                new Band(720, "10.99"),
+                new Band(0, "14.99")));
         map.put(ApplicationType.PERSONAL_LOAN, personal);
 
         ProductRules auto = new ProductRules();
@@ -207,6 +344,9 @@ public class UnderwritingPolicy {
         auto.setMaxLtv(new BigDecimal("1.20"));
         auto.setMaxAmount(new BigDecimal("100000"));
         auto.setTermsMonths(List.of(36, 48, 60, 72));
+        auto.setAprBands(List.of(
+                new Band(720, "7.99"),
+                new Band(0, "9.99")));
         map.put(ApplicationType.AUTO_LOAN, auto);
 
         ProductRules mortgage = new ProductRules();
@@ -217,6 +357,9 @@ public class UnderwritingPolicy {
         mortgage.setMaxLtv(new BigDecimal("0.95"));
         mortgage.setMaxAmount(new BigDecimal("1000000"));
         mortgage.setTermsMonths(List.of(180, 240, 360));
+        mortgage.setAprBands(List.of(
+                new Band(760, "6.50"),
+                new Band(0, "7.25")));
         map.put(ApplicationType.MORTGAGE, mortgage);
 
         return map;

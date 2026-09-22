@@ -92,6 +92,25 @@ class ApplicationEventContractTest {
     }
 
     @Test
+    @DisplayName("the loan takes the offered term and rate, not ones worked out here")
+    void usesOfferedTerms() throws Exception {
+        // The customer asked for 12 months. The offer was 36 at 10.99%. This
+        // service used to pick 48 from a switch on product type.
+        consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
+                7L, 42L, "PERSONAL_LOAN", null, 760,
+                new BigDecimal("10000"), new BigDecimal("8000"),
+                new BigDecimal("10.99"), 36, null, null)));
+
+        ArgumentCaptor<CreateLoanRequest> captor = ArgumentCaptor.forClass(CreateLoanRequest.class);
+        verify(loanService).createLoan(captor.capture());
+
+        CreateLoanRequest request = captor.getValue();
+        assertThat(request.getPrincipal()).isEqualByComparingTo(new BigDecimal("8000"));
+        assertThat(request.getTermMonths()).isEqualTo(36);
+        assertThat(request.getInterestRate()).isEqualByComparingTo(new BigDecimal("10.99"));
+    }
+
+    @Test
     @DisplayName("a payload with no approved amount falls back to the requested one")
     void fallsBackToRequestedAmount() throws Exception {
         // Version 1 of the event carried only the requested amount, and that

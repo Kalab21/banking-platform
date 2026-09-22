@@ -72,9 +72,19 @@ public class ApplicationEventConsumer {
         CreateCreditCardRequest request = new CreateCreditCardRequest();
         request.setUserId(approved.userId());
         request.setApplicationId(approved.applicationId());
-        request.setCardType(resolveCardType(creditScore));
-        request.setCreditLimit(resolveCreditLimit(creditScore));
-        request.setApr(resolveApr(creditScore));
+        // The tier, limit and rate the customer accepted. Deriving them here
+        // from a credit score meant the card could differ from the offer the
+        // customer was shown. The fallbacks cover payloads published before the
+        // offer stage existed.
+        request.setCardType(approved.offeredCardTier() != null
+                ? CardType.valueOf(approved.offeredCardTier())
+                : resolveCardType(creditScore));
+        request.setCreditLimit(approved.offeredCreditLimit() != null
+                ? approved.offeredCreditLimit()
+                : resolveCreditLimit(creditScore));
+        request.setApr(approved.offeredApr() != null
+                ? approved.offeredApr()
+                : resolveApr(creditScore));
 
         try {
             creditCardService.createCard(request);

@@ -4,9 +4,11 @@ import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.application.dto.ApplicationResponse;
 import com.bankingplatform.application.dto.CreateApplicationRequest;
+import com.bankingplatform.application.dto.OfferResponse;
 import com.bankingplatform.application.dto.ReviewRequest;
 import com.bankingplatform.application.model.ApplicationStatus;
 import com.bankingplatform.application.service.ApplicationService;
+import com.bankingplatform.application.service.OfferService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +39,7 @@ import java.util.List;
 public class ApplicationController {
 
     private final ApplicationService applicationService;
+    private final OfferService offerService;
 
     @PostMapping
     @Operation(summary = "Submit a new product application")
@@ -80,6 +83,33 @@ public class ApplicationController {
         // open, an applicant could approve their own loan and set the amount.
         AccessGuard.requireStaff(caller);
         return ResponseEntity.ok(applicationService.review(id, request));
+    }
+
+    @GetMapping("/{id}/offers")
+    @Operation(summary = "The offers made on an application")
+    public ResponseEntity<List<OfferResponse>> offers(@PathVariable Long id, CallerIdentity caller) {
+        ApplicationResponse application = applicationService.getById(id);
+        AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
+        return ResponseEntity.ok(offerService.forApplication(id));
+    }
+
+    @PostMapping("/{id}/offer/accept")
+    @Operation(summary = "Accept the offer as made")
+    public ResponseEntity<OfferResponse> acceptOffer(@PathVariable Long id, CallerIdentity caller) {
+        // There is no request body, and that is the point: a customer accepts
+        // the offer that was made, not a version of it they have edited. The
+        // terms come from the stored offer and nowhere else.
+        ApplicationResponse application = applicationService.getById(id);
+        AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
+        return ResponseEntity.ok(offerService.accept(id, application.getUserId()));
+    }
+
+    @PostMapping("/{id}/offer/decline")
+    @Operation(summary = "Decline the offer")
+    public ResponseEntity<OfferResponse> declineOffer(@PathVariable Long id, CallerIdentity caller) {
+        ApplicationResponse application = applicationService.getById(id);
+        AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
+        return ResponseEntity.ok(offerService.decline(id, application.getUserId()));
     }
 
     @PutMapping("/{id}/cancel")

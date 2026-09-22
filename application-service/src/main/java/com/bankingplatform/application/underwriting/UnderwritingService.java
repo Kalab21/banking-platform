@@ -146,7 +146,8 @@ public class UnderwritingService {
         if (refer) {
             return refer(reasons, requested, dti, ltv);
         }
-        return approve(requested, reasons, dti, ltv);
+        return approve(requested, reasons, dti, ltv,
+                priceOffer(application, creditScore, requested));
     }
 
     /**
@@ -224,12 +225,18 @@ public class UnderwritingService {
     private UnderwritingDecision approve(BigDecimal amount, List<ReasonCode> reasons,
                                          BigDecimal dti, BigDecimal ltv) {
         return new UnderwritingDecision(UnderwritingDecision.Outcome.APPROVE,
-                List.copyOf(reasons), amount, dti, ltv, policy.getVersion());
+                List.copyOf(reasons), amount, dti, ltv, policy.getVersion(), null);
+    }
+
+    private UnderwritingDecision approve(BigDecimal amount, List<ReasonCode> reasons,
+                                         BigDecimal dti, BigDecimal ltv, OfferedTerms terms) {
+        return new UnderwritingDecision(UnderwritingDecision.Outcome.APPROVE,
+                List.copyOf(reasons), amount, dti, ltv, policy.getVersion(), terms);
     }
 
     private UnderwritingDecision reject(List<ReasonCode> reasons, BigDecimal dti, BigDecimal ltv) {
         return new UnderwritingDecision(UnderwritingDecision.Outcome.REJECT,
-                List.copyOf(reasons), null, dti, ltv, policy.getVersion());
+                List.copyOf(reasons), null, dti, ltv, policy.getVersion(), null);
     }
 
     private UnderwritingDecision refer(List<ReasonCode> reasons, BigDecimal amount,
@@ -237,6 +244,55 @@ public class UnderwritingService {
         List<ReasonCode> stated = reasons.isEmpty()
                 ? List.of(ReasonCode.MANUAL_REVIEW_REQUIRED) : List.copyOf(reasons);
         return new UnderwritingDecision(UnderwritingDecision.Outcome.REFER,
-                stated, amount, dti, ltv, policy.getVersion());
+                stated, amount, dti, ltv, policy.getVersion(), null);
+    }
+
+    /**
+     * Prices an approval.
+     *
+     * <p>The term offered is the term that was asked for. It has already been
+     * checked against the set this product offers, so honouring it is both
+     * possible and the only honest thing to do: a customer who asked for twelve
+     * months and is handed forty-eight was not offered what they applied for.
+     */
+    public OfferedTerms priceOffer(Application application, Integer creditScore,
+                                   BigDecimal approvedAmount) {
+        UnderwritingPolicy.ProductRules rules = policy.rulesFor(application.getApplicationType());
+        if (rules == null) {
+            return null;
+        }
+        int score = creditScore != null ? creditScore : 0;
+
+        UnderwritingPolicy.CardBand card = rules.cardBandFor(score);
+        if (card != null) {
+            return new OfferedTerms(card.getApr(), null, null, card.getCreditLimit(), card.getTier());
+        }
+
+        BigDecimal apr = rules.aprFor(score);
+        Integer term = application.getTermMonths();
+        BigDecimal payment = monthlyPayment(approvedAmount, apr, term);
+        return new OfferedTerms(apr, term, payment, null, null);
+    }
+
+    /**
+     * The standard amortised instalment: P·i / (1 − (1+i)^−n), with i the
+     * monthly rate. A zero rate divides the principal evenly instead, because
+     * the formula collapses to 0/0 there.
+     */
+    BigDecimal monthlyPayment(BigDecimal principal, BigDecimal annualRatePercent, Integer termMonths) {
+        if (principal == null || annualRatePercent == null || termMonths == null || termMonths <= 0) {
+            return null;
+        }
+        BigDecimal months = new BigDecimal(termMonths);
+        if (annualRatePercent.signum() == 0) {
+            return principal.divide(months, 2, RoundingMode.HALF_UP);
+        }
+        BigDecimal monthlyRate = annualRatePercent
+                .divide(new BigDecimal("100"), 10, RoundingMode.HALF_UP)
+                .divide(MONTHS_PER_YEAR, 10, RoundingMode.HALF_UP);
+        BigDecimal onePlusI = BigDecimal.ONE.add(monthlyRate);
+        BigDecimal growth = onePlusI.pow(termMonths);
+        BigDecimal denominator = BigDecimal.ONE.subtract(BigDecimal.ONE.divide(growth, 10, RoundingMode.HALF_UP));
+        return principal.multiply(monthlyRate).divide(denominator, 2, RoundingMode.HALF_UP);
     }
 }

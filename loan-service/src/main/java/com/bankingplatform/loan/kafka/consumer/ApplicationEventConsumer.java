@@ -91,8 +91,17 @@ public class ApplicationEventConsumer {
         request.setPrincipal(fundable != null
                 ? fundable
                 : resolveDefaultPrincipal(approved.productType()));
-        request.setInterestRate(resolveRate(approved.productType(), approved.creditScore()));
-        request.setTermMonths(resolveTermMonths(approved.productType()));
+        // The rate and the term the customer accepted, not ones worked out here.
+        // This service has never seen the application: deriving a term from the
+        // product type is how somebody who asked for twelve months was written
+        // a forty-eight month loan. The fallbacks are for payloads published
+        // before the offer stage existed.
+        request.setInterestRate(approved.offeredApr() != null
+                ? approved.offeredApr()
+                : resolveRate(approved.productType(), approved.creditScore()));
+        request.setTermMonths(approved.offeredTermMonths() != null
+                ? approved.offeredTermMonths()
+                : resolveTermMonths(approved.productType()));
 
         try {
             loanService.createLoan(request);

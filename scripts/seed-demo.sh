@@ -196,13 +196,19 @@ say "Applying for a loan and letting the bank issue it"
 # The seed asks for a loan the way a customer does. It does not state a rate or
 # a term, because those are the bank's to decide, and there is no longer an
 # endpoint that would accept them if it tried.
-api POST /api/applications "$(cat <<JSON
+LOAN_APP=$(api POST /api/applications "$(cat <<JSON
 {"userId":${USER_ID},"applicationType":"PERSONAL_LOAN","requestedAmount":10000.00,
  "termMonths":12,"currency":"USD","purpose":"Home improvement",
  "annualIncome":90000.00,"monthlyDebtObligations":450.00}
 JSON
-)" "$TOKEN" > /dev/null
-ok "personal loan application submitted"
+)" "$TOKEN" | json id)
+ok "personal loan application ${LOAN_APP} submitted"
+
+# Approval is an offer, not a product. Nothing is created until the customer
+# accepts the terms they were shown, so the seed accepts them the way a
+# customer would.
+LOAN_OFFER=$(api POST "/api/applications/${LOAN_APP}/offer/accept" "" "$TOKEN")
+ok "offer accepted — $(printf '%s' "$LOAN_OFFER" | json approvedAmount) over $(printf '%s' "$LOAN_OFFER" | json termMonths) months at $(printf '%s' "$LOAN_OFFER" | json apr)%"
 
 LOAN="$(await_product "/api/loans/user/${USER_ID}" "$TOKEN" || true)"
 if [[ -n "$LOAN" ]]; then
@@ -224,12 +230,15 @@ fi
 say "Applying for a credit card and letting the bank issue it"
 # A card applicant states what they earn and what they already owe. The tier,
 # the limit and the APR are decided for them.
-api POST /api/applications "$(cat <<JSON
+CARD_APP=$(api POST /api/applications "$(cat <<JSON
 {"userId":${USER_ID},"applicationType":"CREDIT_CARD","currency":"USD",
  "purpose":"Everyday spending","annualIncome":90000.00,"monthlyDebtObligations":450.00}
 JSON
-)" "$TOKEN" > /dev/null
-ok "credit card application submitted"
+)" "$TOKEN" | json id)
+ok "credit card application ${CARD_APP} submitted"
+
+CARD_OFFER=$(api POST "/api/applications/${CARD_APP}/offer/accept" "" "$TOKEN")
+ok "offer accepted — $(printf '%s' "$CARD_OFFER" | json cardTier) at $(printf '%s' "$CARD_OFFER" | json creditLimit) limit, $(printf '%s' "$CARD_OFFER" | json apr)% APR"
 
 CARD="$(await_product "/api/credit-cards/user/${USER_ID}" "$TOKEN" || true)"
 if [[ -n "$CARD" ]]; then
