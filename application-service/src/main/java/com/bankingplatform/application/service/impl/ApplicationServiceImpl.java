@@ -238,9 +238,14 @@ public class ApplicationServiceImpl implements ApplicationService {
         Application saved = applicationRepository.save(application);
         audit("APPLICATION", saved.getId(), auditAction,
                 "Type: " + type + ", ProductId: " + saved.getProductId());
+        // Both figures go out. The product is funded from the approved one:
+        // a reviewer who approves 8,000 against a request for 10,000 has
+        // agreed to lend 8,000, and publishing only the request is how the
+        // loan came to be written for the larger number.
         eventProducer.publishApplicationApproved(saved.getId(), saved.getUserId(),
                 type.name(), saved.getProductId(),
-                saved.getCreditScoreAtApply(), saved.getRequestedAmount());
+                saved.getCreditScoreAtApply(), saved.getRequestedAmount(),
+                saved.getApprovedAmount());
         return saved;
     }
 

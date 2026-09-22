@@ -59,7 +59,7 @@ class ApplicationEventContractTest {
     @DisplayName("an approved card application issues a card matching the score")
     void approvedIssuesCard() throws Exception {
         consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
-                7L, 42L, "CREDIT_CARD", null, 810, new BigDecimal("5000"))));
+                7L, 42L, "CREDIT_CARD", null, 810, new BigDecimal("5000"), null)));
 
         ArgumentCaptor<CreateCreditCardRequest> captor =
                 ArgumentCaptor.forClass(CreateCreditCardRequest.class);
@@ -77,7 +77,7 @@ class ApplicationEventContractTest {
     @DisplayName("a loan approval belongs to another service")
     void loanApprovalIgnored() throws Exception {
         consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
-                7L, 42L, "PERSONAL_LOAN", null, 810, new BigDecimal("10000"))));
+                7L, 42L, "PERSONAL_LOAN", null, 810, new BigDecimal("10000"), new BigDecimal("10000"))));
 
         verifyNoInteractions(creditCardService);
     }

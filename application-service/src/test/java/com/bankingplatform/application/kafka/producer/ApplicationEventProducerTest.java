@@ -1,5 +1,6 @@
 package com.bankingplatform.application.kafka.producer;
 
+import com.bankingplatform.common.events.ApplicationApproved;
 import com.bankingplatform.common.events.DomainEvent;
 import com.bankingplatform.common.events.EventTypes;
 import com.bankingplatform.common.events.Topics;
@@ -60,11 +61,19 @@ class ApplicationEventProducerTest {
     @Test
     @DisplayName("an approval is keyed by application, since it is what issues a product")
     void approved() {
-        producer.publishApplicationApproved(5L, 42L, "PERSONAL_LOAN", null, 720, new BigDecimal("10000"));
+        producer.publishApplicationApproved(5L, 42L, "PERSONAL_LOAN", null, 720,
+                new BigDecimal("10000"), new BigDecimal("8000"));
 
         DomainEvent sent = published();
         assertThat(sent.eventType()).isEqualTo(EventTypes.APPLICATION_APPROVED);
         assertThat(sent.partitionKey()).isEqualTo("5");
+
+        // Both figures travel, and they are different figures. The service
+        // that issues the loan reads the approved one.
+        ApplicationApproved approved = (ApplicationApproved) sent;
+        assertThat(approved.requestedAmount()).isEqualByComparingTo(new BigDecimal("10000"));
+        assertThat(approved.approvedAmount()).isEqualByComparingTo(new BigDecimal("8000"));
+        assertThat(approved.fundableAmount()).isEqualByComparingTo(new BigDecimal("8000"));
     }
 
     @Test

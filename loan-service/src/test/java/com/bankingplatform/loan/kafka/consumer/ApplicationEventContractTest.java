@@ -63,7 +63,7 @@ class ApplicationEventContractTest {
     @DisplayName("an approved loan application creates a loan with the approved terms")
     void approvedCreatesLoan() throws Exception {
         consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
-                7L, 42L, "PERSONAL_LOAN", null, 760, new BigDecimal("12000"))));
+                7L, 42L, "PERSONAL_LOAN", null, 760, new BigDecimal("12000"), new BigDecimal("12000"))));
 
         ArgumentCaptor<CreateLoanRequest> captor = ArgumentCaptor.forClass(CreateLoanRequest.class);
         verify(loanService).createLoan(captor.capture());
@@ -78,10 +78,39 @@ class ApplicationEventContractTest {
     }
 
     @Test
+    @DisplayName("a loan is written for the approved amount, not the requested one")
+    void fundsTheApprovedAmount() throws Exception {
+        // The customer asked for 10,000 and the bank agreed to 8,000. Writing
+        // the loan for 10,000 would lend two thousand nobody approved.
+        consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
+                7L, 42L, "PERSONAL_LOAN", null, 760, new BigDecimal("10000"), new BigDecimal("8000"))));
+
+        ArgumentCaptor<CreateLoanRequest> captor = ArgumentCaptor.forClass(CreateLoanRequest.class);
+        verify(loanService).createLoan(captor.capture());
+
+        assertThat(captor.getValue().getPrincipal()).isEqualByComparingTo(new BigDecimal("8000"));
+    }
+
+    @Test
+    @DisplayName("a payload with no approved amount falls back to the requested one")
+    void fallsBackToRequestedAmount() throws Exception {
+        // Version 1 of the event carried only the requested amount, and that
+        // is what it meant by the amount to lend. A payload written before
+        // this change must still issue the right loan.
+        consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
+                7L, 42L, "PERSONAL_LOAN", null, 760, new BigDecimal("9000"), null)));
+
+        ArgumentCaptor<CreateLoanRequest> captor = ArgumentCaptor.forClass(CreateLoanRequest.class);
+        verify(loanService).createLoan(captor.capture());
+
+        assertThat(captor.getValue().getPrincipal()).isEqualByComparingTo(new BigDecimal("9000"));
+    }
+
+    @Test
     @DisplayName("a card approval belongs to another service")
     void cardApprovalIgnored() throws Exception {
         consumer.onApplicationEvent(overTheWire(ApplicationApproved.of(
-                7L, 42L, "CREDIT_CARD", null, 760, new BigDecimal("5000"))));
+                7L, 42L, "CREDIT_CARD", null, 760, new BigDecimal("5000"), null)));
 
         verifyNoInteractions(loanService);
     }

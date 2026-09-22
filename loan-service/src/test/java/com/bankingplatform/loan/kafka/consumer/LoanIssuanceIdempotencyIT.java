@@ -119,7 +119,7 @@ class LoanIssuanceIdempotencyIT {
 
     private static ApplicationApproved approval(Long applicationId) {
         return ApplicationApproved.of(applicationId, 42L, "PERSONAL_LOAN", null, 720,
-                new BigDecimal("10000"));
+                new BigDecimal("10000"), new BigDecimal("10000"));
     }
 
     private long claimsFor(String eventId) {
