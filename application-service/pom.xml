@@ -105,6 +105,23 @@
             <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+          This service began consuming only when it started confirming that
+          products had been created, and the guard behind that writes to a
+          table the migrations had to add. A mocked guard cannot show whether
+          the schema is there, so the confirmation is tested against a real
+          PostgreSQL.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
