@@ -50,9 +50,7 @@ public class GlobalExceptionHandler {
      * offer moved under it rather than being handed a 500.
      */
     @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
-    public ResponseEntity<ErrorResponse> concurrentChange(
-            org.springframework.orm.ObjectOptimisticLockingFailureException ex,
-            HttpServletRequest req) {
+    public ResponseEntity<ErrorResponse> concurrentChange(HttpServletRequest req) {
         return build(HttpStatus.CONFLICT,
                 "This offer was changed by another request; read it again", req.getRequestURI());
     }
