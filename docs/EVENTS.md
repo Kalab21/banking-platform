@@ -208,6 +208,15 @@ A start-up check logs an error if a service consumes without the wrapper. It is
 a one-line mistake with a disproportionate consequence and nothing a normal
 test would catch.
 
+It asks whether the service consumes before it complains, which it did not
+always do. Configuration is not consumption: Spring Boot builds a
+`ConsumerFactory` from a `spring.kafka.consumer` block whether or not any
+listener exists, so a producer-only service carrying an unused block reported a
+permanently stopped partition it does not have. An alarm that is routinely
+false is worse than none, because it teaches whoever reads the log to skip the
+line on the day it is real. The check now looks for listener containers — both
+`@KafkaListener` endpoints and containers declared directly as beans.
+
 ### Headers are transport metadata
 
 A record's payload and its headers are two trust boundaries, and Spring maps

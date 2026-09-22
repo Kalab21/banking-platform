@@ -4,6 +4,7 @@ import com.bankingplatform.fraud.client.AccountClient;
 import com.bankingplatform.fraud.model.AlertStatus;
 import com.bankingplatform.fraud.model.FraudAlert;
 import com.bankingplatform.fraud.model.FraudRulesAudit;
+import com.bankingplatform.fraud.exception.FraudCounterUnreadableException;
 import com.bankingplatform.fraud.repository.FraudAlertRepository;
 import com.bankingplatform.fraud.repository.FraudRulesAuditRepository;
 import com.bankingplatform.common.events.FraudAlertCreated;
@@ -150,8 +151,11 @@ public class FraudDetectionService {
     private int incrementVelocityCounter(Long accountId, String eventId) {
         String key = "fraud:velocity:" + accountId;
         if (!firstTimeCounting(key, eventId, Duration.ofSeconds(velocityWindowSeconds))) {
-            String current = redisTemplate.opsForValue().get(key);
-            return current == null ? 1 : Integer.parseInt(current);
+            long counted = readCounter(key, "velocity");
+            if (counted > Integer.MAX_VALUE) {
+                throw unreadable("velocity", key, null);
+            }
+            return (int) counted;
         }
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1) {
@@ -192,14 +196,60 @@ public class FraudDetectionService {
     private long incrementFailedPaymentCounter(Long accountId, String eventId) {
         String key = "fraud:failed-payments:" + accountId;
         if (!firstTimeCounting(key, eventId, Duration.ofHours(24))) {
-            String current = redisTemplate.opsForValue().get(key);
-            return current == null ? 1 : Long.parseLong(current);
+            return readCounter(key, "failed-payment");
         }
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1) {
             redisTemplate.expire(key, Duration.ofHours(24));
         }
         return count != null ? count : 1L;
+    }
+
+    /**
+     * The count already recorded for this key, for an event counted before.
+     *
+     * <p>A missing key is not corruption. The counter carries the window's TTL,
+     * so it disappears when the window closes; reading one is then honestly the
+     * first of a new window, which is what the increment path would have
+     * produced anyway.
+     *
+     * <p>A value that is not a number, or is negative, is different in kind:
+     * this service writes it only through INCR, so it can be neither. Both
+     * refuse rather than guess. The refusal matters most where it is least
+     * obvious — parsing the corruption away as a low count would leave the
+     * velocity rule running against an account with the rule effectively off,
+     * which is silent, indefinite, and looks exactly like a quiet customer.
+     */
+    private long readCounter(String key, String counterType) {
+        String current = redisTemplate.opsForValue().get(key);
+        if (current == null) {
+            return 1;
+        }
+        long counted;
+        try {
+            counted = Long.parseLong(current.trim());
+        } catch (NumberFormatException malformed) {
+            throw unreadable(counterType, key, malformed);
+        }
+        if (counted < 0) {
+            throw unreadable(counterType, key, null);
+        }
+        return counted;
+    }
+
+    /**
+     * Names the counter and the key, and nothing from the event.
+     *
+     * <p>The key is the operationally useful half: it identifies which counter
+     * to look at. The record that triggered this reaches the dead-letter topic
+     * intact, so the log does not need to repeat its contents.
+     */
+    private FraudCounterUnreadableException unreadable(String counterType, String key,
+                                                       NumberFormatException cause) {
+        log.error("Fraud {} counter at {} is not a usable count; refusing to score this event ({})",
+                counterType, key, cause == null ? "negative value" : cause.getClass().getSimpleName());
+        return new FraudCounterUnreadableException(
+                "Fraud " + counterType + " counter could not be read", cause);
     }
 
     private void createAlert(Long accountId, Long userId, String alertType, int score,

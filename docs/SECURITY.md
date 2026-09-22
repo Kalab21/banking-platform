@@ -294,6 +294,29 @@ no screen reports an identity as verified. Passing a format check is not
 verification, and saying otherwise would be the product making a claim about
 itself that is not true.
 
+## A corrupted fraud counter is not evidence
+
+The velocity and failed-payment rules count in Redis, and those counters feed a
+risk score that can raise an alert and freeze a live customer's account.
+
+A counter holding something this service did not write has two readings and no
+safe one. Read low, the velocity rule keeps running with the control
+effectively switched off for that account — silent, indefinite, and
+indistinguishable from a quiet customer. Read high, the platform records a
+claim that this customer was moving money too fast, manufactured out of a
+storage fault.
+
+Neither is a fact about the customer. It is a fact about the store, so it is
+reported as one: the event processing fails with a controlled exception, which
+rolls back the processed-event claim and reaches the retry and dead-letter path
+that already exists for operational problems. The record is preserved and an
+operator sees it.
+
+A missing counter is deliberately not treated as corruption. The counter
+carries its window's TTL, so its absence is the window having closed, and
+reading it as the first of a new window is what the increment path would have
+produced anyway.
+
 ## Dependency advisories
 
 The scanner reports advisories against the packages this platform depends on.
