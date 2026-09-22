@@ -20,6 +20,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @DisplayName("API error contract")
 class ApiErrorContractTest {
+
+    private static final long CARD = 5L;
 
     private MockMvc mvc;
 
@@ -52,10 +55,10 @@ class ApiErrorContractTest {
         @Test
         @DisplayName("an unknown enum value is 400, not 500")
         void unknownEnumValueIsBadRequest() throws Exception {
-            mvc.perform(post("/api/credit-cards")
+            mvc.perform(put("/api/credit-cards/{id}/status", CARD)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    {"userId":1,"cardType":"VISA","creditLimit":5000.00,"apr":19.99}
+                                    {"status":"VISA"}
                                     """))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.status").value(400));
@@ -64,9 +67,9 @@ class ApiErrorContractTest {
         @Test
         @DisplayName("a syntactically broken body is 400")
         void malformedJsonIsBadRequest() throws Exception {
-            mvc.perform(post("/api/credit-cards")
+            mvc.perform(post("/api/credit-cards/{id}/purchase", CARD)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"userId\":1,"))
+                            .content("{\"amount\":1,"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value("Malformed request body"));
         }
@@ -92,7 +95,11 @@ class ApiErrorContractTest {
         @Test
         @DisplayName("the wrong HTTP verb is 405, not 500")
         void wrongMethodIsMethodNotAllowed() throws Exception {
-            mvc.perform(get("/api/credit-cards"))
+            // A path that exists for POST and not for GET. `/api/credit-cards`
+            // itself is no longer such a path: nothing is mapped there at all
+            // since a card stopped being something a caller may create, so it
+            // answers 404 and would be testing the wrong handler.
+            mvc.perform(get("/api/credit-cards/{id}/purchase", CARD))
                     .andExpect(status().isMethodNotAllowed())
                     .andExpect(jsonPath("$.message").value(containsString("GET")));
         }
@@ -105,9 +112,9 @@ class ApiErrorContractTest {
         @Test
         @DisplayName("a malformed body never echoes the parser's own exception detail")
         void malformedBodyDoesNotLeakParserDetail() throws Exception {
-            mvc.perform(post("/api/credit-cards")
+            mvc.perform(put("/api/credit-cards/{id}/status", CARD)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"cardType\":\"NOPE\"}"))
+                            .content("{\"status\":\"NOPE\"}"))
                     .andExpect(status().isBadRequest())
                     // No Jackson/Spring type names, and no list of valid enum
                     // constants, which would describe the internal model.
