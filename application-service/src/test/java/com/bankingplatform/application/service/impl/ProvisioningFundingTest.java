@@ -16,7 +16,10 @@ import com.bankingplatform.application.model.ApplicationStatus;
 import com.bankingplatform.application.model.ApplicationType;
 import com.bankingplatform.application.repository.ApplicationRepository;
 import com.bankingplatform.application.repository.AuditLogRepository;
+import com.bankingplatform.application.repository.DecisionSnapshotRepository;
 import com.bankingplatform.application.service.ApplicationRequestValidator;
+import com.bankingplatform.application.underwriting.UnderwritingPolicy;
+import com.bankingplatform.application.underwriting.UnderwritingService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +67,7 @@ class ProvisioningFundingTest {
 
     @Mock private ApplicationRepository applicationRepository;
     @Mock private AuditLogRepository auditLogRepository;
+    @Mock private DecisionSnapshotRepository decisionSnapshotRepository;
     @Mock private ApplicationMapper applicationMapper;
     @Mock private ApplicationEventProducer eventProducer;
     @Mock private UserClient userClient;
@@ -71,6 +75,9 @@ class ProvisioningFundingTest {
 
     /** Real rules, not a stub: the refusals below are the point of the test. */
     @Spy private ApplicationRequestValidator validator = new ApplicationRequestValidator();
+
+    /** The real policy too, so these tests decide the way production decides. */
+    @Spy private UnderwritingService underwriting = new UnderwritingService(new UnderwritingPolicy());
 
     @InjectMocks private ApplicationServiceImpl applicationService;
 

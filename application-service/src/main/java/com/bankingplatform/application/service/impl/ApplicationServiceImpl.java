@@ -14,10 +14,15 @@ import com.bankingplatform.application.model.ApplicationStatus;
 import com.bankingplatform.application.model.ApplicationTransitions;
 import com.bankingplatform.application.model.ApplicationType;
 import com.bankingplatform.application.model.AuditLog;
+import com.bankingplatform.application.model.DecisionSnapshot;
 import com.bankingplatform.application.repository.ApplicationRepository;
 import com.bankingplatform.application.repository.AuditLogRepository;
+import com.bankingplatform.application.repository.DecisionSnapshotRepository;
 import com.bankingplatform.application.service.ApplicationRequestValidator;
 import com.bankingplatform.application.service.ApplicationService;
+import com.bankingplatform.application.underwriting.ReasonCode;
+import com.bankingplatform.application.underwriting.UnderwritingDecision;
+import com.bankingplatform.application.underwriting.UnderwritingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,31 +30,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ApplicationServiceImpl implements ApplicationService {
 
-    // Minimum credit scores per product type
-    private static final Map<ApplicationType, Integer> MIN_CREDIT_SCORES = Map.of(
-            ApplicationType.CHECKING_ACCOUNT, 0,
-            ApplicationType.SAVINGS_ACCOUNT, 0,
-            ApplicationType.CREDIT_CARD, 650,
-            ApplicationType.PERSONAL_LOAN, 600,
-            ApplicationType.AUTO_LOAN, 620,
-            ApplicationType.MORTGAGE, 700
-    );
-
     private final ApplicationRepository applicationRepository;
     private final AuditLogRepository auditLogRepository;
+    private final DecisionSnapshotRepository decisionSnapshotRepository;
     private final ApplicationMapper applicationMapper;
     private final ApplicationEventProducer eventProducer;
     private final UserClient userClient;
     private final AccountClient accountClient;
     private final ApplicationRequestValidator validator;
+    private final UnderwritingService underwriting;
 
     @Override
     @Transactional
@@ -61,12 +59,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!user.isEnabled()) {
             throw new ApplicationException("User account is disabled");
         }
-        if ("REJECTED".equals(user.getKycStatus())) {
-            throw new ApplicationException("KYC verification rejected \u2014 cannot submit application");
-        }
 
         int creditScore = user.getCreditScore() != null ? user.getCreditScore() : 0;
-        int minScore = MIN_CREDIT_SCORES.getOrDefault(request.getApplicationType(), 650);
 
         Application application = Application.builder()
                 .userId(request.getUserId())
@@ -98,24 +92,35 @@ public class ApplicationServiceImpl implements ApplicationService {
         // application passes through rather than one it skips.
         move(submitted, ApplicationStatus.UNDER_REVIEW);
 
-        if (creditScore >= minScore) {
-            submitted.setApprovedAmount(request.getRequestedAmount());
-            submitted.setReviewedAt(LocalDateTime.now());
-            submitted.setReviewerNotes(
-                    "Auto-approved: credit score " + creditScore + " meets minimum " + minScore);
+        UnderwritingDecision decision =
+                underwriting.decide(submitted, user.getCreditScore(), user.getKycStatus());
+        recordDecision(submitted, decision, DecisionSnapshot.DecidedBy.POLICY, null,
+                user.getCreditScore(), user.getKycStatus());
+        submitted.setReviewedAt(LocalDateTime.now());
+
+        if (decision.isApproved()) {
+            submitted.setApprovedAmount(decision.approvedAmount());
             return applicationMapper.toResponse(approve(submitted, "AUTO_APPROVED"));
         }
 
-        submitted.setReviewedAt(LocalDateTime.now());
-        submitted.setReviewerNotes(
-                "Auto-rejected: credit score " + creditScore + " below minimum " + minScore);
-        move(submitted, ApplicationStatus.REJECTED);
+        if (decision.isReferred()) {
+            // Policy did not refuse it and will not approve it on its own. The
+            // application waits for a person, which is a real state it can sit
+            // in rather than a decision dressed up as one.
+            move(submitted, ApplicationStatus.MANUAL_REVIEW);
+            Application referred = applicationRepository.save(submitted);
+            audit("APPLICATION", referred.getId(), "AUTO_REFERRED",
+                    "Type: " + request.getApplicationType()
+                            + ", Reasons: " + reasonList(decision));
+            return applicationMapper.toResponse(referred);
+        }
 
+        move(submitted, ApplicationStatus.REJECTED);
         Application saved = applicationRepository.save(submitted);
         audit("APPLICATION", saved.getId(), "AUTO_REJECTED",
-                "Type: " + request.getApplicationType() + ", Score: " + creditScore);
+                "Type: " + request.getApplicationType() + ", Reasons: " + reasonList(decision));
         eventProducer.publishApplicationRejected(saved.getId(), request.getUserId(),
-                request.getApplicationType().name(), "Credit score below minimum");
+                request.getApplicationType().name(), reasonList(decision));
 
         return applicationMapper.toResponse(saved);
     }
@@ -154,6 +159,20 @@ public class ApplicationServiceImpl implements ApplicationService {
             application.setReviewerNotes(request.getReviewerNotes());
         }
 
+        // A reviewer's decision is a decision, and is recorded the same way the
+        // policy's is. Without this the audit trail would explain every
+        // automatic outcome and none of the human ones, which is the wrong way
+        // round: a person's judgement is the part worth being able to review.
+        BigDecimal reviewerApproved = request.getDecision() == ReviewDecision.APPROVE
+                ? approvedAmount(application, request) : null;
+        recordDecision(application,
+                new UnderwritingDecision(
+                        UnderwritingDecision.Outcome.valueOf(request.getDecision().name()),
+                        List.of(ReasonCode.MANUAL_REVIEW_REQUIRED),
+                        reviewerApproved, null, null, underwriting.policyVersion()),
+                DecisionSnapshot.DecidedBy.REVIEWER, CallerContext.userId().orElse(null),
+                application.getCreditScoreAtApply(), null);
+
         switch (request.getDecision()) {
             case REFER -> {
                 move(application, ApplicationStatus.MANUAL_REVIEW);
@@ -168,7 +187,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                                 ? request.getReviewerNotes() : "Manual rejection");
             }
             case APPROVE -> {
-                application.setApprovedAmount(approvedAmount(application, request));
+                application.setApprovedAmount(reviewerApproved);
                 return applicationMapper.toResponse(approve(application, "MANUAL_APPROVED"));
             }
         }
@@ -247,6 +266,45 @@ public class ApplicationServiceImpl implements ApplicationService {
                 saved.getCreditScoreAtApply(), saved.getRequestedAmount(),
                 saved.getApprovedAmount());
         return saved;
+    }
+
+    /**
+     * Copies the figures the decision was taken on into a row that is never
+     * updated.
+     *
+     * <p>The alternative is to explain a decision from the customer's profile
+     * as it stands when someone asks, which is a different profile: scores
+     * move, income is restated, debts are paid down. The snapshot is what makes
+     * "why was this refused" answerable months later.
+     */
+    private void recordDecision(Application application, UnderwritingDecision decision,
+                                DecisionSnapshot.DecidedBy decidedBy, Long reviewerId,
+                                Integer creditScore, String kycStatus) {
+        decisionSnapshotRepository.save(DecisionSnapshot.builder()
+                .applicationId(application.getId())
+                .policyVersion(decision.policyVersion())
+                .decidedBy(decidedBy)
+                .reviewerId(reviewerId)
+                .decision(DecisionSnapshot.Decision.valueOf(decision.outcome().name()))
+                .creditScoreAtDecision(creditScore)
+                .kycStatusAtDecision(kycStatus)
+                .annualIncomeAtDecision(application.getAnnualIncome())
+                .monthlyDebtAtDecision(application.getMonthlyDebtObligations())
+                .dtiAtDecision(decision.dti())
+                .ltvAtDecision(decision.ltv())
+                .assetValueAtDecision(application.getAssetValue())
+                .requestedAmountAtDecision(application.getRequestedAmount())
+                .requestedTermAtDecision(application.getTermMonths())
+                // A refusal lends nothing, and the database refuses a row that
+                // says otherwise.
+                .approvedAmount(decision.isRejected() ? null : decision.approvedAmount())
+                .reasonCodes(new ArrayList<>(decision.reasonCodes()))
+                .build());
+    }
+
+    /** The reason codes as one field, for an audit line and a rejection notice. */
+    private String reasonList(UnderwritingDecision decision) {
+        return decision.reasonCodes().stream().map(Enum::name).collect(Collectors.joining(", "));
     }
 
     /** Applies a status change, or refuses it. */
