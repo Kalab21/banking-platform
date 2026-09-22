@@ -59,6 +59,39 @@ json() {
   ' "$1"
 }
 
+# The same, for an endpoint that answers with a list: reads one field off the
+# first element. Used to pick up a product that was created for this customer.
+json_first() {
+  node -e '
+    let raw = "";
+    process.stdin.on("data", (c) => (raw += c));
+    process.stdin.on("end", () => {
+      try {
+        const list = JSON.parse(raw);
+        const value = Array.isArray(list) && list.length ? list[0][process.argv[1]] : undefined;
+        process.stdout.write(value === undefined || value === null ? "" : String(value));
+      } catch {
+        process.stdout.write("");
+      }
+    });
+  ' "$1"
+}
+
+# A loan and a card are issued by the service that owns them, in response to
+# the approval event application-service publishes — not by the call that
+# submits the application. So the product appears a moment after the
+# application is answered, and the seed waits for it rather than assuming it.
+await_product() {
+  local path="$1" token="$2"
+  for _ in $(seq 1 45); do
+    local id
+    id=$(api GET "$path" "" "$token" | json_first id)
+    if [[ -n "$id" ]]; then printf '%s' "$id"; return 0; fi
+    sleep 1
+  done
+  return 1
+}
+
 say "Checking the gateway at ${GATEWAY}"
 if ! curl -sf -o /dev/null "${GATEWAY}/actuator/health"; then
   echo "  Gateway is not responding. Start the stack first: docker compose up -d" >&2
@@ -159,16 +192,28 @@ ok "Northwind Properties"
 
 # ------------------------------------------------------------------------ loan
 
-say "Opening a loan with an amortization schedule"
-LOAN=$(api POST /api/loans \
-  "{\"userId\":${USER_ID},\"loanType\":\"PERSONAL_LOAN\",\"principal\":10000.00,\"interestRate\":6.00,\"termMonths\":12,\"disbursementAccountId\":${CHECKING}}" \
-  "$TOKEN" | json id)
+say "Applying for a loan and letting the bank issue it"
+# The seed asks for a loan the way a customer does. It does not state a rate or
+# a term, because those are the bank's to decide, and there is no longer an
+# endpoint that would accept them if it tried.
+api POST /api/applications "$(cat <<JSON
+{"userId":${USER_ID},"applicationType":"PERSONAL_LOAN","requestedAmount":10000.00,
+ "termMonths":12,"currency":"USD","purpose":"Home improvement",
+ "annualIncome":90000.00,"monthlyDebtObligations":450.00}
+JSON
+)" "$TOKEN" > /dev/null
+ok "personal loan application submitted"
+
+LOAN="$(await_product "/api/loans/user/${USER_ID}" "$TOKEN" || true)"
 if [[ -n "$LOAN" ]]; then
-  ok "loan ${LOAN} — 10,000.00 over 12 months at 6.00%"
+  LOAN_JSON="$(api GET "/api/loans/${LOAN}" "" "$TOKEN")"
+  ok "loan ${LOAN} — $(printf '%s' "$LOAN_JSON" | json principal) over $(printf '%s' "$LOAN_JSON" | json termMonths) months at $(printf '%s' "$LOAN_JSON" | json interestRate)%"
   api POST "/api/loans/${LOAN}/disburse" "{\"disbursementAccountId\":${CHECKING}}" "$TOKEN" > /dev/null
   ok "disbursed"
   api POST "/api/loans/${LOAN}/repay" "{\"amount\":860.66,\"sourceAccountId\":${CHECKING}}" "$TOKEN" > /dev/null
   ok "first instalment repaid"
+else
+  ok "loan application submitted; the loan had not been issued yet when the seed finished"
 fi
 
 # ------------------------------------------------------------------ credit card
@@ -176,10 +221,20 @@ fi
 # A card with a little history on it. The console's cards page is a real page
 # with a real empty state, and an empty state is what a demo customer saw here
 # before: nothing in the seed ever issued a card.
-say "Issuing a credit card"
-CARD=$(api POST /api/credit-cards   "{\"userId\":${USER_ID},\"cardType\":\"GOLD\",\"creditLimit\":3000.00,\"apr\":18.99,\"linkedAccountId\":${CHECKING}}"   "$TOKEN" | json id)
+say "Applying for a credit card and letting the bank issue it"
+# A card applicant states what they earn and what they already owe. The tier,
+# the limit and the APR are decided for them.
+api POST /api/applications "$(cat <<JSON
+{"userId":${USER_ID},"applicationType":"CREDIT_CARD","currency":"USD",
+ "purpose":"Everyday spending","annualIncome":90000.00,"monthlyDebtObligations":450.00}
+JSON
+)" "$TOKEN" > /dev/null
+ok "credit card application submitted"
+
+CARD="$(await_product "/api/credit-cards/user/${USER_ID}" "$TOKEN" || true)"
 if [[ -n "$CARD" ]]; then
-  ok "gold card — 3,000.00 limit at 18.99% APR"
+  CARD_JSON="$(api GET "/api/credit-cards/${CARD}" "" "$TOKEN")"
+  ok "$(printf '%s' "$CARD_JSON" | json cardType) card — $(printf '%s' "$CARD_JSON" | json creditLimit) limit at $(printf '%s' "$CARD_JSON" | json apr)% APR"
   card_purchase() {
     api POST "/api/credit-cards/${CARD}/purchase"       "{\"amount\":$1,\"description\":\"$2\",\"merchantName\":\"$2\",\"merchantCategory\":\"$3\"}"       "$TOKEN" > /dev/null
     ok "$2"

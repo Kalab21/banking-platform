@@ -51,14 +51,18 @@ public class CreditCardController {
         AccessGuard.requireOwnerOrStaff(caller, creditCardService.getCard(cardId).getUserId());
     }
 
-    @PostMapping
-    @Operation(summary = "Issue a new credit card")
-    public ResponseEntity<CreditCardResponse> createCard(@Valid @RequestBody CreateCreditCardRequest request,
-                                                         CallerIdentity caller) {
-        // A customer may apply for their own card; staff may issue one for anyone.
-        AccessGuard.requireTargetUserAllowed(caller, request.getUserId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(creditCardService.createCard(request));
-    }
+    // There is deliberately no endpoint here that issues a card.
+    //
+    // A card used to be issued by POSTing one, with the caller naming its tier,
+    // its credit limit and its APR. A customer could therefore hand themselves
+    // a platinum card with any limit they liked, and staff could do the same
+    // for anyone, without a decision existing anywhere.
+    //
+    // Issuance is a consequence of an approved application. ApplicationEventConsumer
+    // creates the card in-process when application-service publishes an
+    // approval, so the tier and the limit are the ones the bank set. Restoring
+    // a create endpoint here — for staff, for seeding, for convenience —
+    // reopens the bypass whatever the role check on it says.
 
     @GetMapping("/{cardId}")
     @Operation(summary = "Get credit card by ID")
