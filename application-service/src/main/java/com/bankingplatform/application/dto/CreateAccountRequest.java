@@ -10,7 +10,6 @@ import java.math.BigDecimal;
 public class CreateAccountRequest {
     private Long userId;
     private String accountType;
-    private BigDecimal initialDeposit;
     private String currency;
     private BigDecimal overdraftLimit;
 }

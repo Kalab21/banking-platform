@@ -201,11 +201,16 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         if (type == ApplicationType.CHECKING_ACCOUNT || type == ApplicationType.SAVINGS_ACCOUNT) {
             String accountType = type == ApplicationType.CHECKING_ACCOUNT ? "CHECKING" : "SAVINGS";
+            // An application is a request, not a funding source. Opening a
+            // deposit account used to pass the approved amount through as the
+            // opening balance, so applying for a 10,000.00 checking account
+            // created 10,000.00 out of nothing: no payer, no transaction row,
+            // no double entry anywhere. A new account opens empty and is
+            // funded afterwards through the money-movement path, which records
+            // what moved and from where.
             AccountResponse account = accountClient.createAccount(CreateAccountRequest.builder()
                     .userId(application.getUserId())
                     .accountType(accountType)
-                    .initialDeposit(application.getApprovedAmount() != null
-                            ? application.getApprovedAmount() : BigDecimal.ZERO)
                     .currency(currency != null ? currency : "USD")
                     .overdraftLimit(type == ApplicationType.CHECKING_ACCOUNT
                             ? new BigDecimal("500.00") : BigDecimal.ZERO)

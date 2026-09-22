@@ -87,16 +87,29 @@ ok "customer ${USERNAME} (id ${USER_ID})"
 
 # ------------------------------------------------------------------- accounts
 
+# An account opens empty — the API has no field for an opening balance,
+# because a balance that appears with no payer behind it is money invented.
+# The demo's starting funds arrive the way a customer's would: as deposits,
+# each one a transaction that can be listed and totalled.
 say "Opening accounts"
 CHECKING=$(api POST /api/accounts \
-  "{\"userId\":${USER_ID},\"accountType\":\"CHECKING\",\"currency\":\"USD\",\"initialDeposit\":4200.00,\"overdraftLimit\":500.00}" \
+  "{\"userId\":${USER_ID},\"accountType\":\"CHECKING\",\"currency\":\"USD\",\"overdraftLimit\":500.00}" \
   "$TOKEN" | json id)
-ok "checking account ${CHECKING}"
+ok "checking account ${CHECKING} (opened at 0.00)"
 
 SAVINGS=$(api POST /api/accounts \
-  "{\"userId\":${USER_ID},\"accountType\":\"SAVINGS\",\"currency\":\"USD\",\"initialDeposit\":15000.00,\"overdraftLimit\":0.00}" \
+  "{\"userId\":${USER_ID},\"accountType\":\"SAVINGS\",\"currency\":\"USD\",\"overdraftLimit\":0.00}" \
   "$TOKEN" | json id)
-ok "savings account ${SAVINGS}"
+ok "savings account ${SAVINGS} (opened at 0.00)"
+
+say "Funding the accounts"
+fund() {
+  api POST /api/transactions/deposit \
+    "{\"accountId\":$1,\"amount\":$2,\"description\":\"$3\"}" "$TOKEN" > /dev/null
+  ok "$3"
+}
+fund "${CHECKING}" 4200.00  "Opening deposit — checking"
+fund "${SAVINGS}"  15000.00 "Opening deposit — savings"
 
 # --------------------------------------------------------------- transactions
 
@@ -271,9 +284,10 @@ Demo customer ready.
   Username   ${USERNAME}
   Password   ${PASSWORD}
 
-Seeded: 2 accounts, 12 transactions, 1 beneficiary, 1 loan with
-schedule and one repayment, 1 credit card with three purchases and
-a payment, and 2 KYC documents pending review.
+Seeded: 2 accounts opened empty and then funded by deposit,
+14 transactions, 1 beneficiary, 1 loan with schedule and one
+repayment, 1 credit card with three purchases and a payment, and
+2 KYC documents pending review.
 
 Credit cards and notifications populate from Kafka events, so they
 may take a few seconds to appear.
