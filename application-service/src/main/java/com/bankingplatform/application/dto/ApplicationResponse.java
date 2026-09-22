@@ -17,6 +17,14 @@ public class ApplicationResponse {
     private Integer termMonths;
     private String purpose;
     private Integer creditScoreAtApply;
+
+    // What the applicant stated. Returned so a customer can see the
+    // application they submitted, and so staff review reads the figures the
+    // decision was actually made against.
+    private BigDecimal annualIncome;
+    private BigDecimal monthlyDebtObligations;
+    private BigDecimal assetValue;
+    private BigDecimal downPayment;
     private String reviewerNotes;
     private Long productId;
     private LocalDateTime appliedAt;

@@ -99,9 +99,18 @@ export function statusTone(status: string | null | undefined): Tone {
     case "PAID_OFF":
     case "COMPLETED":
     case "PROCESSED":
+    // An application whose product has been confirmed to exist.
+    case "PROVISIONED":
       return "positive";
     case "PENDING":
     case "IN_REVIEW":
+    // An application still moving through its lifecycle. PROVISIONING is
+    // deliberately not positive: a product has been asked for, not confirmed.
+    case "SUBMITTED":
+    case "MANUAL_REVIEW":
+    case "OFFERED":
+    case "ACCEPTED":
+    case "PROVISIONING":
     case "PARTIAL":
     case "SCHEDULED":
       return "caution";

@@ -192,10 +192,17 @@ Write-Host "  UserId=$USER_ID"
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 1: Account Opening ===" -ForegroundColor Cyan
 
-$appBody = @{ userId=$USER_ID; applicationType="CHECKING_ACCOUNT"; requestedAmount=500.00; currency="USD"; purpose="Primary checking account" }
+# A deposit account is not a request for money, so the application carries no
+# amount. The API refuses one rather than ignoring it.
+$appBody = @{ userId=$USER_ID; applicationType="CHECKING_ACCOUNT"; currency="USD"; purpose="Primary checking account" }
 $app1 = Post "$GW/api/applications" $appBody $TOKEN
 Assert "Submit CHECKING_ACCOUNT application" ($app1 -and $app1.id)
-Assert "Application auto-approved (score >= 0)" ($app1.status -eq "DISBURSED")
+# PROVISIONED, not DISBURSED: an account is opened, never disbursed, and
+# this one really does exist because account-service answered with its id.
+Assert "Application provisioned (score >= 0)" ($app1.status -eq "PROVISIONED")
+Assert-Refused "A deposit application cannot state an amount" "POST" `
+    "$GW/api/applications" $TOKEN 400 `
+    @{ userId=$USER_ID; applicationType="SAVINGS_ACCOUNT"; currency="USD"; requestedAmount=500.00 }
 $ACCOUNT_ID = $app1.productId
 if (-not $ACCOUNT_ID -or $ACCOUNT_ID -le 0) {
     # Fallback: look up accounts for user
@@ -253,7 +260,9 @@ Write-Host "  Status=$($acctCleared.status)  Balance=$($acctCleared.balance)"
 Write-Host "`n=== FLOW 2: Credit Card Lifecycle ===" -ForegroundColor Cyan
 
 # Apply for credit card — will auto-reject (score 0 < 650), then manually approve
-$ccAppBody = @{ userId=$USER_ID; applicationType="CREDIT_CARD"; requestedAmount=5000.00; currency="USD"; purpose="Personal credit card" }
+# Northbank sets the limit and the APR, so the applicant states what they
+# earn and what they already owe, and nothing about the card itself.
+$ccAppBody = @{ userId=$USER_ID; applicationType="CREDIT_CARD"; currency="USD"; purpose="Personal credit card"; annualIncome=90000.00; monthlyDebtObligations=450.00 }
 $ccApp = Post "$GW/api/applications" $ccAppBody $TOKEN
 Assert "Submit CREDIT_CARD application" ($ccApp -and $ccApp.id)
 $CC_APP_ID = $ccApp.id
@@ -264,9 +273,13 @@ if ($ccApp.status -eq "REJECTED") {
     # refusal is the assertion: the endpoint exists and the role check holds.
     Assert-Refused "Customer cannot review their own application" "PUT" `
         "$GW/api/applications/$CC_APP_ID/review" $TOKEN 403 `
-        @{ status="APPROVED"; reviewerNotes="Manual E2E approval"; approvedAmount=5000.00 }
+        @{ decision="APPROVE"; reviewerNotes="Manual E2E approval" }
 } else {
-    Assert "Application auto-approved (credit score qualifies)" ($ccApp.status -eq "DISBURSED")
+    # A credit product is created by credit-card-service from the approval
+    # event, and this service has not heard back yet, so PROVISIONING is as
+    # far as the application may honestly claim to have got.
+    Assert "Application reached provisioning" ($ccApp.status -eq "PROVISIONING")
+    Assert "No product id is claimed before confirmation" ($null -eq $ccApp.productId)
     Assert "No manual review needed" $true
 }
 
@@ -313,7 +326,7 @@ if ($cards -and $cards.Count -gt 0) {
 Write-Host "`n=== FLOW 3: Loan Lifecycle ===" -ForegroundColor Cyan
 
 # Apply for personal loan — auto-reject (score 0 < 600), then manually approve
-$loanAppBody = @{ userId=$USER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=10000.00; currency="USD"; purpose="Home improvement" }
+$loanAppBody = @{ userId=$USER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=10000.00; termMonths=48; currency="USD"; purpose="Home improvement"; annualIncome=90000.00; monthlyDebtObligations=450.00 }
 $loanApp = Post "$GW/api/applications" $loanAppBody $TOKEN
 Assert "Submit PERSONAL_LOAN application" ($loanApp -and $loanApp.id)
 $LOAN_APP_ID = $loanApp.id
@@ -322,9 +335,9 @@ if ($loanApp.status -eq "REJECTED") {
     # Staff-only, as above.
     Assert-Refused "Customer cannot review their own loan application" "PUT" `
         "$GW/api/applications/$LOAN_APP_ID/review" $TOKEN 403 `
-        @{ status="APPROVED"; reviewerNotes="Manual E2E approval"; approvedAmount=10000.00 }
+        @{ decision="APPROVE"; reviewerNotes="Manual E2E approval"; approvedAmount=10000.00 }
 } else {
-    Assert "Loan application auto-approved (credit score qualifies)" ($loanApp.status -eq "DISBURSED")
+    Assert "Loan application reached provisioning" ($loanApp.status -eq "PROVISIONING")
 }
 
 $null = Wait-For "loan created via Kafka" {

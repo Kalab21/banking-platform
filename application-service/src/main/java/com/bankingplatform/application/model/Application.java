@@ -31,7 +31,7 @@ public class Application {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
-    private ApplicationStatus status = ApplicationStatus.PENDING;
+    private ApplicationStatus status = ApplicationStatus.SUBMITTED;
 
     @Column(name = "requested_amount", precision = 19, scale = 2)
     private BigDecimal requestedAmount;
@@ -51,6 +51,21 @@ public class Application {
 
     @Column(name = "credit_score_at_apply")
     private Integer creditScoreAtApply;
+
+    // Stated by the applicant at submission. Kept on the application because a
+    // decision has to be explainable later against what was actually said at
+    // the time, not against whatever the customer's profile says today.
+    @Column(name = "annual_income", precision = 19, scale = 2)
+    private BigDecimal annualIncome;
+
+    @Column(name = "monthly_debt_obligations", precision = 19, scale = 2)
+    private BigDecimal monthlyDebtObligations;
+
+    @Column(name = "asset_value", precision = 19, scale = 2)
+    private BigDecimal assetValue;
+
+    @Column(name = "down_payment", precision = 19, scale = 2)
+    private BigDecimal downPayment;
 
     @Column(name = "reviewer_notes", length = 1000)
     private String reviewerNotes;

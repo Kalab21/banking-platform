@@ -19,7 +19,21 @@ import { formatCurrency, formatDateTime, humanise } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Applications" };
 
-const STATUSES = ["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "CANCELLED"] as const;
+// Mirrors ApplicationStatus in application-service. A value here that the
+// backend does not know is a 400 from /api/applications/status/{status}, so
+// the two lists have to move together.
+const STATUSES = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "MANUAL_REVIEW",
+  "OFFERED",
+  "ACCEPTED",
+  "DECLINED",
+  "PROVISIONING",
+  "PROVISIONED",
+  "REJECTED",
+  "CANCELLED",
+] as const;
 
 export default async function AdminApplicationsPage({
   searchParams,
@@ -30,7 +44,7 @@ export default async function AdminApplicationsPage({
   const { status: rawStatus } = await searchParams;
   const status = STATUSES.includes(rawStatus as (typeof STATUSES)[number])
     ? (rawStatus as string)
-    : "PENDING";
+    : "SUBMITTED";
 
   let applications;
   try {
