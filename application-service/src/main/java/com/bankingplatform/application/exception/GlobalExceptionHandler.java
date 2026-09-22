@@ -27,6 +27,15 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), req.getRequestURI());
     }
 
+    // Registered before the ApplicationException handler it extends: a
+    // malformed submission is a bad request, not a conflict with a state the
+    // application is already in.
+    @ExceptionHandler(InvalidApplicationRequestException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(InvalidApplicationRequestException ex,
+                                                              HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req.getRequestURI());
+    }
+
     @ExceptionHandler(ApplicationException.class)
     public ResponseEntity<ErrorResponse> handleApplicationEx(ApplicationException ex, HttpServletRequest req) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), req.getRequestURI());

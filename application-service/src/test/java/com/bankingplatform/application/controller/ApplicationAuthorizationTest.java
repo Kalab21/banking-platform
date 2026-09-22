@@ -62,7 +62,7 @@ class ApplicationAuthorizationTest {
         ApplicationResponse response = new ApplicationResponse();
         response.setId(5L);
         response.setUserId(ownerId);
-        response.setStatus("PENDING");
+        response.setStatus("SUBMITTED");
         return response;
     }
 
@@ -173,7 +173,7 @@ class ApplicationAuthorizationTest {
         @Test
         @DisplayName("a customer cannot work the status queue")
         void customerCannotQueryByStatus() throws Exception {
-            mvc.perform(as(get("/api/applications/status/{s}", ApplicationStatus.PENDING),
+            mvc.perform(as(get("/api/applications/status/{s}", ApplicationStatus.SUBMITTED),
                             CUSTOMER_A, "CUSTOMER"))
                     .andExpect(status().isForbidden());
 
@@ -187,7 +187,7 @@ class ApplicationAuthorizationTest {
             // amount.
             mvc.perform(as(put("/api/applications/{id}/review", 5L), CUSTOMER_A, "CUSTOMER")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"status\":\"APPROVED\",\"approvedAmount\":10000.00}"))
+                            .content("{\"decision\":\"APPROVE\",\"approvedAmount\":10000.00}"))
                     .andExpect(status().isForbidden());
 
             verify(applicationService, never()).review(anyLong(), any());
@@ -198,7 +198,7 @@ class ApplicationAuthorizationTest {
         void staffQueryByStatusAllowed() throws Exception {
             when(applicationService.getByStatus(any())).thenReturn(List.of());
 
-            mvc.perform(as(get("/api/applications/status/{s}", ApplicationStatus.PENDING), STAFF, "EMPLOYEE"))
+            mvc.perform(as(get("/api/applications/status/{s}", ApplicationStatus.SUBMITTED), STAFF, "EMPLOYEE"))
                     .andExpect(status().isOk());
         }
 
@@ -209,7 +209,7 @@ class ApplicationAuthorizationTest {
 
             mvc.perform(as(put("/api/applications/{id}/review", 5L), STAFF, "EMPLOYEE")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"status\":\"APPROVED\",\"approvedAmount\":10000.00}"))
+                            .content("{\"decision\":\"APPROVE\",\"approvedAmount\":10000.00}"))
                     .andExpect(status().isOk());
         }
     }
