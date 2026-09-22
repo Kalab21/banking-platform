@@ -60,7 +60,7 @@ class CreditCardEventProducerTest {
     @Test
     @DisplayName("an issued card carries four digits and no more")
     void cardCreated() {
-        producer.publishCardCreated(6L, 42L, "VISA", "4242");
+        producer.publishCardCreated(6L, 42L, "VISA", "4242", 7L);
 
         DomainEvent sent = published();
         assertThat(sent.eventType()).isEqualTo(EventTypes.CREDIT_CARD_CREATED);

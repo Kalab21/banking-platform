@@ -70,6 +70,12 @@ public class LoanServiceImpl implements LoanService {
 
         loan = loanRepository.save(loan);
         buildAmortizationSchedule(loan, monthlyPayment, monthlyRate);
+        // The confirmation that closes the loop. application-service asked for
+        // this loan by publishing an approval and has been waiting at
+        // PROVISIONING ever since; this is what lets it record the real id.
+        eventProducer.publishLoanCreated(loan.getId(), loan.getUserId(), loan.getApplicationId(),
+                loan.getLoanType().name(), loan.getPrincipal(), loan.getInterestRate(),
+                loan.getTermMonths());
         log.info("Created loan id={} for userId={}", loan.getId(), loan.getUserId());
         return loanMapper.toResponse(loan);
     }

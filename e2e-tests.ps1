@@ -299,6 +299,17 @@ if ($ccApp.status -eq "REJECTED") {
 
     $ccAfter = Get "$GW/api/applications/$CC_APP_ID" $TOKEN
     Assert "Application reached provisioning after acceptance" ($ccAfter.status -eq "PROVISIONING")
+
+    # PROVISIONED is only reached when credit-card-service confirms the card
+    # exists, and the application then holds the card's real id. Saying so on
+    # the strength of having published a request is what produced 153 rows
+    # claiming product_id = -1.
+    $null = Wait-For "application confirmed as provisioned" {
+        (Get "$GW/api/applications/$CC_APP_ID" $TOKEN).status -eq "PROVISIONED"
+    } 180 3
+    $ccDone = Get "$GW/api/applications/$CC_APP_ID" $TOKEN
+    Assert "Application reached PROVISIONED once the card was confirmed" ($ccDone.status -eq "PROVISIONED")
+    Assert "The application holds a real product id" ($ccDone.productId -gt 0)
 }
 
 # The card is created by a Kafka consumer, so this waits for the fact rather
@@ -376,6 +387,13 @@ if ($loanApp.status -eq "REJECTED") {
 
     $loanAfter = Get "$GW/api/applications/$LOAN_APP_ID" $TOKEN
     Assert "Loan application reached provisioning after acceptance" ($loanAfter.status -eq "PROVISIONING")
+
+    $null = Wait-For "loan application confirmed as provisioned" {
+        (Get "$GW/api/applications/$LOAN_APP_ID" $TOKEN).status -eq "PROVISIONED"
+    } 180 3
+    $loanDone = Get "$GW/api/applications/$LOAN_APP_ID" $TOKEN
+    Assert "Loan application reached PROVISIONED once the loan was confirmed" ($loanDone.status -eq "PROVISIONED")
+    Assert "The loan application holds a real product id" ($loanDone.productId -gt 0)
 }
 
 $null = Wait-For "loan created via Kafka" {

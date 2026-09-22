@@ -67,6 +67,7 @@ import java.time.Instant;
         @JsonSubTypes.Type(value = ApplicationApproved.class, name = EventTypes.APPLICATION_APPROVED),
         @JsonSubTypes.Type(value = ApplicationRejected.class, name = EventTypes.APPLICATION_REJECTED),
         @JsonSubTypes.Type(value = CreditCardCreated.class, name = EventTypes.CREDIT_CARD_CREATED),
+        @JsonSubTypes.Type(value = LoanCreated.class, name = EventTypes.LOAN_CREATED),
         @JsonSubTypes.Type(value = CreditCardTransactionCompleted.class,
                 name = EventTypes.CREDIT_CARD_TRANSACTION_COMPLETED),
         @JsonSubTypes.Type(value = CreditCardStatementGenerated.class,

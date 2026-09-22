@@ -1,6 +1,7 @@
 package com.bankingplatform.loan.kafka.producer;
 
 import com.bankingplatform.common.events.DomainEvent;
+import com.bankingplatform.common.events.LoanCreated;
 import com.bankingplatform.common.events.LoanDisbursed;
 import com.bankingplatform.common.events.LoanPaidOff;
 import com.bankingplatform.common.events.LoanRepaymentMade;
@@ -29,6 +30,16 @@ import java.math.BigDecimal;
 public class LoanEventProducer {
 
     private final OutboxPublisher outbox;
+
+    /**
+     * The confirmation application-service waits for. Until this arrives it
+     * cannot honestly say the loan exists.
+     */
+    public void publishLoanCreated(Long loanId, Long userId, Long applicationId, String loanType,
+                                   BigDecimal principal, BigDecimal interestRate, Integer termMonths) {
+        send(LoanCreated.of(loanId, userId, applicationId, loanType, principal, interestRate, termMonths));
+        log.info("Published LOAN_CREATED: loanId={}, applicationId={}", loanId, applicationId);
+    }
 
     public void publishLoanDisbursed(Long loanId, Long userId, BigDecimal principal, Long accountId) {
         send(LoanDisbursed.of(loanId, userId, principal, accountId));
