@@ -28,13 +28,25 @@ public record CreditCardCreated(
         Long cardId,
         Long userId,
         String cardType,
-        String last4) implements DomainEvent {
+        String last4,
+        Long applicationId) implements DomainEvent {
 
-    public static final int VERSION = 1;
+    /**
+     * Version 2 adds {@code applicationId}. Without it this event said a card
+     * existed but not which application asked for one, so application-service
+     * could not tell that the product it was waiting for had arrived — and an
+     * application stayed at PROVISIONING for ever.
+     */
+    public static final int VERSION = 2;
 
     public static CreditCardCreated of(Long cardId, Long userId, String cardType, String last4) {
+        return of(cardId, userId, cardType, last4, null);
+    }
+
+    public static CreditCardCreated of(Long cardId, Long userId, String cardType, String last4,
+                                       Long applicationId) {
         return new CreditCardCreated(EventMeta.newId(), EventTypes.CREDIT_CARD_CREATED, VERSION,
-                EventMeta.now(), cardId, userId, cardType, last4);
+                EventMeta.now(), cardId, userId, cardType, last4, applicationId);
     }
 
     @Override

@@ -76,8 +76,10 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         card = cardRepository.save(card);
         // last4 only: the notification names the card, it does not need the number.
+        // The application id travels with it: this event is what tells
+        // application-service the product it asked for now exists.
         eventProducer.publishCardCreated(card.getId(), card.getUserId(), card.getCardType().name(),
-                CardNumberMasker.last4(card.getCardNumber()));
+                CardNumberMasker.last4(card.getCardNumber()), card.getApplicationId());
         log.info("Created credit card id={} for userId={}", card.getId(), card.getUserId());
         return cardMapper.toResponse(card);
     }

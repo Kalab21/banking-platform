@@ -36,6 +36,7 @@ public final class EventTypes {
     public static final String CREDIT_CARD_STATEMENT_GENERATED = "CREDIT_CARD_STATEMENT_GENERATED";
 
     // loan-events
+    public static final String LOAN_CREATED = "LOAN_CREATED";
     public static final String LOAN_DISBURSED = "LOAN_DISBURSED";
     public static final String LOAN_REPAYMENT_MADE = "LOAN_REPAYMENT_MADE";
     public static final String LOAN_PAID_OFF = "LOAN_PAID_OFF";

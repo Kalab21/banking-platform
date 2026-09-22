@@ -39,8 +39,9 @@ public class CreditCardEventProducer {
         log.info("Published CREDIT_CARD_TRANSACTION_COMPLETED: ref={}, type={}, amount={}", ref, type, amount);
     }
 
-    public void publishCardCreated(Long cardId, Long userId, String cardType, String last4) {
-        send(CreditCardCreated.of(cardId, userId, cardType, last4));
+    public void publishCardCreated(Long cardId, Long userId, String cardType, String last4,
+                                   Long applicationId) {
+        send(CreditCardCreated.of(cardId, userId, cardType, last4, applicationId));
         log.info("Published CREDIT_CARD_CREATED: cardId={}, userId={}", cardId, userId);
     }
 
