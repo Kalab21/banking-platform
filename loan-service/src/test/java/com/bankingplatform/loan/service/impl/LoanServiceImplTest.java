@@ -71,6 +71,7 @@ class LoanServiceImplTest {
     @Mock private AmortizationScheduleRepository scheduleRepository;
     @Mock private LoanRepaymentRepository repaymentRepository;
     @Mock private AccountClient accountClient;
+    @Mock private com.bankingplatform.loan.service.AccountOwnershipGuard accountOwnership;
     @Mock private LoanEventProducer eventProducer;
     @Mock private LoanMapper loanMapper;
     @Mock private AmortizationMapper amortizationMapper;
