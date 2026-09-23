@@ -4,6 +4,7 @@ import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.application.dto.ApplicationResponse;
 import com.bankingplatform.application.dto.CreateApplicationRequest;
+import com.bankingplatform.application.dto.DecisionSnapshotResponse;
 import com.bankingplatform.application.dto.OfferResponse;
 import com.bankingplatform.application.dto.ReviewRequest;
 import com.bankingplatform.application.model.ApplicationStatus;
@@ -83,6 +84,20 @@ public class ApplicationController {
         // open, an applicant could approve their own loan and set the amount.
         AccessGuard.requireStaff(caller);
         return ResponseEntity.ok(applicationService.review(id, request));
+    }
+
+    @GetMapping("/{id}/decisions")
+    @Operation(summary = "Every decision taken on an application (staff only)")
+    public ResponseEntity<List<DecisionSnapshotResponse>> decisions(@PathVariable Long id,
+                                                                    CallerIdentity caller) {
+        // Staff-only, and not because the figures are secret from the customer
+        // who supplied most of them. A decision record carries the policy
+        // version, the exact ratios and the internal reason codes — the
+        // material for reviewing the bank's own decision, which is a different
+        // job from being told the outcome. The customer's view is the
+        // application and its offer.
+        AccessGuard.requireStaff(caller);
+        return ResponseEntity.ok(applicationService.decisionsFor(id));
     }
 
     @GetMapping("/{id}/offers")

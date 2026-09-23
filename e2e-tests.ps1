@@ -257,6 +257,48 @@ Assert "Account status = ACTIVE after clearing" ($acctCleared.status -eq "ACTIVE
 Write-Host "  Status=$($acctCleared.status)  Balance=$($acctCleared.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+Write-Host "`n=== STAFF: identity check ===" -ForegroundColor Cyan
+
+# Credit waits on a completed identity check. A customer registers PENDING and
+# reaches IN_REVIEW by submitting documents; only a reviewer moves them to
+# APPROVED. Deposit accounts need none of it, which is why FLOW 1 opened first.
+$STAFF_USERNAME = if ($env:NORTHBANK_DEMO_STAFF_USERNAME) { $env:NORTHBANK_DEMO_STAFF_USERNAME } else { "northbank.reviewer" }
+$STAFF_PASSWORD = if ($env:NORTHBANK_DEMO_STAFF_PASSWORD) { $env:NORTHBANK_DEMO_STAFF_PASSWORD } else { "ReviewerDemo2026!" }
+
+$staffAuth = Post "$GW/api/auth/login" @{ username=$STAFF_USERNAME; password=$STAFF_PASSWORD }
+Assert "A reviewer can sign in" ($staffAuth -and $staffAuth.token)
+$STAFF_TOKEN = $staffAuth.token
+
+if ($STAFF_TOKEN) {
+    # The customer submits what the check needs. Submitting moves them from
+    # PENDING to IN_REVIEW — started, and not yet good enough to lend against.
+    $kycDoc1 = Post "$GW/api/users/$USER_ID/kyc/documents" @{ documentType="PASSPORT"; documentRef="s3://kyc-docs/passport-e2e-$ts.jpg" } $TOKEN
+    Assert "Submit PASSPORT document" ($kycDoc1 -and $kycDoc1.id)
+    Assert "Document status = SUBMITTED" ($kycDoc1.status -eq "SUBMITTED")
+    $DOC1_ID = $kycDoc1.id
+
+    $kycDoc2 = Post "$GW/api/users/$USER_ID/kyc/documents" @{ documentType="PROOF_OF_ADDRESS"; documentRef="s3://kyc-docs/address-e2e-$ts.pdf" } $TOKEN
+    Assert "Submit PROOF_OF_ADDRESS document" ($kycDoc2 -and $kycDoc2.id)
+
+    $docs = Get "$GW/api/users/$USER_ID/kyc/documents" $TOKEN
+    Assert "GET KYC documents returns list" ((CountOf $docs) -ge 2)
+
+    $userInReview = Get "$GW/api/users/$USER_ID" $TOKEN
+    Assert "User KYC status = IN_REVIEW after document submission" ($userInReview.kycStatus -eq "IN_REVIEW")
+
+    # A customer cannot complete their own identity check, however politely
+    # they ask. That refusal is the assertion.
+    Assert-Refused "A customer cannot approve their own identity check" "PUT" `
+        "$GW/api/users/$USER_ID/kyc/status?status=APPROVED" $TOKEN 403
+
+    Assert-Refused "A customer cannot approve their own KYC document" "PUT" `
+        "$GW/api/kyc/documents/$DOC1_ID/review" $TOKEN 403 @{ status="APPROVED"; reviewedBy=1 }
+
+    $kycDone = Put "$GW/api/users/$USER_ID/kyc/status?status=APPROVED" $null $STAFF_TOKEN
+    Assert "A reviewer completes the identity check" ($kycDone -and $kycDone.kycStatus -eq "APPROVED")
+}
+
 Write-Host "`n=== FLOW 2: Credit Card Lifecycle ===" -ForegroundColor Cyan
 
 # Apply for credit card — will auto-reject (score 0 < 650), then manually approve
@@ -330,7 +372,12 @@ if ($cards -and $cards.Count -gt 0) {
     Assert "Credit card status = ACTIVE" ($card.status -eq "ACTIVE")
 
     # Purchase $200
-    $purchase = Post "$GW/api/credit-cards/$CARD_ID/purchase" @{ amount=200.00; description="Meridian Books purchase"; merchantName="Meridian Books"; merchantCategory="RETAIL" } $TOKEN
+    # A purchase is simulated by staff. A customer views card transactions; they
+    # do not invent them, and the refusal below is the assertion for that.
+    Assert-Refused "A customer cannot manufacture a card purchase" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/purchase" $TOKEN 403 `
+        @{ amount=5.00; description="Self-service spending"; merchantName="Harborline Groceries"; merchantCategory="GROCERIES" }
+    $purchase = Post "$GW/api/credit-cards/$CARD_ID/purchase" @{ amount=200.00; description="Meridian Books purchase"; merchantName="Meridian Books"; merchantCategory="RETAIL" } $STAFF_TOKEN
     Assert "Credit card purchase $200" ($purchase -ne $null)
 
     $cardAfter = Get "$GW/api/credit-cards/$CARD_ID" $TOKEN
@@ -518,6 +565,21 @@ if ($wire -and $wire.transferRef) {
 # Second-factor management is self-only: no customer, and no role, manages
 # another account's authenticator.
 # ─────────────────────────────────────────────────────────────────────────────
+# Staff review: the decision record a reviewer needs, and that the record is the
+# bank's working rather than the customer's view.
+if ($STAFF_TOKEN -and $CC_APP_ID) {
+    $decisions = Get "$GW/api/applications/$CC_APP_ID/decisions" $STAFF_TOKEN
+    Assert "A reviewer can read the decision record" ((CountOf $decisions) -gt 0)
+    $d = @($decisions)[0]
+    Assert "The decision names the policy it was taken under" ($null -ne $d.policyVersion)
+    Assert "The decision records the score it was taken on" ($null -ne $d.creditScoreAtDecision)
+    Assert "The decision carries machine-readable reasons" ($null -ne $d.reasonCodes)
+    Write-Host "  Decision: $($d.decision) under policy $($d.policyVersion)"
+
+    Assert-Refused "A customer cannot read the decision record" "GET" `
+        "$GW/api/applications/$CC_APP_ID/decisions" $TOKEN 403
+}
+
 # Card status authority: a cardholder may take precautions and undo them, and
 # may not touch anything the bank applied. The service used to assign whichever
 # status arrived in the request body, so a customer could mark their own card
@@ -526,8 +588,11 @@ if ($CARD_ID) {
     $frozen = Put "$GW/api/credit-cards/$CARD_ID/status" @{ status="CUSTOMER_FROZEN" } $TOKEN
     Assert "A customer may freeze their own card" ($frozen -and $frozen.status -eq "CUSTOMER_FROZEN")
 
+    # Simulated by staff, because a customer cannot make a purchase at all
+    # now. Sent as the customer this would be refused for the wrong reason:
+    # 403 for who is asking, rather than 422 for the card being frozen.
     Assert-Refused "A frozen card cannot be spent on" "POST" `
-        "$GW/api/credit-cards/$CARD_ID/purchase" $TOKEN 422 `
+        "$GW/api/credit-cards/$CARD_ID/purchase" $STAFF_TOKEN 422 `
         @{ amount=10.00; description="While frozen"; merchantName="Harborline Groceries"; merchantCategory="GROCERIES" }
 
     $thawed = Put "$GW/api/credit-cards/$CARD_ID/status" @{ status="ACTIVE" } $TOKEN
@@ -629,33 +694,17 @@ Assert "Notifications returned" ($notifs -ne $null)
 Write-Host "  UnreadCount=$($notifs.unreadCount)  Total=$($notifs.notifications.Count)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-Write-Host "`n=== FLOW 9: KYC Document Submission ===" -ForegroundColor Cyan
+Write-Host "`n=== FLOW 9: KYC state after review ===" -ForegroundColor Cyan
 
-# Submit passport
-$kycDoc1 = Post "$GW/api/users/$USER_ID/kyc/documents" @{ documentType="PASSPORT"; documentRef="s3://kyc-docs/passport-e2e-$ts.jpg" } $TOKEN
-Assert "Submit PASSPORT document" ($kycDoc1 -and $kycDoc1.id)
-Assert "Document status = SUBMITTED" ($kycDoc1.status -eq "SUBMITTED")
-$DOC1_ID = $kycDoc1.id
-
-# Submit proof of address
-$kycDoc2 = Post "$GW/api/users/$USER_ID/kyc/documents" @{ documentType="PROOF_OF_ADDRESS"; documentRef="s3://kyc-docs/address-e2e-$ts.pdf" } $TOKEN
-Assert "Submit PROOF_OF_ADDRESS document" ($kycDoc2 -and $kycDoc2.id)
-$DOC2_ID = $kycDoc2.id
-
-# GET documents
-$docs = Get "$GW/api/users/$USER_ID/kyc/documents" $TOKEN
-Assert "GET KYC documents returns list" ($docs -and $docs.Count -ge 2)
-Write-Host "  Documents submitted: $($docs.Count)"
-
-# Verify user kyc_status auto-transitioned to IN_REVIEW
+# The documents were submitted and the check completed above, before any credit
+# application, because credit will not proceed without it. What is left to
+# assert here is that the settled state is what the customer reads back.
 $userAfterKyc = Get "$GW/api/users/$USER_ID" $TOKEN
-Assert "User KYC status = IN_REVIEW after document submission" ($userAfterKyc.kycStatus -eq "IN_REVIEW")
+Assert "User KYC status = APPROVED after review" ($userAfterKyc.kycStatus -eq "APPROVED")
 Write-Host "  KycStatus=$($userAfterKyc.kycStatus)"
 
-# Review document (requires EMPLOYEE/ADMIN role — will be 403 with customer token)
-# In production use an admin token. Here we verify the endpoint exists and returns expected error.
-Assert-Refused "Customer cannot approve their own KYC document" "PUT" `
-    "$GW/api/kyc/documents/$DOC1_ID/review" $TOKEN 403 @{ status="APPROVED"; reviewedBy=1 }
+$docsAfter = Get "$GW/api/users/$USER_ID/kyc/documents" $TOKEN
+Assert "The submitted documents are still listed" ((CountOf $docsAfter) -ge 2)
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 10: Credit Score ===" -ForegroundColor Cyan

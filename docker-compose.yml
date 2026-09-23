@@ -176,6 +176,18 @@ services:
       # needs the same Redis the gateway already uses for its per-IP limit.
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # A staff account for this stack, so the controls that are not the
+      # customer's can actually be demonstrated and tested: reviewing a referred
+      # application, completing a KYC check, simulating a card purchase.
+      #
+      # Local only. The service creates nothing unless this is true, and this
+      # file is the only place it is set. The password is as synthetic as the
+      # rest of the demo data and sits beside the database password that has
+      # always been here — which is the convention for a repository meant to be
+      # read and run locally, and not a pattern for anything deployed.
+      NORTHBANK_DEMO_STAFF_ENABLED: "true"
+      NORTHBANK_DEMO_STAFF_USERNAME: northbank.reviewer
+      NORTHBANK_DEMO_STAFF_PASSWORD: ReviewerDemo2026!
     depends_on:
       postgres:
         condition: service_healthy

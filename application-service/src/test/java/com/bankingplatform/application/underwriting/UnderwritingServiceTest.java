@@ -172,13 +172,6 @@ class UnderwritingServiceTest {
     @DisplayName("KYC is not a binary of rejected and fine")
     class Kyc {
 
-        /** The policy as it will be once staff can approve KYC. */
-        private UnderwritingService withKycEnforced() {
-            UnderwritingPolicy armed = new UnderwritingPolicy();
-            armed.getProducts().values().forEach(rules -> rules.setRequiresVerifiedKyc(true));
-            return new UnderwritingService(armed);
-        }
-
         @Test
         @DisplayName("a failed check refuses even though the gate is off")
         void rejectedKycRefusesRegardlessOfTheGate() {
@@ -203,22 +196,12 @@ class UnderwritingServiceTest {
         }
 
         @Test
-        @DisplayName("with the gate off, an unfinished check does not hold an application up")
-        void pendingKycPassesWhileTheGateIsOff() {
-            // Today a customer registers PENDING and reaches IN_REVIEW at best,
-            // so arming this would refer every application ever submitted.
+        @DisplayName("an unfinished check refers a credit application")
+        void pendingKycRefersCredit() {
+            // The gate is armed now that a reviewer can complete a check. A
+            // customer registers PENDING and reaches IN_REVIEW by submitting
+            // documents; neither is good enough to lend against.
             UnderwritingDecision decision = underwriting.decide(
-                    soundPersonalLoan().build(), 780, "PENDING");
-
-            assertThat(decision.outcome()).isEqualTo(UnderwritingDecision.Outcome.APPROVE);
-        }
-
-        @Test
-        @DisplayName("with the gate on, an unfinished check refers rather than approving")
-        void pendingKycRefersWhenEnforced() {
-            // The bug this exists for: treating "not REJECTED" as "VERIFIED"
-            // lends to someone whose identity was never established.
-            UnderwritingDecision decision = withKycEnforced().decide(
                     soundPersonalLoan().build(), 780, "PENDING");
 
             assertThat(decision.outcome()).isEqualTo(UnderwritingDecision.Outcome.REFER);
@@ -226,12 +209,32 @@ class UnderwritingServiceTest {
         }
 
         @Test
-        @DisplayName("with the gate on, in review is unfinished and an absent status is too")
-        void inReviewAndMissingReferWhenEnforced() {
-            UnderwritingService armed = withKycEnforced();
+        @DisplayName("an unfinished check does not hold up opening a deposit account")
+        void pendingKycDoesNotBlockDepositAccounts() {
+            // Opening an empty account lends nothing, and it is how a customer
+            // starts. Requiring a completed check first would make the first
+            // step impossible for every new customer.
+            Application application = Application.builder()
+                    .applicationType(ApplicationType.CHECKING_ACCOUNT)
+                    .build();
 
-            assertThat(armed.decide(soundPersonalLoan().build(), 780, "IN_REVIEW").isReferred()).isTrue();
-            assertThat(armed.decide(soundPersonalLoan().build(), 780, null).isReferred()).isTrue();
+            assertThat(underwriting.decide(application, 0, "PENDING").isApproved()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a completed check lets a credit application through")
+        void approvedKycPassesCredit() {
+            UnderwritingDecision decision = underwriting.decide(
+                    soundPersonalLoan().build(), 780, "APPROVED");
+
+            assertThat(decision.outcome()).isEqualTo(UnderwritingDecision.Outcome.APPROVE);
+        }
+
+        @Test
+        @DisplayName("in review is unfinished, and an absent status is too")
+        void inReviewAndMissingRefer() {
+            assertThat(underwriting.decide(soundPersonalLoan().build(), 780, "IN_REVIEW").isReferred()).isTrue();
+            assertThat(underwriting.decide(soundPersonalLoan().build(), 780, null).isReferred()).isTrue();
         }
 
         @Test
@@ -239,10 +242,8 @@ class UnderwritingServiceTest {
         void approvedIsTheClearedState() {
             // user-service's enum is PENDING, IN_REVIEW, APPROVED, REJECTED.
             // Matching on a name it never emits would refer every customer.
-            UnderwritingService armed = withKycEnforced();
-
-            assertThat(armed.decide(soundPersonalLoan().build(), 780, "APPROVED").isApproved()).isTrue();
-            assertThat(armed.decide(soundPersonalLoan().build(), 780, "VERIFIED").isApproved()).isTrue();
+            assertThat(underwriting.decide(soundPersonalLoan().build(), 780, "APPROVED").isApproved()).isTrue();
+            assertThat(underwriting.decide(soundPersonalLoan().build(), 780, "VERIFIED").isApproved()).isTrue();
         }
     }
 

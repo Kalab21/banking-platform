@@ -131,6 +131,18 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<DecisionSnapshotResponse> decisionsFor(Long id) {
+        // Confirms the application exists first, so a reviewer asking about a
+        // number that is not an application is told that, rather than being
+        // handed an empty list that reads like "decided nothing".
+        findById(id);
+        return decisionSnapshotRepository.findByApplicationIdOrderByDecidedAtAsc(id).stream()
+                .map(DecisionSnapshotResponse::from)
+                .toList();
+    }
+
+    @Override
     public ApplicationResponse getById(Long id) {
         return applicationMapper.toResponse(findById(id));
     }
