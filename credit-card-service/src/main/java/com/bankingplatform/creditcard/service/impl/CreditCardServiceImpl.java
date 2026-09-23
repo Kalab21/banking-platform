@@ -1,6 +1,7 @@
 package com.bankingplatform.creditcard.service.impl;
 
 import com.bankingplatform.creditcard.client.AccountClient;
+import com.bankingplatform.creditcard.service.AccountOwnershipGuard;
 import com.bankingplatform.creditcard.dto.request.*;
 import com.bankingplatform.creditcard.dto.response.*;
 import com.bankingplatform.creditcard.exception.CardNotActiveException;
@@ -45,6 +46,7 @@ public class CreditCardServiceImpl implements CreditCardService {
     private final CreditCardTransactionRepository txRepository;
     private final CreditCardStatementRepository statementRepository;
     private final AccountClient accountClient;
+    private final AccountOwnershipGuard accountOwnership;
     private final CreditCardEventProducer eventProducer;
     private final CreditCardMapper cardMapper;
     private final CreditCardTransactionMapper txMapper;
@@ -128,6 +130,10 @@ public class CreditCardServiceImpl implements CreditCardService {
     @Override
     public CreditCardTransactionResponse cashAdvance(Long cardId, CashAdvanceRequest request) {
         CreditCard card = findCardForUpdate(cardId);
+
+        // Authorization before business rules, so a refusal never depends on
+        // the state of the attacker's own card.
+        accountOwnership.requireOwnedBy(request.getTargetAccountId(), card.getUserId(), "target");
         requireActive(card);
 
         BigDecimal fee = request.getAmount().multiply(CASH_ADVANCE_FEE_RATE).setScale(2, RoundingMode.HALF_UP);
@@ -161,6 +167,12 @@ public class CreditCardServiceImpl implements CreditCardService {
     @Override
     public CreditCardTransactionResponse makePayment(Long cardId, CardPaymentRequest request) {
         CreditCard card = findCardForUpdate(cardId);
+
+        // Authorization before business rules. Checked after them, the refusal
+        // would depend on the state of the attacker's own card: a card with
+        // nothing owing answered "no balance to pay" and never reached the
+        // ownership check at all.
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), card.getUserId(), "source");
 
         BigDecimal payAmount = request.getAmount().min(card.getCurrentBalance());
         if (payAmount.compareTo(BigDecimal.ZERO) <= 0) {

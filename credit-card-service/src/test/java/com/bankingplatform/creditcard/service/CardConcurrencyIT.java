@@ -105,6 +105,7 @@ class CardConcurrencyIT {
         service = new CreditCardServiceImpl(
                 cardRepository, txRepository, statementRepository,
                 Mockito.mock(AccountClient.class),
+                Mockito.mock(AccountOwnershipGuard.class),
                 Mockito.mock(CreditCardEventProducer.class),
                 Mockito.mock(CreditCardMapper.class),
                 Mockito.mock(CreditCardTransactionMapper.class),

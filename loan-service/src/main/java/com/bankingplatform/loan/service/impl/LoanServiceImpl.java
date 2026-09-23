@@ -1,6 +1,7 @@
 package com.bankingplatform.loan.service.impl;
 
 import com.bankingplatform.loan.client.AccountClient;
+import com.bankingplatform.loan.service.AccountOwnershipGuard;
 import com.bankingplatform.loan.dto.request.CreateLoanRequest;
 import com.bankingplatform.loan.dto.request.DisburseRequest;
 import com.bankingplatform.loan.dto.request.LoanRepaymentRequest;
@@ -40,6 +41,7 @@ public class LoanServiceImpl implements LoanService {
     private final AmortizationScheduleRepository scheduleRepository;
     private final LoanRepaymentRepository repaymentRepository;
     private final AccountClient accountClient;
+    private final AccountOwnershipGuard accountOwnership;
     private final LoanEventProducer eventProducer;
     private final LoanMapper loanMapper;
     private final AmortizationMapper amortizationMapper;
@@ -95,6 +97,13 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanResponse disburseLoan(Long loanId, DisburseRequest request) {
         Loan loan = findLoanForUpdate(loanId);
+
+        // The money lands in an account the borrower owns, or it does not land.
+        // Checked before the state rules, so a refusal never depends on the
+        // state of the attacker's own loan.
+        accountOwnership.requireOwnedBy(request.getDisbursementAccountId(), loan.getUserId(),
+                "disbursement");
+
         if (loan.getStatus() != LoanStatus.PENDING) {
             throw new LoanNotActiveException("Loan not in PENDING state: " + loan.getStatus());
         }
@@ -129,6 +138,10 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanRepaymentResponse makeRepayment(Long loanId, LoanRepaymentRequest request) {
         Loan loan = findLoanForUpdate(loanId);
+
+        // Authorization before business rules, so a refusal never depends on
+        // the state of the attacker's own loan.
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -205,6 +218,10 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanRepaymentResponse earlyPayoff(Long loanId, LoanRepaymentRequest request) {
         Loan loan = findLoanForUpdate(loanId);
+
+        // Authorization before business rules, so a refusal never depends on
+        // the state of the attacker's own loan.
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
