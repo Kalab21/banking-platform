@@ -5,6 +5,8 @@ import com.bankingplatform.creditcard.service.AccountOwnershipGuard;
 import com.bankingplatform.creditcard.dto.request.*;
 import com.bankingplatform.creditcard.dto.response.*;
 import com.bankingplatform.creditcard.exception.CardNotActiveException;
+import com.bankingplatform.creditcard.exception.CardStatusTransitionException;
+import com.bankingplatform.creditcard.model.CardStatusTransitions;
 import com.bankingplatform.creditcard.exception.InsufficientCreditException;
 import com.bankingplatform.creditcard.exception.ResourceNotFoundException;
 import com.bankingplatform.creditcard.kafka.producer.CreditCardEventProducer;
@@ -101,9 +103,26 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
 
     @Override
-    public CreditCardResponse updateStatus(Long cardId, UpdateCardStatusRequest request) {
+    public CreditCardResponse updateStatus(Long cardId, UpdateCardStatusRequest request,
+                                           boolean actingAsStaff) {
         CreditCard card = findCard(cardId);
-        card.setStatus(request.getStatus());
+        CardStatus from = card.getStatus();
+        CardStatus to = request.getStatus();
+
+        if (from == to) {
+            // Freezing a frozen card is what a second click looks like, not an
+            // error worth failing a request over.
+            return cardMapper.toResponse(card);
+        }
+        if (!CardStatusTransitions.mayMove(from, to, actingAsStaff)) {
+            // Says what is not allowed, not why the card is in the state it is
+            // in. A cardholder does not need to be told the bank blocked them
+            // for a reason they could then argue with.
+            throw new CardStatusTransitionException(
+                    "A card that is " + from + " cannot be set to " + to);
+        }
+
+        card.setStatus(to);
         return cardMapper.toResponse(cardRepository.save(card));
     }
 
@@ -346,7 +365,7 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
 
     private void requireActive(CreditCard card) {
-        if (card.getStatus() != CardStatus.ACTIVE) {
+        if (!card.getStatus().isSpendable()) {
             throw new CardNotActiveException("Card is not active: " + card.getStatus());
         }
     }

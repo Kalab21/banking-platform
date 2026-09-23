@@ -178,10 +178,10 @@ class CreditCardAuthorizationTest {
 
             mvc.perform(as(put("/api/credit-cards/{id}/status", CARD_OF_A), CUSTOMER_B, "CUSTOMER")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"status\":\"FROZEN\"}"))
+                            .content("{\"status\":\"CUSTOMER_FROZEN\"}"))
                     .andExpect(status().isForbidden());
 
-            verify(creditCardService, never()).updateStatus(anyLong(), any());
+            verify(creditCardService, never()).updateStatus(anyLong(), any(), org.mockito.ArgumentMatchers.anyBoolean());
         }
 
         @Test
@@ -221,6 +221,30 @@ class CreditCardAuthorizationTest {
                     .andExpect(status().isForbidden());
 
             verify(creditCardService, never()).makePayment(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("a customer cannot cut their own statement")
+        void customerCannotGenerateStatement() throws Exception {
+            // A statement is issued by the bank on a cycle. Left open, a
+            // cardholder could produce as many billing periods as they liked.
+            cardBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/credit-cards/{id}/statements/generate", CARD_OF_A),
+                            CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isForbidden());
+
+            verify(creditCardService, never()).generateStatement(anyLong());
+        }
+
+        @Test
+        @DisplayName("staff may cut a statement")
+        void staffMayGenerateStatement() throws Exception {
+            cardBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/credit-cards/{id}/statements/generate", CARD_OF_A),
+                            STAFF, "EMPLOYEE"))
+                    .andExpect(status().isCreated());
         }
 
         @Test

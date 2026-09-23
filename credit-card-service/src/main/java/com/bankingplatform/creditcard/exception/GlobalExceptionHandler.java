@@ -59,6 +59,17 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
     }
 
+    /**
+     * 403, not 422. The request is well formed and the card exists; the caller
+     * is simply not entitled to make this change. A customer clearing a block
+     * the bank applied is a permission failure, not a validation one.
+     */
+    @ExceptionHandler(CardStatusTransitionException.class)
+    public ResponseEntity<Map<String, Object>> handleCardStatusTransition(
+            CardStatusTransitionException ex) {
+        return error(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         String msg = ex.getBindingResult().getFieldErrors().stream()

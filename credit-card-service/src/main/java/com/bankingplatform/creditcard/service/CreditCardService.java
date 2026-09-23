@@ -11,7 +11,7 @@ public interface CreditCardService {
     CreditCardResponse createCard(CreateCreditCardRequest request);
     CreditCardResponse getCard(Long cardId);
     List<CreditCardResponse> getCardsByUser(Long userId);
-    CreditCardResponse updateStatus(Long cardId, UpdateCardStatusRequest request);
+    CreditCardResponse updateStatus(Long cardId, UpdateCardStatusRequest request, boolean actingAsStaff);
 
     CreditCardTransactionResponse purchase(Long cardId, PurchaseRequest request);
     CreditCardTransactionResponse cashAdvance(Long cardId, CashAdvanceRequest request);
