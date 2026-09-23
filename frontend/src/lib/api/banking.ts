@@ -5,6 +5,8 @@ import type {
   Account,
   AmortizationScheduleRow,
   Application,
+  CreateApplicationRequest,
+  Offer,
   AuthResponse,
   Beneficiary,
   CreditCard,
@@ -352,6 +354,45 @@ export function getApplications(userId: number): Promise<Application[]> {
 /** Staff view of the review queue. */
 export function getApplicationsByStatus(status: string): Promise<Application[]> {
   return apiFetchOptional<Application[]>(`/api/applications/status/${status}`, {}, []);
+}
+
+/** One application, for the customer who owns it or for staff. */
+export function getApplication(id: number): Promise<Application> {
+  return apiFetch<Application>(`/api/applications/${id}`);
+}
+
+/**
+ * Applies for a credit product.
+ *
+ * The request carries only what the customer knows: what they want, what they
+ * earn, what they already owe. The score, the rate, the term, the limit and the
+ * tier are the bank's, and the backend refuses a request that tries to state
+ * them.
+ */
+export function submitApplication(request: CreateApplicationRequest): Promise<Application> {
+  return apiFetch<Application>("/api/applications", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+/** The offers made on an application, newest first. */
+export function getOffers(applicationId: number): Promise<Offer[]> {
+  return apiFetchOptional<Offer[]>(`/api/applications/${applicationId}/offers`, {}, []);
+}
+
+/**
+ * Accepts the offer as it was made.
+ *
+ * No body, deliberately: a customer accepts what they were shown, and there is
+ * no shape in which edited terms could travel.
+ */
+export function acceptOffer(applicationId: number): Promise<Offer> {
+  return apiFetch<Offer>(`/api/applications/${applicationId}/offer/accept`, { method: "POST" });
+}
+
+export function declineOffer(applicationId: number): Promise<Offer> {
+  return apiFetch<Offer>(`/api/applications/${applicationId}/offer/decline`, { method: "POST" });
 }
 
 // --------------------------------------------------------------------- fraud

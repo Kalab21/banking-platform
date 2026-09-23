@@ -421,12 +421,70 @@ export interface UserStats {
 
 // ---------------------------------------------------------------- applications
 
+/**
+ * The products a customer may apply for.
+ *
+ * Deposit accounts are applied for too, through the onboarding wizard rather
+ * than the credit journey, which is why they are here and not in
+ * `CreditProductType`.
+ */
+export type ApplicationType =
+  | "CHECKING_ACCOUNT"
+  | "SAVINGS_ACCOUNT"
+  | "CREDIT_CARD"
+  | "PERSONAL_LOAN"
+  | "AUTO_LOAN"
+  | "MORTGAGE";
+
+/** The four products the credit journey offers. */
+export type CreditProductType = Exclude<
+  ApplicationType,
+  "CHECKING_ACCOUNT" | "SAVINGS_ACCOUNT"
+>;
+
+/**
+ * The backend's lifecycle, exactly.
+ *
+ * `OFFERED` means terms have been set and are waiting on the customer.
+ * `PROVISIONING` means the product has been asked for and not yet confirmed —
+ * so it is not a link to a product, however tempting that is to render.
+ */
+export type ApplicationStatus =
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "MANUAL_REVIEW"
+  | "OFFERED"
+  | "ACCEPTED"
+  | "DECLINED"
+  | "REJECTED"
+  | "PROVISIONING"
+  | "PROVISIONED"
+  | "CANCELLED";
+
+/**
+ * Why a decision went the way it did.
+ *
+ * These are the bank's own codes. The console translates them into something a
+ * customer can act on; it never shows the code itself, and it never shows the
+ * ratios behind them.
+ */
+export type ReasonCode =
+  | "CREDIT_SCORE_BELOW_MINIMUM"
+  | "DTI_ABOVE_POLICY"
+  | "LTV_ABOVE_POLICY"
+  | "REQUEST_AMOUNT_ABOVE_POLICY"
+  | "TERM_NOT_SUPPORTED"
+  | "KYC_REVIEW_REQUIRED"
+  | "KYC_REJECTED"
+  | "MANUAL_REVIEW_REQUIRED"
+  | "INSUFFICIENT_INFORMATION";
+
 /** `GET /api/applications/user/{userId}`. */
 export interface Application {
   id: number;
   userId: number;
-  applicationType: string;
-  status: string;
+  applicationType: ApplicationType;
+  status: ApplicationStatus;
   requestedAmount: number | null;
   approvedAmount: number | null;
   currency: string;
@@ -438,6 +496,47 @@ export interface Application {
   appliedAt: string | null;
   reviewedAt: string | null;
   createdAt: string;
+}
+
+/** What the customer may state. Everything else is the bank's to decide. */
+export interface CreateApplicationRequest {
+  userId: number;
+  applicationType: CreditProductType;
+  currency: string;
+  purpose?: string;
+  requestedAmount?: number;
+  termMonths?: number;
+  annualIncome?: number;
+  monthlyDebtObligations?: number;
+  assetValue?: number;
+  downPayment?: number;
+}
+
+export type OfferStatus = "OFFERED" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+
+/**
+ * `GET /api/applications/{id}/offers`.
+ *
+ * The terms are the bank's and are fixed once made. A customer accepts or
+ * declines this offer; there is deliberately no shape here for a modified one,
+ * and the accept endpoint takes no body.
+ */
+export interface Offer {
+  offerId: number;
+  applicationId: number;
+  productType: ApplicationType;
+  status: OfferStatus;
+  approvedAmount: number | null;
+  apr: number | null;
+  termMonths: number | null;
+  monthlyPayment: number | null;
+  creditLimit: number | null;
+  cardTier: string | null;
+  currency: string;
+  createdAt: string | null;
+  expiresAt: string | null;
+  acceptedAt: string | null;
+  declinedAt: string | null;
 }
 
 // ---------------------------------------------------------------------- errors

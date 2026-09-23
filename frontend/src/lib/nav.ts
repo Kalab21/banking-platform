@@ -1,4 +1,6 @@
 import {
+  FileText,
+  Sparkles,
   ArrowLeftRight,
   Bell,
   ClipboardList,
@@ -52,6 +54,19 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/move-money", label: "Move Money", icon: ArrowLeftRight },
       { href: "/transactions", label: "Transactions", icon: ReceiptText },
       { href: "/payments", label: "Payments", icon: HandCoins },
+    ],
+  },
+  /*
+   * Borrowing is its own family, not a corner of banking. Cards and loans sat
+   * under Banking beside the deposit accounts, which made credit look like
+   * something you get once you have an account — and left the products a
+   * customer could apply for with nowhere to be listed at all.
+   */
+  {
+    label: "Borrow & credit",
+    items: [
+      { href: "/credit", label: "Explore Credit", icon: Sparkles },
+      { href: "/applications", label: "My Applications", icon: FileText },
       { href: "/cards", label: "Credit Cards", icon: CreditCard },
       { href: "/loans", label: "Loans", icon: ClipboardList },
     ],

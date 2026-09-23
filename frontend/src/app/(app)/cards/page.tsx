@@ -51,7 +51,16 @@ export default async function CardsPage() {
         <Card>
           <EmptyState
             title="No credit cards"
-            description="Approved card applications will appear here with their limit, balance and statement dates."
+            description="When you have a card, its limit, balance and statement dates appear here."
+            action={
+              <Link
+                href="/credit"
+                className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
+              >
+                Explore credit
+                <ArrowRight aria-hidden className="size-4" />
+              </Link>
+            }
           />
         </Card>
       ) : (

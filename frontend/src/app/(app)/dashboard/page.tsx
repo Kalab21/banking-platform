@@ -186,9 +186,32 @@ export default async function DashboardPage() {
 
         {accounts.length === 0 ? (
           <Card>
+            {/*
+             * A customer with nothing yet gets both doors, not a dead end and
+             * not a shove towards one of them. Registration deliberately opens
+             * no products, so this is the first thing a new customer sees, and
+             * credit is a sibling of banking rather than something you earn by
+             * opening an account first.
+             */}
             <EmptyState
-              title="No accounts yet"
-              description="Once an account application is approved, it will appear here with its balance and activity."
+              title="Nothing here yet"
+              description="Open an account to hold money, or apply for a card or a loan. You can do either first."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Link
+                    href="/accounts"
+                    className="text-sm font-medium text-[var(--accent)] hover:underline"
+                  >
+                    Open an account
+                  </Link>
+                  <Link
+                    href="/credit"
+                    className="text-sm font-medium text-[var(--accent)] hover:underline"
+                  >
+                    Explore credit
+                  </Link>
+                </div>
+              }
             />
           </Card>
         ) : (
@@ -303,7 +326,18 @@ export default async function DashboardPage() {
             }
           />
           {cards.length === 0 ? (
-            <EmptyState title="No credit cards" description="Approved card applications appear here." />
+            <EmptyState
+              title="No credit cards"
+              description="Apply for one and it will appear here."
+              action={
+                <Link
+                  href="/credit"
+                  className="text-sm font-medium text-[var(--accent)] hover:underline"
+                >
+                  Explore credit
+                </Link>
+              }
+            />
           ) : (
             <CardBody className="space-y-4">
               <div>

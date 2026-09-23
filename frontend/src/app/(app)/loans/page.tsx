@@ -69,7 +69,16 @@ export default async function LoansPage() {
         <Card>
           <EmptyState
             title="No loans"
-            description="Approved loan applications will appear here once disbursed, with their schedule and payoff figures."
+            description="When you have a loan, its schedule and payoff figures appear here."
+            action={
+              <Link
+                href="/credit"
+                className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
+              >
+                Explore credit
+                <ArrowRight aria-hidden className="size-4" />
+              </Link>
+            }
           />
         </Card>
       ) : (
