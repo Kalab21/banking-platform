@@ -224,6 +224,23 @@ class CreditCardAuthorizationTest {
         }
 
         @Test
+        @DisplayName("a customer cannot manufacture a purchase on their own card")
+        void customerCannotPurchase() throws Exception {
+            // A real purchase arrives from a merchant through a card network.
+            // Left open, this let a cardholder mint spending, rewards and
+            // statement lines at will.
+            cardBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/credit-cards/{id}/purchase", CARD_OF_A), CUSTOMER_A, "CUSTOMER")
+                            .header(IdempotencyGuard.HEADER, "purchase-authorization-test")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"amount\":10.00,\"description\":\"x\",\"merchantName\":\"x\",\"merchantCategory\":\"RETAIL\"}"))
+                    .andExpect(status().isForbidden());
+
+            verify(creditCardService, never()).purchase(anyLong(), any());
+        }
+
+        @Test
         @DisplayName("a customer cannot cut their own statement")
         void customerCannotGenerateStatement() throws Exception {
             // A statement is issued by the bank on a cycle. Left open, a

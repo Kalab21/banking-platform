@@ -9,6 +9,10 @@ import java.util.List;
 
 public interface ApplicationService {
 
+    /** Every decision taken on an application, oldest first. */
+    java.util.List<com.bankingplatform.application.dto.DecisionSnapshotResponse> decisionsFor(Long id);
+
+
     ApplicationResponse submitApplication(CreateApplicationRequest request);
 
     ApplicationResponse getById(Long id);

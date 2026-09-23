@@ -26,6 +26,11 @@ SUFFIX="$(date +%s)"
 USERNAME="demo.customer.${SUFFIX}"
 PASSWORD="DemoPassword123!"
 
+# The reviewer this stack creates. Credit applications wait on a completed
+# identity check, and only a reviewer can complete one.
+STAFF_USERNAME="${NORTHBANK_DEMO_STAFF_USERNAME:-northbank.reviewer}"
+STAFF_PASSWORD="${NORTHBANK_DEMO_STAFF_PASSWORD:-ReviewerDemo2026!}"
+
 say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 ok()  { printf '  [ok] %s\n' "$1"; }
 
@@ -192,6 +197,30 @@ ok "Northwind Properties"
 
 # ------------------------------------------------------------------------ loan
 
+# ------------------------------------------------------------------------- kyc
+#
+# Credit needs a completed identity check. A customer registers PENDING and
+# reaches IN_REVIEW by submitting documents; only a reviewer moves them to
+# APPROVED, so the seed does what a real customer's application would wait for.
+# A deposit account needs none of this, which is why the accounts above opened
+# first.
+
+say "Submitting KYC documents"
+api POST "/api/users/${USER_ID}/kyc/documents"   '{"documentType":"PASSPORT","documentRef":"DEMO-PASSPORT-0001"}' "$TOKEN" > /dev/null
+ok "passport"
+api POST "/api/users/${USER_ID}/kyc/documents"   '{"documentType":"PROOF_OF_ADDRESS","documentRef":"DEMO-ADDRESS-0001"}' "$TOKEN" > /dev/null
+ok "proof of address"
+
+say "Completing the identity check as a reviewer"
+STAFF_TOKEN=$(api POST /api/auth/login   "{\"username\":\"${STAFF_USERNAME}\",\"password\":\"${STAFF_PASSWORD}\"}" | json token)
+if [[ -z "$STAFF_TOKEN" ]]; then
+  echo "  Could not sign in as ${STAFF_USERNAME}. user-service creates this account when"
+  echo "  NORTHBANK_DEMO_STAFF_ENABLED is true; see docker-compose.yml."
+  exit 1
+fi
+api PUT "/api/users/${USER_ID}/kyc/status?status=APPROVED" "" "$STAFF_TOKEN" > /dev/null
+ok "identity check approved by ${STAFF_USERNAME}"
+
 say "Applying for a loan and letting the bank issue it"
 # The seed asks for a loan the way a customer does. It does not state a rate or
 # a term, because those are the bank's to decide, and there is no longer an
@@ -244,8 +273,10 @@ CARD="$(await_product "/api/credit-cards/user/${USER_ID}" "$TOKEN" || true)"
 if [[ -n "$CARD" ]]; then
   CARD_JSON="$(api GET "/api/credit-cards/${CARD}" "" "$TOKEN")"
   ok "$(printf '%s' "$CARD_JSON" | json cardType) card — $(printf '%s' "$CARD_JSON" | json creditLimit) limit at $(printf '%s' "$CARD_JSON" | json apr)% APR"
+  # Purchases are simulated by the reviewer, not the cardholder: a customer
+  # views card transactions, they do not invent them.
   card_purchase() {
-    api POST "/api/credit-cards/${CARD}/purchase"       "{\"amount\":$1,\"description\":\"$2\",\"merchantName\":\"$2\",\"merchantCategory\":\"$3\"}"       "$TOKEN" > /dev/null
+    api POST "/api/credit-cards/${CARD}/purchase"       "{\"amount\":$1,\"description\":\"$2\",\"merchantName\":\"$2\",\"merchantCategory\":\"$3\"}"       "$STAFF_TOKEN" > /dev/null
     ok "$2"
   }
   card_purchase 186.40 "Harborline Groceries" "GROCERIES"
@@ -254,16 +285,6 @@ if [[ -n "$CARD" ]]; then
   api POST "/api/credit-cards/${CARD}/payment"     "{\"amount\":200.00,\"sourceAccountId\":${CHECKING}}" "$TOKEN" > /dev/null
   ok "200.00 paid off the balance"
 fi
-
-# ------------------------------------------------------------------------- kyc
-
-say "Submitting KYC documents"
-api POST "/api/users/${USER_ID}/kyc/documents" \
-  '{"documentType":"PASSPORT","documentRef":"DEMO-PASSPORT-0001"}' "$TOKEN" > /dev/null
-ok "passport"
-api POST "/api/users/${USER_ID}/kyc/documents" \
-  '{"documentType":"PROOF_OF_ADDRESS","documentRef":"DEMO-ADDRESS-0001"}' "$TOKEN" > /dev/null
-ok "proof of address"
 
 # ------------------------------------------------------------------ backdating
 

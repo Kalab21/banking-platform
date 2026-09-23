@@ -101,18 +101,19 @@ public class UnderwritingPolicy {
         /**
          * Whether an <em>unfinished</em> identity check holds this product back.
          *
-         * <p>Off everywhere today, and deliberately so. A customer registers
-         * with KYC {@code PENDING} and submitting documents only reaches
-         * {@code IN_REVIEW}; nothing moves them to {@code APPROVED} except a
-         * staff review, and no staff review path exists yet. Arming this now
-         * would refer every credit application ever submitted, which is not a
-         * safer bank, only a bank that issues nothing.
+         * <p>On for credit, off for deposit accounts. A customer registers with
+         * KYC {@code PENDING} and reaches {@code IN_REVIEW} by submitting
+         * documents; only a staff review moves them to {@code APPROVED}. Until
+         * that review existed there was nothing to wait for, so arming this
+         * would have referred every credit application ever submitted — not a
+         * safer bank, just one that issued nothing. Staff review exists now.
          *
-         * <p>It is switched on in the PR that gives staff a way to approve
-         * KYC. The semantics it governs are already implemented and tested:
-         * {@code PENDING} and {@code IN_REVIEW} are read as unfinished rather
-         * than as good enough, and this flag decides only what is done about
-         * that. A <em>failed</em> check refuses regardless of this flag.
+         * <p>Deposit accounts stay off deliberately. Opening an empty account
+         * lends nothing and is how a customer starts; requiring completed
+         * identity checks first would make the first step of the demo
+         * impossible, and there is no credit risk to hold back.
+         *
+         * <p>A <em>failed</em> check refuses regardless of this flag.
          */
         private boolean requiresVerifiedKyc = false;
 
@@ -312,6 +313,7 @@ public class UnderwritingPolicy {
 
         ProductRules card = new ProductRules();
         card.setMinCreditScore(650);
+        card.setRequiresVerifiedKyc(true);
         card.setReferBelowCreditScore(680);
         card.setMaxDti(new BigDecimal("0.45"));
         card.setReferAboveDti(new BigDecimal("0.40"));
@@ -326,6 +328,7 @@ public class UnderwritingPolicy {
 
         ProductRules personal = new ProductRules();
         personal.setMinCreditScore(600);
+        personal.setRequiresVerifiedKyc(true);
         personal.setReferBelowCreditScore(640);
         personal.setMaxDti(new BigDecimal("0.43"));
         personal.setReferAboveDti(new BigDecimal("0.38"));
@@ -338,6 +341,7 @@ public class UnderwritingPolicy {
 
         ProductRules auto = new ProductRules();
         auto.setMinCreditScore(620);
+        auto.setRequiresVerifiedKyc(true);
         auto.setReferBelowCreditScore(660);
         auto.setMaxDti(new BigDecimal("0.45"));
         auto.setReferAboveDti(new BigDecimal("0.40"));
@@ -351,6 +355,7 @@ public class UnderwritingPolicy {
 
         ProductRules mortgage = new ProductRules();
         mortgage.setMinCreditScore(700);
+        mortgage.setRequiresVerifiedKyc(true);
         mortgage.setReferBelowCreditScore(740);
         mortgage.setMaxDti(new BigDecimal("0.36"));
         mortgage.setReferAboveDti(new BigDecimal("0.31"));

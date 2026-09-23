@@ -101,16 +101,15 @@ public class CreditCardController {
                                                                    @RequestHeader(name = IdempotencyGuard.HEADER,
                                                                            required = false) String idempotencyKey,
                                                                    CallerIdentity caller) {
-        // NOTE: still customer-callable, and it should not be. A cardholder
-        // does not manufacture their own purchases — a real one arrives from a
-        // merchant through a card network, and this platform has neither, so
-        // this is a simulation that currently lets a customer mint spending,
-        // rewards and statement lines.
+        // A cardholder does not manufacture their own purchases. A real one
+        // arrives from a merchant through a card network, and this platform has
+        // neither — so this is a simulation, and left open it let a customer
+        // mint spending, rewards and statement lines at will.
         //
-        // Closing it needs a staff or demo caller that can drive the seed and
-        // the E2E suite, and no reproducible staff account exists yet. The same
-        // blocker holds back the KYC gate in application-service. Both are
-        // closed in the staff-review work, together.
+        // It stays, because the demo needs card history to show, but behind a
+        // deliberate boundary. A customer views transactions; they do not
+        // invent them.
+        AccessGuard.requireStaff(caller);
         requireOwnsCard(caller, cardId);
         return idempotency.execute(idempotencyKey, PURCHASE, caller, keyed(cardId, request),
                 CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
