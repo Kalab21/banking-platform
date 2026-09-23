@@ -81,12 +81,16 @@ public class CreditCardController {
     }
 
     @PutMapping("/{cardId}/status")
-    @Operation(summary = "Freeze, unfreeze, or close a card")
+    @Operation(summary = "Freeze or unfreeze a card")
     public ResponseEntity<CreditCardResponse> updateStatus(@PathVariable Long cardId,
                                                              @Valid @RequestBody UpdateCardStatusRequest request,
                                                              CallerIdentity caller) {
         requireOwnsCard(caller, cardId);
-        return ResponseEntity.ok(creditCardService.updateStatus(cardId, request));
+        // Owning the card says which card; it does not say which states the
+        // caller may put it in. A cardholder may freeze and unfreeze their own
+        // card and nothing else — a block or a default is the bank's, and
+        // staff act under a different table of moves.
+        return ResponseEntity.ok(creditCardService.updateStatus(cardId, request, caller.isStaff()));
     }
 
     @PostMapping("/{cardId}/purchase")
@@ -97,8 +101,16 @@ public class CreditCardController {
                                                                    @RequestHeader(name = IdempotencyGuard.HEADER,
                                                                            required = false) String idempotencyKey,
                                                                    CallerIdentity caller) {
-        // Ownership first, then the guard. A refused request must neither
-        // claim a key nor leave a cached result behind it.
+        // NOTE: still customer-callable, and it should not be. A cardholder
+        // does not manufacture their own purchases — a real one arrives from a
+        // merchant through a card network, and this platform has neither, so
+        // this is a simulation that currently lets a customer mint spending,
+        // rewards and statement lines.
+        //
+        // Closing it needs a staff or demo caller that can drive the seed and
+        // the E2E suite, and no reproducible staff account exists yet. The same
+        // blocker holds back the KYC gate in application-service. Both are
+        // closed in the staff-review work, together.
         requireOwnsCard(caller, cardId);
         return idempotency.execute(idempotencyKey, PURCHASE, caller, keyed(cardId, request),
                 CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
@@ -155,10 +167,14 @@ public class CreditCardController {
     }
 
     @PostMapping("/{cardId}/statements/generate")
-    @Operation(summary = "Manually trigger statement generation")
+    @Operation(summary = "Trigger statement generation (staff/demo only)")
     public ResponseEntity<CreditCardStatementResponse> generateStatement(@PathVariable Long cardId,
                                                                          CallerIdentity caller) {
-        requireOwnsCard(caller, cardId);
+        // A statement is something the bank issues on a cycle, not something a
+        // cardholder asks for. Left open, a customer could cut a statement
+        // whenever they liked and produce as many billing periods as they
+        // wanted; StatementGeneratorJob owns the real schedule.
+        AccessGuard.requireStaff(caller);
         return ResponseEntity.status(HttpStatus.CREATED).body(creditCardService.generateStatement(cardId));
     }
 

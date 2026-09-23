@@ -330,7 +330,7 @@ if ($cards -and $cards.Count -gt 0) {
     Assert "Credit card status = ACTIVE" ($card.status -eq "ACTIVE")
 
     # Purchase $200
-    $purchase = Post "$GW/api/credit-cards/$CARD_ID/purchase" @{ amount=200.00; description="Amazon purchase"; merchantName="Amazon"; merchantCategory="RETAIL" } $TOKEN
+    $purchase = Post "$GW/api/credit-cards/$CARD_ID/purchase" @{ amount=200.00; description="Meridian Books purchase"; merchantName="Meridian Books"; merchantCategory="RETAIL" } $TOKEN
     Assert "Credit card purchase $200" ($purchase -ne $null)
 
     $cardAfter = Get "$GW/api/credit-cards/$CARD_ID" $TOKEN
@@ -438,7 +438,7 @@ if ($loans -and $loans.Count -gt 0) {
 Write-Host "`n=== FLOW 5: Scheduled Payment ===" -ForegroundColor Cyan
 
 # Create beneficiary first
-$ben = Post "$GW/api/payments/beneficiaries" @{ userId=$USER_ID; name="E2E Landlord"; nickname="Landlord"; accountNumber="9876543210"; bankName="Chase"; routingNumber="021000021"; beneficiaryType="EXTERNAL_ACH"; currency="USD" } $TOKEN
+$ben = Post "$GW/api/payments/beneficiaries" @{ userId=$USER_ID; name="E2E Landlord"; nickname="Landlord"; accountNumber="9876543210"; bankName="Example Bank"; routingNumber="021000021"; beneficiaryType="EXTERNAL_ACH"; currency="USD" } $TOKEN
 Assert "Create beneficiary" ($ben -and $ben.id)
 $BEN_ID = $ben.id
 
@@ -456,7 +456,7 @@ Assert "Upcoming scheduled payments visible" ($upcoming -ne $null)
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 6: Wire Transfer ===" -ForegroundColor Cyan
 
-$wire = Post "$GW/api/integrations/wire-transfer" @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="London Corp Ltd"; beneficiaryAccount="GB29NWBK60161331926819"; swiftCode="NWBKGB2L"; bankName="NatWest"; bankCountry="GB"; amount=5000.00; currency="USD"; purpose="Business payment" } $TOKEN
+$wire = Post "$GW/api/integrations/wire-transfer" @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="London Corp Ltd"; beneficiaryAccount="GB29EXMP60161331926819"; swiftCode="EXMPGB2L"; bankName="Example Bank"; bankCountry="GB"; amount=5000.00; currency="USD"; purpose="Business payment" } $TOKEN
 Assert "WIRE transfer initiated" ($wire -and $wire.transferRef)
 Assert "Status = PENDING" ($wire.status -eq "PENDING")
 # The services run in UTC and this script runs in the machine's local zone, so
@@ -499,7 +499,7 @@ $OTHER_TOKEN = $otherAuth.token
 
 Assert-Refused "Another customer cannot wire from an account they do not own" "POST" `
     "$GW/api/integrations/wire-transfer" $OTHER_TOKEN 403 `
-    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="GB29NWBK60161331926819"; swiftCode="NWBKGB2L"; bankName="NatWest"; bankCountry="GB"; amount=100.00; currency="USD"; purpose="Not theirs" }
+    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="GB29EXMP60161331926819"; swiftCode="EXMPGB2L"; bankName="Example Bank"; bankCountry="GB"; amount=100.00; currency="USD"; purpose="Not theirs" }
 
 Assert-Refused "Another customer cannot ACH from an account they do not own" "POST" `
     "$GW/api/integrations/ach-transfer" $OTHER_TOKEN 403 `
@@ -517,6 +517,35 @@ if ($wire -and $wire.transferRef) {
 
 # Second-factor management is self-only: no customer, and no role, manages
 # another account's authenticator.
+# ─────────────────────────────────────────────────────────────────────────────
+# Card status authority: a cardholder may take precautions and undo them, and
+# may not touch anything the bank applied. The service used to assign whichever
+# status arrived in the request body, so a customer could mark their own card
+# defaulted, or clear a default and carry on spending.
+if ($CARD_ID) {
+    $frozen = Put "$GW/api/credit-cards/$CARD_ID/status" @{ status="CUSTOMER_FROZEN" } $TOKEN
+    Assert "A customer may freeze their own card" ($frozen -and $frozen.status -eq "CUSTOMER_FROZEN")
+
+    Assert-Refused "A frozen card cannot be spent on" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/purchase" $TOKEN 422 `
+        @{ amount=10.00; description="While frozen"; merchantName="Harborline Groceries"; merchantCategory="GROCERIES" }
+
+    $thawed = Put "$GW/api/credit-cards/$CARD_ID/status" @{ status="ACTIVE" } $TOKEN
+    Assert "A customer may lift their own freeze" ($thawed -and $thawed.status -eq "ACTIVE")
+
+    Assert-Refused "A customer cannot mark their own card defaulted" "PUT" `
+        "$GW/api/credit-cards/$CARD_ID/status" $TOKEN 403 @{ status="DEFAULTED" }
+
+    Assert-Refused "A customer cannot block their own card as the bank would" "PUT" `
+        "$GW/api/credit-cards/$CARD_ID/status" $TOKEN 403 @{ status="SYSTEM_BLOCKED" }
+
+    Assert-Refused "A customer cannot close their own card by setting the state" "PUT" `
+        "$GW/api/credit-cards/$CARD_ID/status" $TOKEN 403 @{ status="CLOSED" }
+
+    Assert-Refused "A customer cannot cut their own statement" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/statements/generate" $TOKEN 403
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Cross-resource ownership: both sides of a money movement, not just one.
 #

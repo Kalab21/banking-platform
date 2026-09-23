@@ -226,7 +226,15 @@ export interface LoanRepayment {
 // ----------------------------------------------------------------- credit cards
 
 export type CardType = "STANDARD" | "GOLD" | "PLATINUM";
-export type CardStatus = "ACTIVE" | "BLOCKED" | "CLOSED" | "EXPIRED";
+// The backend's vocabulary, exactly. These drifted apart: the console
+// listed BLOCKED and EXPIRED, neither of which the service could ever
+// return, and did not list the frozen states it actually did return.
+export type CardStatus =
+  | "ACTIVE"
+  | "CUSTOMER_FROZEN"
+  | "SYSTEM_BLOCKED"
+  | "DEFAULTED"
+  | "CLOSED";
 
 /**
  * `GET /api/credit-cards/{cardId}`.

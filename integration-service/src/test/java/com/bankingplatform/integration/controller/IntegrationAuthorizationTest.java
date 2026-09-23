@@ -101,7 +101,7 @@ class IntegrationAuthorizationTest {
         return """
                 {"fromAccountId":5,"beneficiaryName":"London Corp Ltd",
                  "beneficiaryAccount":"GB29NWBK60161331926819","routingNumber":"026009593",
-                 "bankName":"NatWest","bankCountry":"GB","amount":5000.00,
+                 "bankName":"Example Bank","bankCountry":"GB","amount":5000.00,
                  "currency":"USD","purpose":"Business payment"}
                 """;
     }
