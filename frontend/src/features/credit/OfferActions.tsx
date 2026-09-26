@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button, FormError } from "@/components/ui/form";
 import { acceptOfferAction, declineOfferAction, type CreditFormState } from "@/features/credit/actions";
 
@@ -22,6 +22,9 @@ export function OfferActions({ applicationId }: { applicationId: number }) {
     {},
   );
 
+  // Declining closes the offer for good, so it takes a second, explicit click.
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
+
   const error = acceptState.error ?? declineState.error;
 
   return (
@@ -36,16 +39,35 @@ export function OfferActions({ applicationId }: { applicationId: number }) {
           </Button>
         </form>
 
-        <form action={decline}>
-          <input type="hidden" name="applicationId" value={applicationId} />
-          <Button type="submit" variant="secondary" disabled={accepting || declining}>
-            {declining ? "Declining…" : "Decline"}
+        {confirmingDecline ? (
+          <form action={decline} className="flex flex-wrap gap-2">
+            <input type="hidden" name="applicationId" value={applicationId} />
+            <Button type="submit" variant="danger" disabled={accepting || declining}>
+              {declining ? "Declining…" : "Confirm decline"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setConfirmingDecline(false)}
+              disabled={declining}
+            >
+              Keep offer
+            </Button>
+          </form>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setConfirmingDecline(true)}
+            disabled={accepting || declining}
+          >
+            Decline
           </Button>
-        </form>
+        )}
       </div>
 
-      <p className="text-xs text-[var(--text-muted)]">
-        Accepting these terms creates the product. Declining closes this offer for good.
+      <p className="text-xs text-ink-muted">
+        Accepting these terms starts setting up your product. Declining closes this offer for good.
       </p>
     </div>
   );

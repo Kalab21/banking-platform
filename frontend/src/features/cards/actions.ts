@@ -30,12 +30,13 @@ export async function setCardFreezeAction(
   const intent = String(formData.get("intent"));
   if (!Number.isFinite(cardId)) return { error: "That card could not be found." };
 
+  if (intent !== "freeze" && intent !== "unfreeze") return { error: "That change is not available." };
   const status = intent === "freeze" ? "CUSTOMER_FROZEN" : "ACTIVE";
 
   try {
     await apiFetch<CreditCard>(`/api/credit-cards/${cardId}/status`, {
       method: "PUT",
-      body: JSON.stringify({ status }),
+      body: { status },
     });
     revalidatePath("/cards");
     revalidatePath(`/cards/${cardId}`);

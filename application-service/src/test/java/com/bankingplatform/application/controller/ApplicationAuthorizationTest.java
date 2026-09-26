@@ -166,6 +166,80 @@ class ApplicationAuthorizationTest {
 
             verify(applicationService, never()).cancel(anyLong(), anyLong());
         }
+
+        @Test
+        @DisplayName("cannot read the offers on another customer's application")
+        void foreignOffersDenied() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_B));
+
+            mvc.perform(as(get("/api/applications/{id}/offers", 5L), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isForbidden());
+
+            verify(offerService, never()).forApplication(anyLong());
+        }
+
+        @Test
+        @DisplayName("cannot accept another customer's offer")
+        void foreignAcceptDenied() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_B));
+
+            mvc.perform(as(post("/api/applications/{id}/offer/accept", 5L), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isForbidden());
+
+            verify(offerService, never()).accept(anyLong(), anyLong());
+        }
+
+        @Test
+        @DisplayName("cannot decline another customer's offer")
+        void foreignDeclineDenied() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_B));
+
+            mvc.perform(as(post("/api/applications/{id}/offer/decline", 5L), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isForbidden());
+
+            verify(offerService, never()).decline(anyLong(), anyLong());
+        }
+    }
+
+    @Nested
+    @DisplayName("a customer and the offer on their own application")
+    class OwnOffers {
+
+        @Test
+        @DisplayName("may read the offers")
+        void ownOffersAllowed() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+            when(offerService.forApplication(5L)).thenReturn(List.of());
+
+            mvc.perform(as(get("/api/applications/{id}/offers", 5L), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("accepts against the stored owner, and no request body can carry terms")
+        void ownAcceptUsesStoredOwner() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+
+            // A body naming other terms and another user is ignored: the
+            // endpoint reads no body, and the owner comes from the application.
+            mvc.perform(as(post("/api/applications/{id}/offer/accept", 5L), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":20,\"approvedAmount\":1000000,\"apr\":0.0001}"))
+                    .andExpect(status().isOk());
+
+            verify(offerService).accept(5L, CUSTOMER_A);
+        }
+
+        @Test
+        @DisplayName("declines against the stored owner")
+        void ownDeclineUsesStoredOwner() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+
+            mvc.perform(as(post("/api/applications/{id}/offer/decline", 5L), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isOk());
+
+            verify(offerService).decline(5L, CUSTOMER_A);
+        }
     }
 
     @Nested

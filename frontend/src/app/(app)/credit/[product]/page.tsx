@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Card, PageHeader } from "@/components/ui/primitives";
+import { Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { ApplyForm } from "@/features/credit/ApplyForm";
 import { CREDIT_PRODUCTS, creditProduct } from "@/features/credit/products";
 
@@ -37,7 +37,9 @@ export default async function ApplyPage({ params }: { params: Promise<{ product:
     <>
       <PageHeader title={`Apply for a ${found.name.toLowerCase()}`} description={found.summary} />
       <Card>
-        <ApplyForm product={found} />
+        <CardBody>
+          <ApplyForm product={found} />
+        </CardBody>
       </Card>
     </>
   );

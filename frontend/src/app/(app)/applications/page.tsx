@@ -7,6 +7,7 @@ import { ApiError, NetworkError } from "@/lib/api/client";
 import {
   Badge,
   Card,
+  CardBody,
   Detail,
   DetailList,
   EmptyState,
@@ -17,7 +18,7 @@ import {
 import { formatCurrency, formatDate, formatPercent, humanise } from "@/lib/format";
 import { OfferActions } from "@/features/credit/OfferActions";
 import { productLabel } from "@/features/credit/products";
-import { awaitingCustomer, statusSummary } from "@/features/credit/reasons";
+import { awaitingCustomer, offerHeading, offerIsOpen, statusSummary } from "@/features/credit/reasons";
 import type { Application, Offer } from "@/types/api";
 
 export const metadata: Metadata = { title: "My applications" };
@@ -64,7 +65,9 @@ function OfferTerms({ offer }: { offer: Offer }) {
           {formatCurrency(offer.monthlyPayment, offer.currency)}
         </Detail>
       ) : null}
-      {offer.expiresAt ? <Detail label="Offer valid until">{formatDate(offer.expiresAt)}</Detail> : null}
+      {offer.status === "OFFERED" && offer.expiresAt ? (
+        <Detail label="Offer valid until">{formatDate(offer.expiresAt)}</Detail>
+      ) : null}
     </DetailList>
   );
 }
@@ -74,7 +77,9 @@ export default async function ApplicationsPage() {
 
   let applications: Application[];
   try {
-    applications = await getApplications(session.userId);
+    // Newest first: the application a customer has just submitted is the one
+    // they came here to see.
+    applications = [...(await getApplications(session.userId))].sort((a, b) => b.id - a.id);
   } catch (error) {
     if (error instanceof ApiError || error instanceof NetworkError) {
       return (
@@ -95,12 +100,14 @@ export default async function ApplicationsPage() {
     ),
   );
   const offersByApplication = new Map<number, Offer>();
+  const offerErrors = new Set<number>();
   const fetched = await Promise.all(
     withOffers.map(async (application) => {
       try {
         return [application.id, (await getOffers(application.id))[0]] as const;
       } catch {
         // An offer that cannot be read should not take the whole page down.
+        offerErrors.add(application.id);
         return [application.id, undefined] as const;
       }
     }),
@@ -123,7 +130,7 @@ export default async function ApplicationsPage() {
           action={
             <Link
               href="/credit"
-              className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
               Explore credit
               <ArrowRight aria-hidden className="size-4" />
@@ -138,13 +145,13 @@ export default async function ApplicationsPage() {
 
             return (
               <Card key={application.id}>
-                <div className="grid gap-3">
+                <CardBody className="grid gap-3" data-application-id={application.id}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <h2 className="text-base font-semibold text-[var(--text-strong)]">
+                      <h2 className="text-base font-semibold text-ink">
                         {productLabel(application.applicationType)}
                       </h2>
-                      <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      <p className="mt-0.5 text-xs text-ink-muted">
                         Applied {formatDate(application.appliedAt ?? application.createdAt)}
                       </p>
                     </div>
@@ -153,7 +160,7 @@ export default async function ApplicationsPage() {
                     </Badge>
                   </div>
 
-                  <p className="text-sm text-[var(--text-muted)]">{statusSummary(application)}</p>
+                  <p className="text-sm text-ink-muted">{statusSummary(application)}</p>
 
                   {application.requestedAmount !== null || application.termMonths !== null ? (
                     <DetailList>
@@ -169,28 +176,38 @@ export default async function ApplicationsPage() {
                   ) : null}
 
                   {offer ? (
-                    <div className="rounded-[var(--radius-control)] border border-line p-3">
-                      <h3 className="mb-2 text-sm font-semibold text-[var(--text-strong)]">
-                        {awaitingCustomer(application) ? "Our offer" : "The terms you accepted"}
+                    <section
+                      aria-labelledby={`offer-${application.id}`}
+                      className="rounded-[var(--radius-control)] border border-line p-3"
+                    >
+                      <h3 id={`offer-${application.id}`} className="mb-2 text-sm font-semibold text-ink">
+                        {offerHeading(offer)}
                       </h3>
                       <OfferTerms offer={offer} />
-                    </div>
+                    </section>
                   ) : null}
 
-                  {awaitingCustomer(application) ? (
+                  {offerErrors.has(application.id) || (awaitingCustomer(application) && !offer) ? (
+                    <ErrorState
+                      title="We could not load this offer"
+                      message="The terms are not available right now, so you cannot accept or decline it here. Refresh and try again."
+                    />
+                  ) : null}
+
+                  {awaitingCustomer(application) && offer && offerIsOpen(offer) ? (
                     <OfferActions applicationId={application.id} />
                   ) : null}
 
                   {href ? (
                     <Link
                       href={href}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                     >
                       View your {productLabel(application.applicationType).toLowerCase()}
                       <ArrowRight aria-hidden className="size-4" />
                     </Link>
                   ) : null}
-                </div>
+                </CardBody>
               </Card>
             );
           })}

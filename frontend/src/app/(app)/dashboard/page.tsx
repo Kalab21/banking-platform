@@ -200,13 +200,13 @@ export default async function DashboardPage() {
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Link
                     href="/accounts"
-                    className="text-sm font-medium text-[var(--accent)] hover:underline"
+                    className="text-sm font-medium text-primary hover:underline"
                   >
                     Open an account
                   </Link>
                   <Link
                     href="/credit"
-                    className="text-sm font-medium text-[var(--accent)] hover:underline"
+                    className="text-sm font-medium text-primary hover:underline"
                   >
                     Explore credit
                   </Link>
@@ -328,11 +328,11 @@ export default async function DashboardPage() {
           {cards.length === 0 ? (
             <EmptyState
               title="No credit cards"
-              description="Apply for one and it will appear here."
+              description="When your card is ready, it will appear here."
               action={
                 <Link
                   href="/credit"
-                  className="text-sm font-medium text-[var(--accent)] hover:underline"
+                  className="text-sm font-medium text-primary hover:underline"
                 >
                   Explore credit
                 </Link>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { Card, PageHeader } from "@/components/ui/primitives";
+import { Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { CREDIT_PRODUCTS } from "@/features/credit/products";
 
 export const metadata: Metadata = { title: "Explore credit" };
@@ -26,29 +26,29 @@ export default function ExploreCreditPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         {CREDIT_PRODUCTS.map((product) => (
           <Card key={product.type}>
-            <div className="flex h-full flex-col gap-3">
+            <CardBody className="flex h-full flex-col gap-3">
               <div>
-                <h2 className="text-base font-semibold text-[var(--text-strong)]">
+                <h2 className="text-base font-semibold text-ink">
                   {product.name}
                 </h2>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">{product.summary}</p>
+                <p className="mt-1 text-sm text-ink-muted">{product.summary}</p>
               </div>
 
               <div className="mt-auto pt-2">
                 <Link
                   href={`/credit/${product.type.toLowerCase().replace(/_/g, "-")}`}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                 >
                   Apply
                   <ArrowRight aria-hidden className="size-4" />
                 </Link>
               </div>
-            </div>
+            </CardBody>
           </Card>
         ))}
       </div>
 
-      <p className="mt-6 text-xs text-[var(--text-muted)]">
+      <p className="mt-6 text-xs text-ink-muted">
         Northbank is a portfolio demonstration. Decisions are made by a demo policy against
         synthetic data — there is no credit bureau behind them, and no real money is lent.
       </p>

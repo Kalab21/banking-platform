@@ -580,6 +580,78 @@ if ($STAFF_TOKEN -and $CC_APP_ID) {
         "$GW/api/applications/$CC_APP_ID/decisions" $TOKEN 403
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+Write-Host "`n=== FLOW 3b: Decline, manual review and offer boundaries ===" -ForegroundColor Cyan
+
+# A second offer on the verified customer, to decline. The first two were
+# accepted; the decline path is its own lifecycle and needs its own proof.
+$declApp = Post "$GW/api/applications" @{ userId=$USER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=5000.00; termMonths=24; currency="USD"; purpose="Decline journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $TOKEN
+Assert "Submit a loan application to decline" ($declApp -and $declApp.status -eq "OFFERED") "status=$($declApp.status)"
+$DECL_APP_ID = $declApp.id
+
+if ($DECL_APP_ID -and $OTHER_TOKEN) {
+    # Another customer is refused on every offer route, by the stored owner of
+    # the application rather than by anything in the request.
+    Assert-Refused "Another customer cannot read this offer" "GET" `
+        "$GW/api/applications/$DECL_APP_ID/offers" $OTHER_TOKEN 403
+    Assert-Refused "Another customer cannot accept this offer" "POST" `
+        "$GW/api/applications/$DECL_APP_ID/offer/accept" $OTHER_TOKEN 403
+    Assert-Refused "Another customer cannot decline this offer" "POST" `
+        "$GW/api/applications/$DECL_APP_ID/offer/decline" $OTHER_TOKEN 403
+}
+
+if ($DECL_APP_ID) {
+    $loansBefore = CountOf (Get "$GW/api/loans/user/$USER_ID" $TOKEN)
+    $declined = Post "$GW/api/applications/$DECL_APP_ID/offer/decline" $null $TOKEN
+    Assert "Customer declines the offer" ($declined -and $declined.status -eq "DECLINED")
+    $declAfter = Get "$GW/api/applications/$DECL_APP_ID" $TOKEN
+    Assert "A declined application is DECLINED" ($declAfter.status -eq "DECLINED") "status=$($declAfter.status)"
+    Assert "A declined application names no product" ($null -eq $declAfter.productId)
+    Assert-Refused "A declined offer cannot then be accepted" "POST" `
+        "$GW/api/applications/$DECL_APP_ID/offer/accept" $TOKEN 409
+    # Nothing was published, so nothing can arrive. Give a consumer the time it
+    # would have taken anyway before counting.
+    Start-Sleep -Seconds 5
+    Assert "Declining provisioned no loan" ((CountOf (Get "$GW/api/loans/user/$USER_ID" $TOKEN)) -eq $loansBefore)
+}
+
+# The second customer has not finished an identity check, so policy refers
+# their credit application to a person. That referral is the real route into
+# MANUAL_REVIEW, not a state forced for the test.
+if ($OTHER_TOKEN -and $STAFF_TOKEN) {
+    $OTHER_ID = $otherAuth.userId
+    $mrApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="CREDIT_CARD"; currency="USD"; purpose="Manual review journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
+    Assert "An unverified customer's credit application is referred" ($mrApp -and $mrApp.status -eq "MANUAL_REVIEW") "status=$($mrApp.status)"
+    $MR_APP_ID = $mrApp.id
+
+    if ($MR_APP_ID) {
+        Assert-Refused "The applicant cannot resolve their own referral" "PUT" `
+            "$GW/api/applications/$MR_APP_ID/review" $OTHER_TOKEN 403 `
+            @{ decision="APPROVE"; reviewerNotes="Self-approval" }
+
+        $mrDecisions = @(Get "$GW/api/applications/$MR_APP_ID/decisions" $STAFF_TOKEN)
+        Assert "A reviewer sees why it was referred" (($mrDecisions | ForEach-Object { $_.reasonCodes }) -contains "KYC_REVIEW_REQUIRED")
+
+        $mrApproved = Put "$GW/api/applications/$MR_APP_ID/review" @{ decision="APPROVE"; reviewerNotes="Identity documents seen in branch" } $STAFF_TOKEN
+        Assert "A reviewer's approval becomes an offer" ($mrApproved -and $mrApproved.status -eq "OFFERED") "status=$($mrApproved.status)"
+        Assert "A reviewer's approval creates no product" ($null -eq $mrApproved.productId)
+        Assert "The approval produced offer terms" ((CountOf (Get "$GW/api/applications/$MR_APP_ID/offers" $OTHER_TOKEN)) -gt 0)
+        Start-Sleep -Seconds 5
+        Assert "No card exists until the customer accepts" ((CountOf (Get "$GW/api/credit-cards/user/$OTHER_ID" $OTHER_TOKEN)) -eq 0)
+    }
+
+    $rjApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=3000.00; termMonths=12; currency="USD"; purpose="Rejection journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
+    Assert "A second referral for rejection" ($rjApp -and $rjApp.status -eq "MANUAL_REVIEW") "status=$($rjApp.status)"
+    if ($rjApp.id) {
+        $rejected = Put "$GW/api/applications/$($rjApp.id)/review" @{ decision="REJECT"; reviewerNotes="Could not verify identity" } $STAFF_TOKEN
+        Assert "A reviewer's rejection is REJECTED" ($rejected -and $rejected.status -eq "REJECTED") "status=$($rejected.status)"
+        Assert "A rejection makes no offer" ((CountOf (Get "$GW/api/applications/$($rjApp.id)/offers" $OTHER_TOKEN)) -eq 0)
+        $acceptRejected = Status "POST" "$GW/api/applications/$($rjApp.id)/offer/accept" $OTHER_TOKEN
+        Assert "Nothing can be accepted on a rejected application" ($acceptRejected -in 404, 409) "got HTTP $acceptRejected"
+        Assert "A rejection provisions no loan" ((CountOf (Get "$GW/api/loans/user/$OTHER_ID" $OTHER_TOKEN)) -eq 0)
+    }
+}
+
 # Card status authority: a cardholder may take precautions and undo them, and
 # may not touch anything the bank applied. The service used to assign whichever
 # status arrived in the request body, so a customer could mark their own card

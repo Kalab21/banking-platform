@@ -348,7 +348,7 @@ export function cancelPayment(paymentId: number): Promise<Payment> {
 // --------------------------------------------------------------- applications
 
 export function getApplications(userId: number): Promise<Application[]> {
-  return apiFetchOptional<Application[]>(`/api/applications/user/${userId}`, {}, []);
+  return apiFetch<Application[]>(`/api/applications/user/${userId}`);
 }
 
 /** Staff view of the review queue. */
@@ -372,13 +372,13 @@ export function getApplication(id: number): Promise<Application> {
 export function submitApplication(request: CreateApplicationRequest): Promise<Application> {
   return apiFetch<Application>("/api/applications", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: request,
   });
 }
 
 /** The offers made on an application, newest first. */
 export function getOffers(applicationId: number): Promise<Offer[]> {
-  return apiFetchOptional<Offer[]>(`/api/applications/${applicationId}/offers`, {}, []);
+  return apiFetch<Offer[]>(`/api/applications/${applicationId}/offers`);
 }
 
 /**

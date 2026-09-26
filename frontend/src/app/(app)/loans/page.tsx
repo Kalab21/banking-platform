@@ -73,7 +73,7 @@ export default async function LoansPage() {
             action={
               <Link
                 href="/credit"
-                className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
               >
                 Explore credit
                 <ArrowRight aria-hidden className="size-4" />

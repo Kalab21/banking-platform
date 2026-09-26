@@ -1,4 +1,4 @@
-import type { Application, ReasonCode } from "@/types/api";
+import type { Application, Offer, ReasonCode } from "@/types/api";
 
 /**
  * What a customer is told, as opposed to what the bank recorded.
@@ -65,4 +65,30 @@ export function statusSummary(application: Application): string {
 /** Whether the customer still has a decision to make. */
 export function awaitingCustomer(application: Application): boolean {
   return application.status === "OFFERED";
+}
+
+/**
+ * Whether an offer can still be acted on. The backend refuses an offer past its
+ * expiry even while its stored status still reads OFFERED, so the date decides
+ * too — a button that can only fail is not an offer.
+ */
+export function offerIsOpen(offer: Offer, now: Date = new Date()): boolean {
+  if (offer.status !== "OFFERED") return false;
+  return !offer.expiresAt || new Date(offer.expiresAt).getTime() > now.getTime();
+}
+
+/** The heading over an offer's terms, in words that match what happened to it. */
+export function offerHeading(offer: Offer, now: Date = new Date()): string {
+  switch (offer.status) {
+    case "OFFERED":
+      return offerIsOpen(offer, now) ? "Our offer" : "This offer has expired";
+    case "ACCEPTED":
+      return "The terms you accepted";
+    case "DECLINED":
+      return "The offer you declined";
+    case "EXPIRED":
+      return "This offer has expired";
+    default:
+      return "Offer terms";
+  }
 }

@@ -491,6 +491,10 @@ export interface Application {
   termMonths: number | null;
   purpose: string | null;
   creditScoreAtApply: number | null;
+  annualIncome: number | null;
+  monthlyDebtObligations: number | null;
+  assetValue: number | null;
+  downPayment: number | null;
   reviewerNotes: string | null;
   productId: number | null;
   appliedAt: string | null;

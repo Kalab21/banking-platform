@@ -47,12 +47,13 @@ export function ApplyForm({ product }: { product: CreditProduct }) {
           label="How much would you like to borrow?"
           name="requestedAmount"
           requiredMark
+          required
           placeholder="10000.00"
         />
       ) : null}
 
       {product.asks.term && product.terms ? (
-        <SelectField label="Over how long?" name="termMonths" requiredMark>
+        <SelectField label="Over how long?" name="termMonths" requiredMark required>
           {product.terms.map((months) => (
             <option key={months} value={months}>
               {months} months
@@ -68,6 +69,7 @@ export function ApplyForm({ product }: { product: CreditProduct }) {
           }
           name="assetValue"
           requiredMark
+          required
           placeholder="250000.00"
         />
       ) : null}
@@ -85,6 +87,7 @@ export function ApplyForm({ product }: { product: CreditProduct }) {
         label="Your annual income before tax"
         name="annualIncome"
         requiredMark
+        required
         placeholder="90000.00"
       />
 
@@ -92,6 +95,7 @@ export function ApplyForm({ product }: { product: CreditProduct }) {
         label="What you already pay each month towards other debts"
         name="monthlyDebtObligations"
         requiredMark
+        required
         placeholder="450.00"
         hint="Loans, cards and other regular credit commitments."
       />
@@ -100,6 +104,8 @@ export function ApplyForm({ product }: { product: CreditProduct }) {
         <TextField
           label="What is it for?"
           name="purpose"
+          requiredMark={product.type === "PERSONAL_LOAN"}
+          required={product.type === "PERSONAL_LOAN"}
           placeholder="Home improvement"
           maxLength={200}
         />
@@ -111,7 +117,7 @@ export function ApplyForm({ product }: { product: CreditProduct }) {
         </Button>
       </div>
 
-      <p className="text-xs text-[var(--text-muted)]">
+      <p className="text-xs text-ink-muted">
         Submitting does not guarantee an offer. If we can lend, we will tell you the amount, the
         rate and the term, and it will be yours to accept or decline.
       </p>

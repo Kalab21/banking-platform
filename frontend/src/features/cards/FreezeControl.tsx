@@ -20,7 +20,7 @@ export function FreezeControl({ cardId, status }: { cardId: number; status: stri
 
   if (status !== "ACTIVE" && status !== "CUSTOMER_FROZEN") {
     return (
-      <p className="text-sm text-[var(--text-muted)]">
+      <p className="text-sm text-ink-muted">
         This card is not active. Please contact us about it — it is not something you can change
         here.
       </p>
@@ -43,7 +43,7 @@ export function FreezeControl({ cardId, status }: { cardId: number; status: stri
         </Button>
       </div>
 
-      <p className="text-xs text-[var(--text-muted)]">
+      <p className="text-xs text-ink-muted">
         {freezing
           ? "A frozen card cannot be spent on. You can unfreeze it yourself at any time."
           : "You froze this card. Unfreezing makes it spendable again."}
