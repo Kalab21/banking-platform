@@ -609,6 +609,10 @@ if ($DECL_APP_ID) {
     Assert "A declined application names no product" ($null -eq $declAfter.productId)
     Assert-Refused "A declined offer cannot then be accepted" "POST" `
         "$GW/api/applications/$DECL_APP_ID/offer/accept" $TOKEN 409
+    if ($STAFF_TOKEN) {
+        Assert-Refused "Staff cannot accept a declined customer offer either" "POST" `
+            "$GW/api/applications/$DECL_APP_ID/offer/accept" $STAFF_TOKEN 403
+    }
     # Nothing was published, so nothing can arrive. Give a consumer the time it
     # would have taken anyway before counting.
     Start-Sleep -Seconds 5
@@ -638,6 +642,20 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
         Assert "The approval produced offer terms" ((CountOf (Get "$GW/api/applications/$MR_APP_ID/offers" $OTHER_TOKEN)) -gt 0)
         Start-Sleep -Seconds 5
         Assert "No card exists until the customer accepts" ((CountOf (Get "$GW/api/credit-cards/user/$OTHER_ID" $OTHER_TOKEN)) -eq 0)
+
+        # Staff decided to make the offer; answering it is the applicant's
+        # decision, and there is no assisted-service workflow to act for them.
+        Assert-Refused "The reviewer cannot accept the customer's offer" "POST" `
+            "$GW/api/applications/$MR_APP_ID/offer/accept" $STAFF_TOKEN 403
+        Assert-Refused "The reviewer cannot decline the customer's offer" "POST" `
+            "$GW/api/applications/$MR_APP_ID/offer/decline" $STAFF_TOKEN 403
+        $mrAccepted = Post "$GW/api/applications/$MR_APP_ID/offer/accept" $null $OTHER_TOKEN
+        Assert "The applicant accepts the reviewed offer" ($mrAccepted -and $mrAccepted.status -eq "ACCEPTED") "status=$($mrAccepted.status)"
+        $null = Wait-For "reviewed card confirmed as provisioned" {
+            (Get "$GW/api/applications/$MR_APP_ID" $OTHER_TOKEN).status -eq "PROVISIONED"
+        } 180 3
+        $mrDone = Get "$GW/api/applications/$MR_APP_ID" $OTHER_TOKEN
+        Assert "The reviewed application reaches PROVISIONED with a real product id" ($mrDone.status -eq "PROVISIONED" -and $mrDone.productId -gt 0) "status=$($mrDone.status)"
     }
 
     $rjApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=3000.00; termMonths=12; currency="USD"; purpose="Rejection journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN

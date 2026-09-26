@@ -243,6 +243,64 @@ class ApplicationAuthorizationTest {
     }
 
     @Nested
+    @DisplayName("answering an offer is the applicant's alone")
+    class OfferResponseAuthority {
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "{0} cannot accept a customer's offer")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"EMPLOYEE", "ADMIN"})
+        void staffCannotAccept(String role) throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+
+            mvc.perform(as(post("/api/applications/{id}/offer/accept", 5L), STAFF, role))
+                    .andExpect(status().isForbidden());
+
+            verify(offerService, never()).accept(anyLong(), anyLong());
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "{0} cannot decline a customer's offer")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"EMPLOYEE", "ADMIN"})
+        void staffCannotDecline(String role) throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+
+            mvc.perform(as(post("/api/applications/{id}/offer/decline", 5L), STAFF, role))
+                    .andExpect(status().isForbidden());
+
+            verify(offerService, never()).decline(anyLong(), anyLong());
+        }
+
+        @Test
+        @DisplayName("staff may still read the offer they are reviewing")
+        void staffMayReadOffers() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+            when(offerService.forApplication(5L)).thenReturn(List.of());
+
+            mvc.perform(as(get("/api/applications/{id}/offers", 5L), STAFF, "EMPLOYEE"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("staff may still read the application")
+        void staffMayReadApplication() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_A));
+
+            mvc.perform(as(get("/api/applications/{id}", 5L), STAFF, "EMPLOYEE"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("a request with no gateway identity cannot accept or decline")
+        void noIdentityRefused() throws Exception {
+            mvc.perform(post("/api/applications/{id}/offer/accept", 5L))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/applications/{id}/offer/decline", 5L))
+                    .andExpect(status().isUnauthorized());
+
+            verify(offerService, never()).accept(anyLong(), anyLong());
+            verify(offerService, never()).decline(anyLong(), anyLong());
+        }
+    }
+
+    @Nested
     @DisplayName("staff operations")
     class StaffOperations {
 
