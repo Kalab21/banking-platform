@@ -22,10 +22,14 @@ export const metadata: Metadata = { title: "Applications" };
 // Mirrors ApplicationStatus in application-service. A value here that the
 // backend does not know is a 400 from /api/applications/status/{status}, so
 // the two lists have to move together.
+//
+// Manual review leads because it is the reviewer's work: the only status where
+// an application waits on a person. SUBMITTED and UNDER_REVIEW last
+// milliseconds, so opening on them showed an empty queue.
 const STATUSES = [
+  "MANUAL_REVIEW",
   "SUBMITTED",
   "UNDER_REVIEW",
-  "MANUAL_REVIEW",
   "OFFERED",
   "ACCEPTED",
   "DECLINED",
@@ -44,7 +48,7 @@ export default async function AdminApplicationsPage({
   const { status: rawStatus } = await searchParams;
   const status = STATUSES.includes(rawStatus as (typeof STATUSES)[number])
     ? (rawStatus as string)
-    : "SUBMITTED";
+    : "MANUAL_REVIEW";
 
   let applications;
   try {

@@ -177,6 +177,9 @@ test.describe("customer credit", () => {
     await expect(card.getByRole("button", { name: "Accept offer" })).toHaveCount(0);
     await card.getByRole("link", { name: "View your personal loan" }).click();
     await page.waitForURL(`**/loans/${provisioned.productId}`);
+    // The page is rendered on the server from three service calls; wait for it
+    // the way the other live specs do rather than on the 5 s default.
+    await expect(page.getByText("Original principal")).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText(money(offer.approvedAmount!, offer.currency)).first()).toBeVisible();
   });
 
