@@ -8,6 +8,7 @@ import { ApiError, NetworkError } from "@/lib/api/client";
 import {
   Badge,
   Card,
+  CardBody,
   CardHeader,
   Detail,
   DetailList,
@@ -30,6 +31,7 @@ import {
   humanise,
 } from "@/lib/format";
 import { VirtualCard } from "@/features/cards/VirtualCard";
+import { FreezeControl } from "@/features/cards/FreezeControl";
 import { utilisation } from "@/features/cards/utilisation";
 
 export const metadata: Metadata = { title: "Credit card" };
@@ -150,6 +152,16 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           </DetailList>
         </div>
       </section>
+
+      <Card>
+        <CardHeader
+          title="Card security"
+          description="Freeze the card if you have mislaid it. You can lift your own freeze at any time."
+        />
+        <CardBody>
+          <FreezeControl cardId={card.id} status={card.status} />
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title="Card transactions" />

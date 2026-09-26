@@ -111,13 +111,19 @@ export function statusTone(status: string | null | undefined): Tone {
     case "OFFERED":
     case "ACCEPTED":
     case "PROVISIONING":
+    case "CUSTOMER_FROZEN":
     case "PARTIAL":
     case "SCHEDULED":
       return "caution";
+    // A customer's own freeze is a precaution they took, not a fault: it reads
+    // as caution above. These are states the bank imposed or that ended the
+    // product.
     case "FROZEN":
+    case "SYSTEM_BLOCKED":
     case "CLOSED":
     case "REJECTED":
     case "MISSED":
+    case "DECLINED":
     case "DEFAULTED":
     case "FAILED":
     case "BLOCKED":

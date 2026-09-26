@@ -121,10 +121,15 @@ test.describe("account numbers do not cross into the browser", () => {
     await page.waitForURL(/\/move-money$/, { timeout: 90_000 });
     await settle(page);
 
-    expect(
-      payloads.length,
-      "no RSC responses were captured, so this test checked nothing",
-    ).toBeGreaterThan(0);
+    // The listener reads each body asynchronously, so a response can have
+    // arrived without its body being collected yet. Wait for one rather than
+    // counting at an instant.
+    await expect
+      .poll(() => payloads.length, {
+        message: "no RSC responses were captured, so this test checked nothing",
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0);
 
     const combined = payloads.join("\n");
     for (const account of accounts) {

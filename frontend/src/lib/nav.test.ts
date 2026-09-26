@@ -38,14 +38,19 @@ describe("role-based navigation", () => {
     // and announce a group with nothing in it to a screen reader.
     const groups = navGroupsForRole("CUSTOMER").map((g) => g.label);
 
-    expect(groups).toEqual(["Banking", "Your account"]);
+    expect(groups).toEqual(["Banking", "Borrow & credit", "Your account"]);
     expect(navGroupsForRole("CUSTOMER").every((g) => g.items.length > 0)).toBe(true);
   });
 
   it("gives staff the extra group without changing the customer ones", () => {
     const groups = navGroupsForRole("ADMIN");
 
-    expect(groups.map((g) => g.label)).toEqual(["Banking", "Your account", "Staff tools"]);
+    expect(groups.map((g) => g.label)).toEqual([
+      "Banking",
+      "Borrow & credit",
+      "Your account",
+      "Staff tools",
+    ]);
     expect(groups.find((g) => g.label === "Staff tools")?.items).toHaveLength(3);
   });
 

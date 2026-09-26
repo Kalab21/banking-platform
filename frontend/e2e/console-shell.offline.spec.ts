@@ -41,15 +41,29 @@ test.describe("signed-in navigation", () => {
     await page.goto("/dashboard");
 
     const nav = page.getByRole("navigation", { name: "Primary" });
-    for (const label of ["Overview", "Accounts", "Transactions", "Payments", "Credit Cards", "Loans"]) {
+    for (const label of [
+      "Overview",
+      "Accounts",
+      "Transactions",
+      "Payments",
+      "Explore Credit",
+      "My Applications",
+      "Credit Cards",
+      "Loans",
+    ]) {
       await expect(nav.getByRole("link", { name: label })).toBeVisible();
     }
+
+    // Borrowing is its own group, not a corner of banking.
+    await expect(nav.getByText("Borrow & credit")).toBeVisible();
 
     // Hiding these is presentation, not protection — the services enforce the
     // rule — but a customer should never be shown a door marked "Fraud Alerts".
     await expect(nav.getByRole("link", { name: "KYC Review" })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: "Fraud Alerts" })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Applications" })).toHaveCount(0);
+    // Exact, because the customer's own "My Applications" would otherwise
+    // match the staff queue's name and make this assertion meaningless.
+    await expect(nav.getByRole("link", { name: "Applications", exact: true })).toHaveCount(0);
     await expect(nav.getByText("Staff tools")).toHaveCount(0);
   });
 
