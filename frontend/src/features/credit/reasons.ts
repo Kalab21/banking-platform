@@ -37,7 +37,10 @@ export function reasonText(code: ReasonCode): string {
  * customer their card exists before the card service says so is the mistake the
  * whole lifecycle was rebuilt to stop.
  */
-export function statusSummary(application: Application): string {
+export function statusSummary(application: Application, offer?: Offer): string {
+  if (offerLapsed(application, offer)) {
+    return "This offer has expired, so it can no longer be accepted. You are welcome to apply again.";
+  }
   switch (application.status) {
     case "SUBMITTED":
     case "UNDER_REVIEW":
@@ -91,4 +94,12 @@ export function offerHeading(offer: Offer, now: Date = new Date()): string {
     default:
       return "Offer terms";
   }
+}
+
+/**
+ * An application still reading OFFERED whose offer can no longer be taken up.
+ * The application itself has no expired state, so the offer decides.
+ */
+export function offerLapsed(application: Application, offer?: Offer, now: Date = new Date()): boolean {
+  return application.status === "OFFERED" && !!offer && !offerIsOpen(offer, now);
 }

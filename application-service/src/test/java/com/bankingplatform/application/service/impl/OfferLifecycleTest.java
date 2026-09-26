@@ -1,6 +1,7 @@
 package com.bankingplatform.application.service.impl;
 
 import com.bankingplatform.application.exception.OfferException;
+import com.bankingplatform.application.exception.OfferExpiredException;
 import com.bankingplatform.application.exception.ResourceNotFoundException;
 import com.bankingplatform.application.kafka.producer.ApplicationEventProducer;
 import com.bankingplatform.application.model.Application;
@@ -232,6 +233,22 @@ class OfferLifecycleTest {
                     .build());
 
             assertThat(offerService.decline(APPLICATION_ID, OWNER).status()).isEqualTo("DECLINED");
+        }
+
+        @Test
+        @DisplayName("a lapsed offer cannot be declined either, and is recorded as expired")
+        void lapsedCannotBeDeclined() {
+            storedOffer(loanOffer()
+                    .expiresAt(LocalDateTime.now().minusDays(1))
+                    .build());
+
+            assertThatThrownBy(() -> offerService.decline(APPLICATION_ID, OWNER))
+                    .isInstanceOf(OfferExpiredException.class);
+
+            ArgumentCaptor<Offer> saved = ArgumentCaptor.forClass(Offer.class);
+            verify(offerRepository).save(saved.capture());
+            assertThat(saved.getValue().getStatus()).isEqualTo(Offer.Status.EXPIRED);
+            verify(applicationRepository, never()).save(any());
         }
 
         @Test

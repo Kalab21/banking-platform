@@ -1,6 +1,7 @@
 package com.bankingplatform.application.service.impl;
 
 import com.bankingplatform.application.dto.OfferResponse;
+import com.bankingplatform.application.exception.OfferExpiredException;
 import com.bankingplatform.application.exception.OfferException;
 import com.bankingplatform.application.exception.ResourceNotFoundException;
 import com.bankingplatform.application.kafka.producer.ApplicationEventProducer;
@@ -72,8 +73,10 @@ public class OfferServiceImpl implements OfferService {
                 .build());
     }
 
+    // The expiry recorded before refusing must survive the refusal, so the
+    // expired-offer exception does not roll the transaction back.
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = OfferExpiredException.class)
     public OfferResponse accept(Long applicationId, Long callerUserId) {
         Offer offer = liveOffer(applicationId, callerUserId);
 
@@ -85,11 +88,7 @@ public class OfferServiceImpl implements OfferService {
         refuseIfClosed(offer);
 
         LocalDateTime now = LocalDateTime.now();
-        if (offer.hasExpired(now)) {
-            offer.expire();
-            offerRepository.save(offer);
-            throw new OfferException("This offer has expired");
-        }
+        refuseIfLapsed(offer, now);
 
         offer.accept(now);
         offerRepository.save(offer);
@@ -114,7 +113,7 @@ public class OfferServiceImpl implements OfferService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = OfferExpiredException.class)
     public OfferResponse decline(Long applicationId, Long callerUserId) {
         Offer offer = liveOffer(applicationId, callerUserId);
 
@@ -123,7 +122,10 @@ public class OfferServiceImpl implements OfferService {
         }
         refuseIfClosed(offer);
 
-        offer.decline(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        refuseIfLapsed(offer, now);
+
+        offer.decline(now);
         offerRepository.save(offer);
 
         Application application = application(applicationId);
@@ -165,6 +167,19 @@ public class OfferServiceImpl implements OfferService {
         if (!offer.isOpen()) {
             throw new OfferException("This offer is " + offer.getStatus().name().toLowerCase()
                     + " and can no longer be acted on");
+        }
+    }
+
+    /**
+     * An offer past its expiry is recorded as EXPIRED and then refused, for
+     * decline as much as accept: a lapsed offer is finished either way, and
+     * letting one action through would make the other's refusal arbitrary.
+     */
+    private void refuseIfLapsed(Offer offer, LocalDateTime now) {
+        if (offer.hasExpired(now)) {
+            offer.expire();
+            offerRepository.save(offer);
+            throw new OfferExpiredException();
         }
     }
 
