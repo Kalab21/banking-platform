@@ -114,16 +114,22 @@ public class ApplicationController {
         // There is no request body, and that is the point: a customer accepts
         // the offer that was made, not a version of it they have edited. The
         // terms come from the stored offer and nowhere else.
+        //
+        // Only the applicant answers an offer. Staff decide whether to make
+        // one; accepting or declining it is the customer's decision, and
+        // Northbank has no assisted-service workflow that would let an
+        // employee express it for them.
         ApplicationResponse application = applicationService.getById(id);
-        AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
+        AccessGuard.requireSelf(caller, application.getUserId());
         return ResponseEntity.ok(offerService.accept(id, application.getUserId()));
     }
 
     @PostMapping("/{id}/offer/decline")
     @Operation(summary = "Decline the offer")
     public ResponseEntity<OfferResponse> declineOffer(@PathVariable Long id, CallerIdentity caller) {
+        // The applicant's decision, as for acceptance.
         ApplicationResponse application = applicationService.getById(id);
-        AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
+        AccessGuard.requireSelf(caller, application.getUserId());
         return ResponseEntity.ok(offerService.decline(id, application.getUserId()));
     }
 
