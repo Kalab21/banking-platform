@@ -18,7 +18,13 @@ import {
 import { formatCurrency, formatDate, formatPercent, humanise } from "@/lib/format";
 import { OfferActions } from "@/features/credit/OfferActions";
 import { productLabel } from "@/features/credit/products";
-import { awaitingCustomer, offerHeading, offerIsOpen, statusSummary } from "@/features/credit/reasons";
+import {
+  awaitingCustomer,
+  offerHeading,
+  offerIsOpen,
+  offerLapsed,
+  statusSummary,
+} from "@/features/credit/reasons";
 import type { Application, Offer } from "@/types/api";
 
 export const metadata: Metadata = { title: "My applications" };
@@ -142,6 +148,7 @@ export default async function ApplicationsPage() {
           {applications.map((application) => {
             const offer = offersByApplication.get(application.id);
             const href = productHref(application);
+            const lapsed = offerLapsed(application, offer);
 
             return (
               <Card key={application.id}>
@@ -155,12 +162,16 @@ export default async function ApplicationsPage() {
                         Applied {formatDate(application.appliedAt ?? application.createdAt)}
                       </p>
                     </div>
-                    <Badge tone={statusTone(application.status)}>
-                      {humanise(application.status)}
-                    </Badge>
+                    {lapsed ? (
+                      <Badge tone="neutral">Offer expired</Badge>
+                    ) : (
+                      <Badge tone={statusTone(application.status)}>
+                        {humanise(application.status)}
+                      </Badge>
+                    )}
                   </div>
 
-                  <p className="text-sm text-ink-muted">{statusSummary(application)}</p>
+                  <p className="text-sm text-ink-muted">{statusSummary(application, offer)}</p>
 
                   {application.requestedAmount !== null || application.termMonths !== null ? (
                     <DetailList>
@@ -196,6 +207,16 @@ export default async function ApplicationsPage() {
 
                   {awaitingCustomer(application) && offer && offerIsOpen(offer) ? (
                     <OfferActions applicationId={application.id} />
+                  ) : null}
+
+                  {lapsed ? (
+                    <Link
+                      href="/credit"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                    >
+                      Apply again
+                      <ArrowRight aria-hidden className="size-4" />
+                    </Link>
                   ) : null}
 
                   {href ? (

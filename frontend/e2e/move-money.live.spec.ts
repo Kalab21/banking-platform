@@ -77,8 +77,12 @@ async function transactionCount(
     `${GATEWAY}/api/transactions/account/${accountId}?page=0&size=100`,
     { headers },
   );
+  // A failed read must fail the test, not count as zero: a zero baseline turns
+  // "moved once" into "moved N times" whenever the first read is slow.
+  expect(response.ok(), `transaction history read returned ${response.status()}`).toBe(true);
   const page = await response.json();
-  return page?.totalElements ?? page?.content?.length ?? 0;
+  expect(typeof page?.totalElements, "transaction history carried no total").toBe("number");
+  return page.totalElements;
 }
 
 test.describe("moving money through the console", () => {

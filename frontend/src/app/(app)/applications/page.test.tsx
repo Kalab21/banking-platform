@@ -75,11 +75,17 @@ describe("offer visibility and authority", () => {
     expect(screen.getByRole("heading", { name: "The offer you declined" })).toBeInTheDocument();
   });
 
-  it("blocks actions on an offer past its expiry even while its status still reads OFFERED", async () => {
-    vi.mocked(getOffers).mockResolvedValue([{ ...offer, expiresAt: "2020-01-01T00:00:00" }]);
+  it.each([
+    ["past its expiry date", { expiresAt: "2020-01-01T00:00:00" }],
+    ["recorded as EXPIRED", { status: "EXPIRED" as const }],
+  ])("tells the truth about an OFFERED application whose offer is %s", async (_case, change) => {
+    vi.mocked(getOffers).mockResolvedValue([{ ...offer, ...change }]);
     render(await ApplicationsPage());
     expectNoActions();
     expect(screen.getByRole("heading", { name: "This offer has expired" })).toBeInTheDocument();
+    expect(screen.getByText("Offer expired")).toBeInTheDocument();
+    expect(screen.queryByText(/yours to accept or decline/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Apply again" })).toHaveAttribute("href", "/credit");
   });
 
   it.each(["ACCEPTED", "DECLINED", "PROVISIONING", "PROVISIONED", "CANCELLED"] as const)(
