@@ -111,6 +111,11 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
     restart: unless-stopped
+    # The shared Dockerfile sizes each JVM heap as a share of the container
+    # limit (MaxRAMPercentage=70, InitialRAMPercentage=30). Without a limit
+    # that share is taken of the whole Docker VM, so each of the thirteen
+    # services starts with a heap sized for the entire machine.
+    mem_limit: 1g
     ports:
       - "8761:8761"
     healthcheck:
@@ -128,6 +133,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-api-gateway
     restart: unless-stopped
+    mem_limit: 1g
     ports:
       - "8080:8080"
     environment:
@@ -159,6 +165,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-user-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       # Required. Compose fails with this message rather than starting a
       # service that cannot verify a token. Both services must share it.
@@ -210,6 +217,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-account-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/account_db
@@ -240,6 +248,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-application-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/application_db
@@ -270,6 +279,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-transaction-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transaction_db
@@ -300,6 +310,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-payment-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
@@ -330,6 +341,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-statistics-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/statistics_db
@@ -364,6 +376,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-notification-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
@@ -394,6 +407,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-fraud-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fraud_db
@@ -428,6 +442,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-credit-card-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/credit_card_db
@@ -458,6 +473,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-loan-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loan_db
@@ -488,6 +504,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: banking-integration-service
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/integration_db
