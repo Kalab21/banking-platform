@@ -1,5 +1,6 @@
 package com.bankingplatform.payment.controller;
 
+import com.bankingplatform.payment.exception.GlobalExceptionHandler;
 import com.bankingplatform.common.security.CallerIdentityArgumentResolver;
 import com.bankingplatform.common.security.CallerIdentityExceptionHandler;
 import com.bankingplatform.common.security.CallerIdentityHeaders;
@@ -71,7 +72,7 @@ class PaymentAuthorizationTest {
                         new BeneficiaryController(beneficiaryService),
                         new PaymentController(paymentService, ownership, passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
-                .setControllerAdvice(new CallerIdentityExceptionHandler())
+                .setControllerAdvice(new CallerIdentityExceptionHandler(), new GlobalExceptionHandler())
                 .build();
 
         when(accountClient.getAccountById(ACCOUNT_OF_A)).thenReturn(account(ACCOUNT_OF_A, CUSTOMER_A));

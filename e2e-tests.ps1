@@ -540,6 +540,20 @@ Write-Host "  PaymentId=$($schedPay.id)  ScheduledAt=$($schedPay.scheduledAt)  P
 $upcoming = Get "$GW/api/payments/account/$ACCOUNT_ID/scheduled" $TOKEN
 Assert "Upcoming scheduled payments visible" ($upcoming -ne $null)
 
+# A payment to an outside payee debits the payer. It used to be marked
+# COMPLETED without any money leaving the account. The retry reuses the key,
+# so a lost response cannot send the money twice.
+$extBefore = [decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance
+$payKey = "e2e-pay-$([guid]::NewGuid())"
+$payHeaders = @{ "Content-Type" = "application/json"; "Authorization" = "Bearer $TOKEN"; "Idempotency-Key" = $payKey }
+$payBody = @{ payerAccountId=$ACCOUNT_ID; beneficiaryId=$BEN_ID; paymentType="EXTERNAL_ACH"; amount=12.34; currency="USD"; description="Utility bill" } | ConvertTo-Json
+$extPay = $null; $extReplay = $null
+try { $extPay = Invoke-RestMethod "$GW/api/payments" -Method POST -Body $payBody -Headers $payHeaders -TimeoutSec $script:WRITE_TIMEOUT } catch { Write-Host "    POST payment => $($_.Exception.Message)" -ForegroundColor DarkYellow }
+try { $extReplay = Invoke-RestMethod "$GW/api/payments" -Method POST -Body $payBody -Headers $payHeaders -TimeoutSec $script:WRITE_TIMEOUT } catch { Write-Host "    POST payment replay => $($_.Exception.Message)" -ForegroundColor DarkYellow }
+Assert "An outside payment completes" ($extPay -and $extPay.status -eq "COMPLETED") "status=$($extPay.status)"
+Assert "Retrying with the same key returns the same payment" ($extReplay -and $extReplay.id -eq $extPay.id)
+Assert "The payer was debited once for the outside payment" ([decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance -eq $extBefore - 12.34)
+
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 6: Wire Transfer ===" -ForegroundColor Cyan
 
