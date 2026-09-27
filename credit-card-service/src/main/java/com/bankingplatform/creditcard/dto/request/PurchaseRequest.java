@@ -12,6 +12,8 @@ public class PurchaseRequest {
 
     @NotNull
     @DecimalMin("0.01")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal amount;
 
     @NotBlank

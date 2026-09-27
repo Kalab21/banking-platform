@@ -170,6 +170,31 @@ class TransactionAuthorizationTest {
     @DisplayName("withdrawals and deposits")
     class WithdrawAndDeposit {
 
+        @org.junit.jupiter.params.ParameterizedTest(name = "a {0} of a fraction of a cent is refused")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"deposit", "withdraw"})
+        void subCentAmountsRefused(String operation) throws Exception {
+            // The balance column holds cents, so the database rounded what it
+            // was given: three deposits of 0.015 stored 0.06.
+            mvc.perform(as(post("/api/transactions/" + operation), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"accountId\":%d,\"amount\":0.015}".formatted(ACCOUNT_OF_A)))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
+        @DisplayName("a transfer of a fraction of a cent is refused")
+        void subCentTransferRefused() throws Exception {
+            mvc.perform(as(post("/api/transactions/transfer"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"fromAccountId\":%d,\"toAccountId\":%d,\"amount\":0.015}"
+                                    .formatted(ACCOUNT_OF_A, ACCOUNT_OF_B)))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(transactionService);
+        }
+
         @Test
         @DisplayName("a customer may withdraw from their own account")
         void ownWithdrawAllowed() throws Exception {

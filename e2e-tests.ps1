@@ -231,6 +231,10 @@ $fund = Post "$GW/api/transactions/deposit" @{ accountId=$ACCOUNT_ID; amount=500
 Assert "Opening deposit accepted" ($fund -ne $null)
 $acctFunded = Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN
 Assert "Balance after opening deposit = 500.00" ([decimal]$acctFunded.balance -eq 500.00)
+# Balances are held in cents. A fraction of a cent used to be rounded by the
+# database on write, so three deposits of 0.015 stored 0.06.
+Assert-Refused "A deposit of a fraction of a cent is refused" "POST" `
+    "$GW/api/transactions/deposit" $TOKEN 400 @{ accountId=$ACCOUNT_ID; amount=0.015; description="Sub-cent" }
 Write-Host "  Funded balance=$($acctFunded.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -108,6 +108,18 @@ class BalanceMutationBoundaryTest {
     class InternalSurface {
 
         @Test
+        @DisplayName("a balance change of a fraction of a cent is refused, even service to service")
+        void subCentBalanceChangeRefused() throws Exception {
+            internalApi().perform(put("/internal/accounts/{id}/balance", ACCOUNT_OF_A)
+                            .header(IdempotencyGuard.HEADER, "boundary-test-subcent")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"amount\":0.015,\"operation\":\"CREDIT\"}"))
+                    .andExpect(status().isBadRequest());
+
+            verify(accountService, org.mockito.Mockito.never()).updateBalance(anyLong(), any());
+        }
+
+        @Test
         @DisplayName("a service-to-service debit succeeds, so transfers keep working")
         void internalDebitWorks() throws Exception {
             internalApi().perform(put("/internal/accounts/{id}/balance", ACCOUNT_OF_A)

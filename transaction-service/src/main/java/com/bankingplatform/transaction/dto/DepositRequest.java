@@ -14,6 +14,8 @@ public class DepositRequest {
 
     @NotNull(message = "amount is required")
     @DecimalMin(value = "0.01", message = "amount must be positive")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal amount;
 
     private String currency;

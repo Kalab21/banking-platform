@@ -17,6 +17,8 @@ public class ReviewRequest {
      * was asked for. Never larger than the request: a reviewer answers an
      * application, they do not lend more than was wanted.
      */
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal approvedAmount;
 
     @Size(max = 1000, message = "reviewerNotes cannot exceed 1000 characters")

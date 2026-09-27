@@ -16,6 +16,8 @@ public class CreateApplicationRequest {
     private ApplicationType applicationType;
 
     @DecimalMin(value = "0.01", message = "requestedAmount must be positive")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal requestedAmount;
 
     private String currency;
@@ -37,15 +39,23 @@ public class CreateApplicationRequest {
     // request object a client could use to set them.
 
     @DecimalMin(value = "0.01", message = "annualIncome must be positive")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal annualIncome;
 
     @DecimalMin(value = "0.00", message = "monthlyDebtObligations cannot be negative")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal monthlyDebtObligations;
 
     /** The vehicle's or property's value, for lending secured against it. */
     @DecimalMin(value = "0.01", message = "assetValue must be positive")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal assetValue;
 
     @DecimalMin(value = "0.00", message = "downPayment cannot be negative")
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal downPayment;
 }
