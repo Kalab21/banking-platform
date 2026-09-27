@@ -254,6 +254,10 @@ Assert "Deposit to clear overdraft" ($dep2 -ne $null)
 
 $acctCleared = Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN
 Assert "Account status = ACTIVE after clearing" ($acctCleared.status -eq "ACTIVE")
+# 100 - 400 left -35 on the balance (the fee) and 300 overdrawn: a net -335.
+# The 450 deposit repays the 300 first, so 115 reaches the balance. Counting the
+# repaid part twice used to leave 415.
+Assert "The deposit repaid the overdraft instead of adding on top of it" ([decimal]$acctCleared.balance -eq 115.00 -and [decimal]$acctCleared.overdraftBalance -eq 0) "balance=$($acctCleared.balance) overdraft=$($acctCleared.overdraftBalance)"
 Write-Host "  Status=$($acctCleared.status)  Balance=$($acctCleared.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -385,6 +389,11 @@ if ($cards -and $cards.Count -gt 0) {
     Assert "Available credit reduced by purchase" ($cardAfter.availableCredit -le $expectedCredit + 0.01)
     Write-Host "  AvailableCredit=$($cardAfter.availableCredit)  CurrentBalance=$($cardAfter.currentBalance)"
 
+    # A payment must come out of an account. One that named none used to
+    # restore the credit without debiting anything.
+    Assert-Refused "A card payment with no funding account is refused" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/payment" $TOKEN 400 @{ amount=200.00 }
+
     # Make a payment from the checking account
     $payment = Post "$GW/api/credit-cards/$CARD_ID/payment" @{ amount=200.00; sourceAccountId=$ACCOUNT_ID } $TOKEN
     Assert "Credit card payment $200" ($payment -ne $null)
@@ -470,6 +479,11 @@ if ($loans -and $loans.Count -gt 0) {
     $schedule = Get "$GW/api/loans/$LOAN_ID/schedule" $TOKEN
     Assert "Amortization schedule returned" ($schedule -and $schedule.Count -gt 0)
     Write-Host "  Schedule rows=$($schedule.Count)  First payment due=$($schedule[0].dueDate)"
+
+    Assert-Refused "A loan repayment with no funding account is refused" "POST" `
+        "$GW/api/loans/$LOAN_ID/repay" $TOKEN 400 @{ amount=$loan.monthlyPayment }
+    Assert-Refused "A 0.01 payoff with no funding account cannot close the loan" "POST" `
+        "$GW/api/loans/$LOAN_ID/payoff" $TOKEN 400 @{ amount=0.01 }
 
     # Make a regular repayment
     $repay = Post "$GW/api/loans/$LOAN_ID/repay" @{ amount=$loan.monthlyPayment; sourceAccountId=$ACCOUNT_ID } $TOKEN

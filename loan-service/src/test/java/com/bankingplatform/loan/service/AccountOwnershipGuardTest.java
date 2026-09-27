@@ -91,12 +91,12 @@ class AccountOwnershipGuardTest {
     }
 
     @Test
-    @DisplayName("no account named means nothing to check")
-    void nullAccountIsNotChecked() {
-        // A repayment that moves no money from an account is a legitimate
-        // shape; refusing it here would break it for no security gain.
-        assertThatCode(() -> guard.requireOwnedBy(null, BORROWER, "source"))
-                .doesNotThrowAnyException();
+    @DisplayName("no account named is refused, not waved through")
+    void nullAccountIsRefused() {
+        // Waving it through let a payment reduce a debt without debiting any
+        // account at all.
+        assertThatThrownBy(() -> guard.requireOwnedBy(null, BORROWER, "source"))
+                .isInstanceOf(AccessDeniedException.class);
         Mockito.verifyNoInteractions(accountClient);
     }
 }

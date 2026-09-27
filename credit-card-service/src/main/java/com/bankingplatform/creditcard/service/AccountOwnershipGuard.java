@@ -35,7 +35,9 @@ public class AccountOwnershipGuard {
      */
     public void requireOwnedBy(Long accountId, Long ownerUserId, String what) {
         if (accountId == null) {
-            return;
+            // Fail closed. Every money path through here needs an account, and
+            // a missing one used to skip both this check and the debit.
+            throw new AccessDeniedException("An account of your own is required");
         }
         AccountOwnerView account = accountClient.getAccount(accountId);
         if (account == null || account.getUserId() == null

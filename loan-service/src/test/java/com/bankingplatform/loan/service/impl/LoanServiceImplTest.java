@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -339,20 +340,6 @@ class LoanServiceImplTest {
         }
 
         @Test
-        @DisplayName("leaves the source account untouched when no account is supplied")
-        void skipsDebitWhenNoSourceAccount() {
-            when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "10000.00")));
-            when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING))
-                    .thenReturn(List.of(scheduleEntry(1, "860.66", "810.66", "50.00")),
-                                List.of(scheduleEntry(2, "860.66", "814.71", "45.95")));
-            when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
-
-            loanService.makeRepayment(LOAN_ID, repaymentRequest("860.66", null));
-
-            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
-        }
-
-        @Test
         @DisplayName("marks the instalment PARTIAL when less than the scheduled payment arrives")
         void underpaymentMarksInstalmentPartial() {
             AmortizationSchedule due = scheduleEntry(1, "860.66", "810.66", "50.00");
@@ -576,15 +563,18 @@ class LoanServiceImplTest {
         }
 
         @Test
-        @DisplayName("still reports the settled principal when no source account is debited")
-        void payoffRecordIsCorrectWithoutSourceAccount() {
+        @DisplayName("debits the full payoff amount whatever amount the request states")
+        void payoffDebitsTheFullAmount() {
             when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
             when(scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(LOAN_ID, ScheduleStatus.PENDING)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
-            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", null));
+            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
 
-            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
+            // The closing figure is computed, not taken from the request: a
+            // stated 0.01 still costs the whole principal plus accrued interest.
+            verify(accountClient).debit(eq(ACCOUNT_ID), anyString(),
+                    argThat(amount -> amount.compareTo(new BigDecimal("9235.29")) == 0), any());
 
             verify(repaymentRepository).save(savedRepayment.capture());
             assertThat(savedRepayment.getValue().getPrincipalPaid()).isEqualByComparingTo("9189.34");
