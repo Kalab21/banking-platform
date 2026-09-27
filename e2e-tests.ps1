@@ -732,6 +732,32 @@ if (-not $VICTIM_ACCOUNT_ID) {
 }
 Assert "A second customer has an account of their own" ($VICTIM_ACCOUNT_ID -and $VICTIM_ACCOUNT_ID -gt 0)
 
+# A scheduled internal payment, executed by the scheduler rather than by the
+# request. The job has no caller of its own; it used to reach
+# transaction-service anonymous, be refused, and mark every due payment FAILED.
+# Due in the server's clock (UTC) shortly, so the request only schedules it.
+if ($VICTIM_ACCOUNT_ID) {
+    $payerBefore = [decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance
+    $payeeBefore = [decimal](Get "$GW/api/accounts/$VICTIM_ACCOUNT_ID" $OTHER_TOKEN).balance
+    $dueSoon = (Get-Date).ToUniversalTime().AddSeconds(20).ToString("yyyy-MM-ddTHH:mm:ss")
+    $internalPay = Post "$GW/api/payments" @{ payerAccountId=$ACCOUNT_ID; payeeAccountId=$VICTIM_ACCOUNT_ID; paymentType="INTERNAL"; amount=5.00; currency="USD"; description="Scheduled internal payment"; scheduledAt=$dueSoon } $TOKEN
+    Assert "A scheduled internal payment is accepted and waits" ($internalPay -and $internalPay.status -eq "PENDING") "status=$($internalPay.status)"
+    if ($internalPay.id) {
+        $null = Wait-For "scheduler executed the internal payment" {
+            (Get "$GW/api/payments/$($internalPay.id)" $TOKEN).status -in "COMPLETED", "FAILED"
+        } 240 5
+        $ran = Get "$GW/api/payments/$($internalPay.id)" $TOKEN
+        Assert "The scheduler completed the internal payment" ($ran.status -eq "COMPLETED") "status=$($ran.status)"
+        Assert "The payer was debited once" ([decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance -eq $payerBefore - 5.00)
+        Assert "The payee was credited once" ([decimal](Get "$GW/api/accounts/$VICTIM_ACCOUNT_ID" $OTHER_TOKEN).balance -eq $payeeBefore + 5.00)
+    }
+
+    $later = (Get-Date).ToUniversalTime().AddDays(3).ToString("yyyy-MM-ddTHH:mm:ss")
+    $toCancel = Post "$GW/api/payments" @{ payerAccountId=$ACCOUNT_ID; payeeAccountId=$VICTIM_ACCOUNT_ID; paymentType="INTERNAL"; amount=5.00; currency="USD"; description="To be cancelled"; scheduledAt=$later } $TOKEN
+    $cancelled = Put "$GW/api/payments/$($toCancel.id)/cancel" $null $TOKEN
+    Assert "A pending scheduled payment can be cancelled" ($cancelled -and $cancelled.status -eq "CANCELLED") "status=$($cancelled.status)"
+}
+
 if ($VICTIM_ACCOUNT_ID -and $LOAN_ID) {
     Assert-Refused "A loan cannot be repaid from someone else's account" "POST" `
         "$GW/api/loans/$LOAN_ID/repay" $TOKEN 403 `

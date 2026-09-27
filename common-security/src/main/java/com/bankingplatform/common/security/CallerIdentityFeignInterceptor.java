@@ -20,8 +20,11 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * the trusted ones are written, so a spoofed header cannot survive a hop even
  * if one somehow reached a service directly.
  *
- * <p>Requests with no inbound identity — scheduled jobs, Kafka consumers —
- * forward nothing, and the callee applies its own rule for identity-less calls.
+ * <p>Work with no inbound request — a scheduled job — forwards the identity
+ * it is running as through {@link CallerContext#runAs}, if any. That is the
+ * only way to set one, and it is set from stored state (the owner of a
+ * scheduled payment's account), never from a request. With neither, nothing is
+ * forwarded and the callee applies its own rule for identity-less calls.
  */
 public class CallerIdentityFeignInterceptor implements RequestInterceptor {
 
@@ -32,13 +35,18 @@ public class CallerIdentityFeignInterceptor implements RequestInterceptor {
         template.removeHeader(CallerIdentityHeaders.USERNAME);
         template.removeHeader(CallerIdentityHeaders.USER_ROLE);
 
-        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)) {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)
+                || attrs.getRequest() == null) {
+            CallerContext.current().ifPresent(caller -> {
+                template.header(CallerIdentityHeaders.USER_ID, String.valueOf(caller.userId()));
+                if (caller.username() != null) {
+                    template.header(CallerIdentityHeaders.USERNAME, caller.username());
+                }
+                template.header(CallerIdentityHeaders.USER_ROLE, caller.role().name());
+            });
             return;
         }
         HttpServletRequest request = attrs.getRequest();
-        if (request == null) {
-            return;
-        }
 
         copy(template, request, CallerIdentityHeaders.USER_ID);
         copy(template, request, CallerIdentityHeaders.USERNAME);
