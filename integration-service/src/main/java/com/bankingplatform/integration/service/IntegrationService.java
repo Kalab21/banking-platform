@@ -121,7 +121,7 @@ public class IntegrationService {
     }
 
     public AccountValidationResponse validateAccount(String accountNumber) {
-        // Stub — real impl would call Plaid or bank directory API
+        // Stub — a real implementation would query a bank directory
         boolean valid = accountNumber != null && accountNumber.matches("\\d{8,17}");
         String msg = valid ? "Account number format is valid" : "Account number format is invalid";
         return new AccountValidationResponse(accountNumber, valid, msg);

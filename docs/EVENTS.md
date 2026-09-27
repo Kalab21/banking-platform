@@ -165,8 +165,8 @@ where the record declares a value.
 That matters because several of these fields back `NOT NULL` columns —
 `notifications.user_id`, `fraud_alerts.account_id`,
 `fraud_rules_audit.account_id`. Passing one through would throw out of the
-listener, and with no dead-letter topic configured yet the container retries
-the same offset ten times and blocks the partition before giving up. A null
+listener, where it would use up the bounded retries and land in the dead-letter
+topic instead of being processed. A null
 account id would also collapse every such event onto one Redis velocity key,
 mixing unrelated customers into a single fraud counter.
 
@@ -181,7 +181,7 @@ A record that a consumer cannot process is retried, and then kept.
 Four deliveries by default, spaced by exponential backoff, and then the record
 is published to `<topic>.DLT` and the offset commits so the partition moves on.
 The policy lives in `common-kafka` as an auto-configuration rather than in each
-service, because six services consume these topics and the answer to "how many
+service, because seven services consume these topics and the answer to "how many
 times, how long, and then where" should not be able to differ between them.
 `kafka.recovery.*` makes the numbers configurable.
 
@@ -291,8 +291,8 @@ need them declared.
 
 Nothing consumes the dead letter topics. A record there is retained and
 inspectable, not automatically replayed; deciding what to do with it is an
-operator's job, and replaying safely needs the consumer idempotency that is
-still outstanding.
+operator's job. Consumers claim each event id before acting on it, so a
+replayed record that was in fact processed is skipped rather than applied twice.
 
 ## Surviving redelivery
 
