@@ -273,14 +273,29 @@ class AccountServiceImplTest {
         }
 
         @Test
-        @DisplayName("a debit that consumes the entire limit is still allowed")
-        void debitOfExactlyTheAvailableAmount() {
+        @DisplayName("a debit that uses the whole limit, fee included, is still allowed")
+        void debitOfExactlyTheAvailableAmountLessTheFee() {
             Account result = whenBalanceUpdated(
                     account(AccountStatus.ACTIVE, "100.00", "500.00", "0.00"),
-                    request("DEBIT", "600.00"));
+                    request("DEBIT", "565.00"));
 
-            assertThat(result.getOverdraftBalance()).isEqualByComparingTo("500.00");
+            // 465 overdrawn plus the 35 fee on the balance: exactly the 500 limit.
+            assertThat(result.getOverdraftBalance()).isEqualByComparingTo("465.00");
+            assertThat(result.getBalance()).isEqualByComparingTo("-35.00");
             assertThat(result.getStatus()).isEqualTo(AccountStatus.OVERDRAWN);
+        }
+
+        @Test
+        @DisplayName("a debit whose overdraft fee would pass the limit is refused")
+        void feeCannotCarryTheAccountPastItsLimit() {
+            // 600 fits the 100 balance plus the 500 limit, but the fee it
+            // triggers does not: it used to be charged anyway, leaving the
+            // account 35 past its limit.
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(
+                    account(AccountStatus.ACTIVE, "100.00", "500.00", "0.00")));
+            assertThatThrownBy(() -> accountService.updateBalance(ACCOUNT_ID,
+                    request("DEBIT", "600.00")))
+                    .isInstanceOf(com.bankingplatform.account.exception.InsufficientFundsException.class);
         }
 
         @Test

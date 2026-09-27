@@ -258,6 +258,10 @@ Assert "Account status = ACTIVE after clearing" ($acctCleared.status -eq "ACTIVE
 # The 450 deposit repays the 300 first, so 115 reaches the balance. Counting the
 # repaid part twice used to leave 415.
 Assert "The deposit repaid the overdraft instead of adding on top of it" ([decimal]$acctCleared.balance -eq 115.00 -and [decimal]$acctCleared.overdraftBalance -eq 0) "balance=$($acctCleared.balance) overdraft=$($acctCleared.overdraftBalance)"
+# 115 on the balance and a 500 limit: 615 fits the limit, but the overdraft fee
+# it triggers does not. The fee used to be charged anyway, 35 past the limit.
+Assert-Refused "A withdrawal whose overdraft fee would pass the limit is refused" "POST" `
+    "$GW/api/transactions/withdraw" $TOKEN 422 @{ accountId=$ACCOUNT_ID; amount=615.00; description="Past the limit with the fee" }
 Write-Host "  Status=$($acctCleared.status)  Balance=$($acctCleared.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────

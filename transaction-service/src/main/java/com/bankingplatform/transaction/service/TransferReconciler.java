@@ -79,8 +79,20 @@ public class TransferReconciler {
         int resolved = 0;
         for (TransferAttempt attempt : stuck.stream().limit(batchSize).toList()) {
             try {
-                boolean debitApplied = applied("txn-" + attempt.getDebitRef());
-                boolean creditApplied = applied("txn-" + attempt.getCreditRef());
+                Boolean debit = applied("txn-" + attempt.getDebitRef());
+                Boolean credit = applied("txn-" + attempt.getCreditRef());
+                if (debit == null || credit == null) {
+                    // A leg whose record never settled cannot be read as "not
+                    // applied": account-service completes the record just
+                    // after the balance commits, so a crash between the two
+                    // leaves a movement that happened looking unfinished.
+                    // Leave the attempt for a person rather than guess.
+                    log.warn("Transfer {} has a leg whose outcome is not settled in account-service; "
+                            + "leaving it unreconciled", attempt.getDebitRef());
+                    continue;
+                }
+                boolean debitApplied = debit;
+                boolean creditApplied = credit;
 
                 recorder.reconciled(attempt.getId(), debitApplied, creditApplied,
                         describe(debitApplied, creditApplied));
@@ -105,9 +117,19 @@ public class TransferReconciler {
         return resolved;
     }
 
-    private boolean applied(String key) {
+    /**
+     * True or false when account-service knows; null when its record for the
+     * key is still open (IN_PROGRESS) or was itself left UNKNOWN.
+     */
+    private Boolean applied(String key) {
         MovementStatusResponse status = accountClient.movementStatus(key);
-        return status != null && status.isApplied();
+        if (status == null) {
+            return null;
+        }
+        if ("IN_PROGRESS".equals(status.getStatus()) || "UNKNOWN".equals(status.getStatus())) {
+            return null;
+        }
+        return status.isApplied();
     }
 
     private static String describe(boolean debitApplied, boolean creditApplied) {

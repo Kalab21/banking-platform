@@ -249,6 +249,24 @@ class TransferReconciliationIT {
     }
 
     @Test
+    @DisplayName("a leg whose record never settled is not read as \"not applied\"")
+    void anUnsettledLegIsNotAVerdict() {
+        // account-service completes the key's record just after the balance
+        // commits. A crash between the two leaves IN_PROGRESS on a movement
+        // that happened; "neither leg applied, may be reissued" would then
+        // invite a second debit.
+        Long attemptId = recorder.started("debit-9", "credit-9", request(), "USD");
+        recorder.debited(attemptId);
+        answer("debit-9", false, "IN_PROGRESS");
+        answer("credit-9", false, "NOT_FOUND");
+
+        assertThat(reconciler.reconcile()).isZero();
+        assertThat(attempts.findByDebitRef("debit-9")).get()
+                .extracting(TransferAttempt::getStatus)
+                .isEqualTo(TransferAttemptStatus.DEBITED);
+    }
+
+    @Test
     @DisplayName("a transfer still in flight is not reported as stuck")
     void inFlightTransfersAreLeftAlone() {
         ReflectionTestUtils.setField(reconciler, "afterMinutes", 5);
