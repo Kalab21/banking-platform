@@ -1,6 +1,8 @@
 package com.bankingplatform.payment.service.impl;
 
 import com.bankingplatform.common.security.CallerContext;
+import com.bankingplatform.common.security.CallerIdentity;
+import com.bankingplatform.common.security.Role;
 import com.bankingplatform.payment.client.AccountClient;
 import com.bankingplatform.payment.client.TransactionClient;
 import com.bankingplatform.payment.dto.*;
@@ -110,8 +112,13 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentResponse cancel(Long id) {
-        Payment payment = findById(id);
-        if (payment.getStatus() == PaymentStatus.COMPLETED || payment.getStatus() == PaymentStatus.CANCELLED) {
+        Payment payment = paymentRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found: " + id));
+        // PROCESSING means the scheduler has claimed it and may already have
+        // moved the money; cancelling then would report a payment as stopped
+        // that went through.
+        if (payment.getStatus() == PaymentStatus.COMPLETED || payment.getStatus() == PaymentStatus.CANCELLED
+                || payment.getStatus() == PaymentStatus.PROCESSING) {
             throw new PaymentException("Cannot cancel payment in status: " + payment.getStatus());
         }
         payment.setStatus(PaymentStatus.CANCELLED);
@@ -174,8 +181,14 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public void processClaimedPayment(Long paymentId) {
-        Payment payment = paymentRepository.findById(paymentId)
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found: " + paymentId));
+        if (payment.getStatus() != PaymentStatus.PROCESSING) {
+            // Cancelled, or finished by another worker, since it was claimed.
+            log.info("Payment {} is {} rather than PROCESSING; not executing it",
+                    paymentId, payment.getStatus());
+            return;
+        }
 
         // Resolved once, before the attempt, and reused by whichever event is
         // published. Doing it in the catch block meant that when
@@ -183,7 +196,15 @@ public class PaymentServiceImpl implements PaymentService {
         // paid a full Feign read timeout again on the way out.
         Long payerUserId = ownerOf(payment.getPayerAccountId());
         try {
-            executePayment(payment, payerUserId);
+            // A timer has no caller. The transfer runs as the customer who owns
+            // the paying account -- the one who scheduled it -- so
+            // transaction-service authorizes it the way it would that
+            // customer's own request, rather than refusing an anonymous one.
+            if (payerUserId == null) {
+                throw new PaymentException("The paying account's owner could not be resolved");
+            }
+            CallerContext.runAs(new CallerIdentity(payerUserId, "scheduled-payment", Role.CUSTOMER),
+                    () -> executePayment(payment, payerUserId));
             payment.setStatus(PaymentStatus.COMPLETED);
             payment.setProcessedAt(LocalDateTime.now());
 
@@ -259,7 +280,7 @@ public class PaymentServiceImpl implements PaymentService {
             return null;
         }
         try {
-            return accountClient.getAccountById(accountId).getUserId();
+            return accountClient.getAccountInternal(accountId).getUserId();
         } catch (Exception e) {
             log.warn("Could not resolve the owner of account {} for a payment event: {}",
                     accountId, e.getClass().getSimpleName());

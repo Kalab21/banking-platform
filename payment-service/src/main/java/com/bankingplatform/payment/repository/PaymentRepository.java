@@ -18,6 +18,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByPaymentRef(String paymentRef);
 
     /**
+     * One payment, locked for the rest of the transaction. Cancelling and
+     * executing both take it, so a cancellation and a scheduled run cannot
+     * both act on the same payment.
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Payment p WHERE p.id = :id")
+    Optional<Payment> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /**
      * Ids of due payments, locked for this transaction and skipped if another
      * worker already holds them.
      *
