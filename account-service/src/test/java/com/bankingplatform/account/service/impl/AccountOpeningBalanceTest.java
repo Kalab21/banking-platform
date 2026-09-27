@@ -130,4 +130,15 @@ class AccountOpeningBalanceTest {
         assertThat(savedAccount.getValue().getBalance())
                 .isEqualByComparingTo(new BigDecimal("4200.00"));
     }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "a {0} account opened without a stated limit gets {1}")
+    @org.junit.jupiter.params.provider.CsvSource({"CHECKING, 500.00", "SAVINGS, 0.00", "BUSINESS, 0.00"})
+    void defaultLimitIsTheBanks(AccountType type, String expected) {
+        CreateAccountRequest request = openRequest(type);
+        request.setOverdraftLimit(null);
+
+        Account opened = whenOpened(request);
+
+        assertThat(opened.getOverdraftLimit()).isEqualByComparingTo(expected);
+    }
 }

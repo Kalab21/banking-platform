@@ -10,6 +10,7 @@ import com.bankingplatform.account.kafka.producer.AccountEventProducer;
 import com.bankingplatform.account.mapper.AccountMapper;
 import com.bankingplatform.account.model.Account;
 import com.bankingplatform.account.model.AccountStatus;
+import com.bankingplatform.account.model.AccountType;
 import com.bankingplatform.account.model.AuditLog;
 import com.bankingplatform.account.repository.AccountRepository;
 import com.bankingplatform.account.repository.AuditLogRepository;
@@ -55,6 +56,11 @@ public class AccountServiceImpl implements AccountService {
     private final AccountEventProducer eventProducer;
     private final UserClient userClient;
 
+    /** The bank's standing overdraft offer by account type. */
+    static BigDecimal defaultOverdraftLimit(AccountType type) {
+        return type == AccountType.CHECKING ? new BigDecimal("500.00") : BigDecimal.ZERO;
+    }
+
     @Override
     @Transactional
     public AccountResponse createAccount(CreateAccountRequest request) {
@@ -66,7 +72,8 @@ public class AccountServiceImpl implements AccountService {
                 .accountType(request.getAccountType())
                 .balance(BigDecimal.ZERO)
                 .currency(request.getCurrency() != null ? request.getCurrency() : "USD")
-                .overdraftLimit(request.getOverdraftLimit())
+                .overdraftLimit(request.getOverdraftLimit() != null
+                        ? request.getOverdraftLimit() : defaultOverdraftLimit(request.getAccountType()))
                 .build();
 
         Account saved = accountRepository.save(account);

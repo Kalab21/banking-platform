@@ -163,6 +163,39 @@ class AccountAuthorizationTest {
             // account for someone else.
             verify(accountService, never()).createAccount(any());
         }
+
+        @Test
+        @DisplayName("a customer cannot choose their own overdraft limit when opening an account")
+        void customerCannotStateOverdraftLimit() throws Exception {
+            // Opened with a 1,000,000 limit, the account could be withdrawn
+            // against immediately; changing a limit was already staff-only.
+            mvc.perform(as(post("/api/accounts"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":%d,\"accountType\":\"CHECKING\",\"overdraftLimit\":1000000}"
+                                    .formatted(CUSTOMER_A)))
+                    .andExpect(status().isForbidden());
+
+            verify(accountService, never()).createAccount(any());
+        }
+
+        @Test
+        @DisplayName("a customer opens their own account with the bank's default limit")
+        void customerOpensWithDefaultLimit() throws Exception {
+            mvc.perform(as(post("/api/accounts"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":%d,\"accountType\":\"CHECKING\"}".formatted(CUSTOMER_A)))
+                    .andExpect(status().isCreated());
+        }
+
+        @Test
+        @DisplayName("staff may set a limit when opening an account")
+        void staffMayStateOverdraftLimit() throws Exception {
+            mvc.perform(as(post("/api/accounts"), 99L, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":%d,\"accountType\":\"CHECKING\",\"overdraftLimit\":750}"
+                                    .formatted(CUSTOMER_A)))
+                    .andExpect(status().isCreated());
+        }
     }
 
     @Nested
