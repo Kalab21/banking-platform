@@ -45,6 +45,14 @@ public class AmortizationSchedule {
 
     private LocalDateTime paidAt;
 
+    /**
+     * Paid against this instalment so far. Interest is paid first, so this
+     * also says how much of the instalment's interest is still due.
+     */
+    @Column(name = "amount_paid", nullable = false, precision = 19, scale = 2)
+    @Builder.Default
+    private BigDecimal amountPaid = BigDecimal.ZERO;
+
     @PrePersist
     void prePersist() {
         if (status == null) status = ScheduleStatus.PENDING;

@@ -501,6 +501,12 @@ if ($loans -and $loans.Count -gt 0) {
     # Make a regular repayment
     $repay = Post "$GW/api/loans/$LOAN_ID/repay" @{ amount=$loan.monthlyPayment; sourceAccountId=$ACCOUNT_ID } $TOKEN
     Assert "Loan repayment made" ($repay -ne $null)
+    # A payment below the instalment used to leave it PARTIAL for good, and the
+    # loan closed once none was PENDING -- with the principal still owed.
+    $beforeTiny = Get "$GW/api/loans/$LOAN_ID" $TOKEN
+    $tiny = Post "$GW/api/loans/$LOAN_ID/repay" @{ amount=0.01; sourceAccountId=$ACCOUNT_ID } $TOKEN
+    $afterTiny = Get "$GW/api/loans/$LOAN_ID" $TOKEN
+    Assert "A 0.01 repayment leaves the loan open with its principal owed" ($tiny -and $afterTiny.status -eq "ACTIVE" -and [decimal]$afterTiny.remainingBalance -eq [decimal]$beforeTiny.remainingBalance) "status=$($afterTiny.status) balance=$($afterTiny.remainingBalance)"
 
     # Get payoff quote
     $quote = Get "$GW/api/loans/$LOAN_ID/payoff-quote" $TOKEN

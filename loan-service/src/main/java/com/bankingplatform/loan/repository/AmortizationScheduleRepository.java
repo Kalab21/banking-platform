@@ -13,8 +13,28 @@ public interface AmortizationScheduleRepository extends JpaRepository<Amortizati
     List<AmortizationSchedule> findByLoanIdOrderByPaymentNumber(Long loanId);
     Optional<AmortizationSchedule> findByLoanIdAndPaymentNumber(Long loanId, Integer paymentNumber);
 
-    @Query("SELECT s FROM AmortizationSchedule s WHERE s.status = 'PENDING' AND s.dueDate <= :date")
+    /**
+     * PENDING instalments past due on loans that have been funded. A loan
+     * waiting to be disbursed has lent nothing yet, so nothing on it is late.
+     */
+    @Query("SELECT s FROM AmortizationSchedule s WHERE s.status = 'PENDING' AND s.dueDate <= :date "
+            + "AND s.loan.status = 'ACTIVE'")
     List<AmortizationSchedule> findDuePayments(LocalDate date);
+
+    /** Every status that still has money owed against it. */
+    List<ScheduleStatus> UNPAID = List.of(ScheduleStatus.PENDING, ScheduleStatus.PARTIAL, ScheduleStatus.MISSED);
+
+    List<AmortizationSchedule> findByLoanIdAndStatusInOrderByPaymentNumberAsc(
+            Long loanId, java.util.Collection<ScheduleStatus> statuses);
+
+    /**
+     * Instalments not yet fully paid, earliest first. Partial and missed ones
+     * are included: they used to drop out of the PENDING set for good, so
+     * what was still owed on them was never collected.
+     */
+    default List<AmortizationSchedule> findUnpaid(Long loanId) {
+        return findByLoanIdAndStatusInOrderByPaymentNumberAsc(loanId, UNPAID);
+    }
 
     /**
      * Instalments in the order they fall due.

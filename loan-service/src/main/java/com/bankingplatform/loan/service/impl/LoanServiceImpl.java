@@ -120,6 +120,14 @@ public class LoanServiceImpl implements LoanService {
         loan.setDisbursedAt(LocalDateTime.now());
         loan.setNextPaymentDate(LocalDate.now().plusMonths(1));
 
+        // The schedule was dated when the loan was created, which can be long
+        // before the money arrives. Instalments fall due from disbursement.
+        LocalDate disbursed = LocalDate.now();
+        scheduleRepository.findByLoanIdOrderByPaymentNumber(loanId).forEach(s -> {
+            s.setDueDate(disbursed.plusMonths(s.getPaymentNumber()));
+            scheduleRepository.save(s);
+        });
+
         loan = loanRepository.save(loan);
         eventProducer.publishLoanDisbursed(loan.getId(), loan.getUserId(),
                 loan.getPrincipal(), request.getDisbursementAccountId());
@@ -149,17 +157,17 @@ public class LoanServiceImpl implements LoanService {
         // The next unpaid instalment, in payment order. The ordering used to
         // be whatever PostgreSQL returned, which decided the interest and
         // principal split and the payment number on the repayment record.
-        List<AmortizationSchedule> pending =
-                scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(
-                        loanId, ScheduleStatus.PENDING);
-        if (pending.isEmpty()) {
-            throw new IllegalStateException("No pending payments found");
-        }
-        AmortizationSchedule nextDue = pending.get(0);
+        List<AmortizationSchedule> unpaid = scheduleRepository.findUnpaid(loanId);
+        // Null only when every instalment is paid but rounding left principal
+        // owed; that is paid against the balance with no interest due.
+        AmortizationSchedule nextDue = unpaid.isEmpty() ? null : unpaid.get(0);
 
-        BigDecimal interestDue = nextDue.getInterestPortion();
-        BigDecimal principalDue = nextDue.getPrincipalPortion();
+        BigDecimal interestDue = nextDue == null ? BigDecimal.ZERO
+                : nextDue.getInterestPortion().subtract(nextDue.getAmountPaid()).max(BigDecimal.ZERO);
         BigDecimal payAmount = request.getAmount().min(loan.getRemainingBalance().add(interestDue));
+        if (payAmount.signum() <= 0) {
+            throw new IllegalStateException("Nothing is owed on this loan");
+        }
 
         // Allocate: interest first, remainder to principal
         BigDecimal interestPaid = payAmount.min(interestDue);
@@ -178,19 +186,29 @@ public class LoanServiceImpl implements LoanService {
         loan.setPaymentsMade(loan.getPaymentsMade() + 1);
 
         // Mark schedule entry
-        nextDue.setStatus(payAmount.compareTo(nextDue.getScheduledPayment()) >= 0
-                ? ScheduleStatus.PAID : ScheduleStatus.PARTIAL);
-        nextDue.setPaidAt(LocalDateTime.now());
-        scheduleRepository.save(nextDue);
+        if (nextDue != null) {
+            nextDue.setAmountPaid(nextDue.getAmountPaid().add(payAmount));
+            nextDue.setStatus(nextDue.getAmountPaid().compareTo(nextDue.getScheduledPayment()) >= 0
+                    ? ScheduleStatus.PAID : ScheduleStatus.PARTIAL);
+            nextDue.setPaidAt(LocalDateTime.now());
+            scheduleRepository.save(nextDue);
+        }
 
-        // Advance next payment date
-        List<AmortizationSchedule> remaining =
-                scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(
-                        loanId, ScheduleStatus.PENDING);
-        if (remaining.isEmpty()) {
+        // The loan is paid off when its principal is, and only then. It used
+        // to close once no instalment was still PENDING, which a run of tiny
+        // or missed payments achieved with the principal still owed.
+        List<AmortizationSchedule> remaining = scheduleRepository.findUnpaid(loanId);
+        if (loan.getRemainingBalance().signum() == 0) {
             loan.setStatus(LoanStatus.PAID_OFF);
             loan.setNextPaymentDate(null);
-        } else {
+            // Later instalments were paid early by the principal this payment
+            // cleared, the same way an early payoff settles them.
+            remaining.forEach(s -> {
+                s.setStatus(ScheduleStatus.PAID);
+                s.setPaidAt(LocalDateTime.now());
+                scheduleRepository.save(s);
+            });
+        } else if (!remaining.isEmpty()) {
             loan.setNextPaymentDate(remaining.get(0).getDueDate());
         }
         loanRepository.save(loan);
@@ -202,7 +220,7 @@ public class LoanServiceImpl implements LoanService {
                 .principalPaid(principalPaid)
                 .interestPaid(interestPaid)
                 .sourceAccountId(request.getSourceAccountId())
-                .paymentNumber(nextDue.getPaymentNumber())
+                .paymentNumber(nextDue == null ? null : nextDue.getPaymentNumber())
                 .isEarlyPayoff(false)
                 .build());
 
@@ -241,7 +259,7 @@ public class LoanServiceImpl implements LoanService {
                 payoffAmount, "Early loan payoff — loanId=" + loanId);
 
         // Mark all remaining schedule entries PAID
-        scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(loanId, ScheduleStatus.PENDING).forEach(s -> {
+        scheduleRepository.findUnpaid(loanId).forEach(s -> {
             s.setStatus(ScheduleStatus.PAID);
             s.setPaidAt(LocalDateTime.now());
         });
@@ -284,7 +302,7 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal accruedInterest = loan.getRemainingBalance().multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
         BigDecimal payoffAmount = loan.getRemainingBalance().add(accruedInterest);
 
-        int remaining = (int) scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(loanId, ScheduleStatus.PENDING).size();
+        int remaining = scheduleRepository.findUnpaid(loanId).size();
 
         PayoffQuoteResponse quote = new PayoffQuoteResponse();
         quote.setLoanId(loanId);
