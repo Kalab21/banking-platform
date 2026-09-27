@@ -24,6 +24,14 @@ public interface AccountClient {
     AccountResponse getAccountById(@PathVariable Long id);
 
     /**
+     * An account read service-to-service. A transfer's destination usually
+     * belongs to someone else, so the caller-authorised read above would
+     * refuse it; this answers whether it can receive money at all.
+     */
+    @GetMapping("/internal/accounts/{id}")
+    AccountResponse getAccountInternal(@PathVariable Long id);
+
+    /**
      * Applies a balance movement, at most once per key.
      *
      * <p>The key names the movement, not the request. A retry of the same

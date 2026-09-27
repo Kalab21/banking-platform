@@ -263,6 +263,13 @@ Assert "Deposit to clear overdraft" ($dep2 -ne $null)
 
 $acctCleared = Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN
 Assert "Account status = ACTIVE after clearing" ($acctCleared.status -eq "ACTIVE")
+# A transfer to an account that does not exist used to debit the source first
+# and then fail the credit, leaving a half-applied transfer. It is refused now,
+# and nothing leaves the account.
+$beforeBadTransfer = [decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance
+Assert-Refused "A transfer to an account that does not exist is refused" "POST" `
+    "$GW/api/transactions/transfer" $TOKEN 422 @{ fromAccountId=$ACCOUNT_ID; toAccountId=99999999; amount=10.00; description="Mistyped account" }
+Assert "A refused transfer takes nothing from the source" ([decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance -eq $beforeBadTransfer)
 # 100 - 400 left -35 on the balance (the fee) and 300 overdrawn: a net -335.
 # The 450 deposit repays the 300 first, so 115 reaches the balance. Counting the
 # repaid part twice used to leave 415.

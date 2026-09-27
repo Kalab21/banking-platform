@@ -100,6 +100,8 @@ class TransactionIdempotencyTest {
 
         when(accountClient.getAccountById(OWN_ACCOUNT)).thenReturn(account(OWN_ACCOUNT, CUSTOMER));
         when(accountClient.getAccountById(FOREIGN_ACCOUNT)).thenReturn(account(FOREIGN_ACCOUNT, OTHER_CUSTOMER));
+        when(accountClient.getAccountInternal(OWN_ACCOUNT)).thenReturn(account(OWN_ACCOUNT, CUSTOMER));
+        when(accountClient.getAccountInternal(FOREIGN_ACCOUNT)).thenReturn(account(FOREIGN_ACCOUNT, OTHER_CUSTOMER));
         when(transactionService.withdraw(any())).thenReturn(withdrawal("txn-ref-1"));
 
         // The default: the key is free, so the operation runs.
