@@ -210,6 +210,11 @@ if (-not $ACCOUNT_ID -or $ACCOUNT_ID -le 0) {
     if ($userAccounts -and $userAccounts.Count -gt 0) { $ACCOUNT_ID = $userAccounts[0].id }
 }
 Assert "Account created (productId set)" ($ACCOUNT_ID -and $ACCOUNT_ID -gt 0)
+# An overdraft limit is credit the bank extends. Opening an account used to
+# accept any limit the customer stated, and the account could be withdrawn
+# against at once.
+Assert-Refused "A customer cannot choose their own overdraft limit" "POST" `
+    "$GW/api/accounts" $TOKEN 403 @{ userId=$USER_ID; accountType="CHECKING"; currency="USD"; overdraftLimit=1000000 }
 
 $acct = Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN
 Assert "Account is ACTIVE" ($acct.status -eq "ACTIVE")

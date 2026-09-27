@@ -3,6 +3,7 @@ package com.bankingplatform.account.controller;
 import com.bankingplatform.account.dto.*;
 import com.bankingplatform.account.model.AccountStatus;
 import com.bankingplatform.account.service.AccountService;
+import com.bankingplatform.common.security.AccessDeniedException;
 import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.common.security.CallerIdentity;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,6 +44,13 @@ public class AccountController {
         // A customer may open an account for themselves only. Staff may open
         // one on behalf of any customer.
         AccessGuard.requireTargetUserAllowed(caller, request.getUserId());
+        // An overdraft limit is credit the bank extends, and changing one is
+        // already staff-only. Stating it while opening the account was the
+        // same decision through a side door: a customer could open a checking
+        // account with a limit of their choosing and withdraw against it.
+        if (request.getOverdraftLimit() != null && !caller.isStaff()) {
+            throw new AccessDeniedException("The overdraft limit is set by the bank");
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(accountService.createAccount(request));
     }
 

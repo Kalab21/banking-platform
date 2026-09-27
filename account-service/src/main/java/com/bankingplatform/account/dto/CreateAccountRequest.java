@@ -18,7 +18,10 @@ public class CreateAccountRequest {
 
     private String currency = "USD";
 
-    /** Zero is valid and is the norm for savings accounts, which have no overdraft. */
+    /**
+     * A lending decision, so staff only. Left null, the bank's default for the
+     * account type applies; a customer who states one is refused.
+     */
     @PositiveOrZero
-    private BigDecimal overdraftLimit = BigDecimal.ZERO;
+    private BigDecimal overdraftLimit;
 }

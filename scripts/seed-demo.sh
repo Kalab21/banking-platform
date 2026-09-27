@@ -131,13 +131,17 @@ ok "customer ${USERNAME} (id ${USER_ID})"
 # each one a transaction that can be listed and totalled.
 say "Opening accounts"
 CHECKING=$(api POST /api/accounts \
-  "{\"userId\":${USER_ID},\"accountType\":\"CHECKING\",\"currency\":\"USD\",\"overdraftLimit\":500.00}" \
+  "{\"userId\":${USER_ID},\"accountType\":\"CHECKING\",\"currency\":\"USD\"}" \
   "$TOKEN" | json id)
+# The overdraft limit is the bank's to set: checking opens with its standing
+# 500.00 offer. A customer stating one is refused, so fail loudly if it is.
+[[ -n "$CHECKING" ]] || { echo "  Could not open the checking account" >&2; exit 1; }
 ok "checking account ${CHECKING} (opened at 0.00)"
 
 SAVINGS=$(api POST /api/accounts \
-  "{\"userId\":${USER_ID},\"accountType\":\"SAVINGS\",\"currency\":\"USD\",\"overdraftLimit\":0.00}" \
+  "{\"userId\":${USER_ID},\"accountType\":\"SAVINGS\",\"currency\":\"USD\"}" \
   "$TOKEN" | json id)
+[[ -n "$SAVINGS" ]] || { echo "  Could not open the savings account" >&2; exit 1; }
 ok "savings account ${SAVINGS} (opened at 0.00)"
 
 say "Funding the accounts"

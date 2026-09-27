@@ -373,8 +373,9 @@ public class ApplicationServiceImpl implements ApplicationService {
                     .userId(application.getUserId())
                     .accountType(accountType)
                     .currency(currency != null ? currency : "USD")
-                    .overdraftLimit(type == ApplicationType.CHECKING_ACCOUNT
-                            ? new BigDecimal("500.00") : BigDecimal.ZERO)
+                    // No overdraft limit: account-service applies the bank's
+                    // default for the type, and refuses one stated on a
+                    // customer's behalf.
                     .build());
             return account.getId();
         }
