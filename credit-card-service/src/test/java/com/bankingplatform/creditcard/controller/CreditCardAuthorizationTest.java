@@ -217,8 +217,22 @@ class CreditCardAuthorizationTest {
 
             mvc.perform(as(post("/api/credit-cards/{id}/payment", CARD_OF_A), CUSTOMER_B, "CUSTOMER")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"amount\":50.00}"))
+                            .content("{\"amount\":50.00,\"sourceAccountId\":1}"))
                     .andExpect(status().isForbidden());
+
+            verify(creditCardService, never()).makePayment(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("a card payment that names no funding account is refused")
+        void paymentWithoutFundingAccountRefused() throws Exception {
+            // It used to restore credit without debiting any account.
+            cardBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/credit-cards/{id}/payment", CARD_OF_A), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"amount\":50.00}"))
+                    .andExpect(status().isBadRequest());
 
             verify(creditCardService, never()).makePayment(anyLong(), any());
         }

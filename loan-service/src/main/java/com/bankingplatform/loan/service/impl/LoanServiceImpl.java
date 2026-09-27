@@ -169,10 +169,10 @@ public class LoanServiceImpl implements LoanService {
         // the repayment's own reference below.
         String paymentRef = generateRef();
 
-        if (request.getSourceAccountId() != null) {
-            accountClient.debit(request.getSourceAccountId(), "loan-" + paymentRef,
-                    payAmount, "Loan repayment — loanId=" + loanId);
-        }
+        // Always debited. A repayment with no account to take it from would
+        // reduce the debt without moving any money.
+        accountClient.debit(request.getSourceAccountId(), "loan-" + paymentRef,
+                payAmount, "Loan repayment — loanId=" + loanId);
 
         loan.setRemainingBalance(loan.getRemainingBalance().subtract(principalPaid).max(BigDecimal.ZERO));
         loan.setPaymentsMade(loan.getPaymentsMade() + 1);
@@ -237,10 +237,8 @@ public class LoanServiceImpl implements LoanService {
 
         String payoffRef = generateRef();
 
-        if (request.getSourceAccountId() != null) {
-            accountClient.debit(request.getSourceAccountId(), "loan-" + payoffRef,
-                    payoffAmount, "Early loan payoff — loanId=" + loanId);
-        }
+        accountClient.debit(request.getSourceAccountId(), "loan-" + payoffRef,
+                payoffAmount, "Early loan payoff — loanId=" + loanId);
 
         // Mark all remaining schedule entries PAID
         scheduleRepository.findByLoanIdAndStatusOrderByPaymentNumberAsc(loanId, ScheduleStatus.PENDING).forEach(s -> {

@@ -87,6 +87,13 @@ class LoanAuthorizationTest {
     private String repayment() throws Exception {
         LoanRepaymentRequest request = new LoanRepaymentRequest();
         request.setAmount(new BigDecimal("100.00"));
+        request.setSourceAccountId(5L);
+        return json.writeValueAsString(request);
+    }
+
+    private String repaymentWithNoAccount() throws Exception {
+        LoanRepaymentRequest request = new LoanRepaymentRequest();
+        request.setAmount(new BigDecimal("100.00"));
         return json.writeValueAsString(request);
     }
 
@@ -198,6 +205,22 @@ class LoanAuthorizationTest {
     @Nested
     @DisplayName("acting on a loan")
     class Writing {
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "{0} without a funding account is refused")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"repay", "payoff"})
+        void noFundingAccountRefused(String action) throws Exception {
+            // A repayment that names no account used to reduce the debt without
+            // debiting anything; a payoff of 0.01 closed the whole loan.
+            loanBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/loans/{id}/" + action, LOAN_OF_A), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(repaymentWithNoAccount()))
+                    .andExpect(status().isBadRequest());
+
+            verify(loanService, never()).makeRepayment(anyLong(), any());
+            verify(loanService, never()).earlyPayoff(anyLong(), any());
+        }
 
         @Test
         @DisplayName("a customer cannot repay another customer's loan")

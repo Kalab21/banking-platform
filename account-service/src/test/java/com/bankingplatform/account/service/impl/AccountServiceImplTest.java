@@ -284,15 +284,40 @@ class AccountServiceImplTest {
         }
 
         @Test
-        @DisplayName("a credit that clears the overdraft restores the account to ACTIVE")
+        @DisplayName("a credit that clears the overdraft and the fee restores the account to ACTIVE")
         void fullOverdraftRepaymentRestoresActive() {
+            Account result = whenBalanceUpdated(
+                    account(AccountStatus.OVERDRAWN, "-35.00", "500.00", "300.00"),
+                    request("CREDIT", "335.00"));
+
+            assertThat(result.getOverdraftBalance()).isEqualByComparingTo("0.00");
+            assertThat(result.getBalance()).isEqualByComparingTo("0.00");
+            assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+        }
+
+        @Test
+        @DisplayName("a credit that clears the overdraft but not the fee leaves the account OVERDRAWN")
+        void overdraftClearedFeeOutstanding() {
             Account result = whenBalanceUpdated(
                     account(AccountStatus.OVERDRAWN, "-35.00", "500.00", "300.00"),
                     request("CREDIT", "300.00"));
 
             assertThat(result.getOverdraftBalance()).isEqualByComparingTo("0.00");
-            assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
-            assertThat(result.getBalance()).isEqualByComparingTo("265.00");
+            assertThat(result.getBalance()).isEqualByComparingTo("-35.00");
+            assertThat(result.getStatus()).isEqualTo(AccountStatus.OVERDRAWN);
+        }
+
+        @ParameterizedTest(name = "a credit of {0} raises what the customer is worth by exactly {0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"10.00", "100.00", "300.00", "335.00", "1000.00"})
+        void creditIsCountedOnce(String credit) {
+            // balance - overdraft is the customer's net position. Money in must
+            // move it by the amount in, never by more.
+            Account result = whenBalanceUpdated(
+                    account(AccountStatus.OVERDRAWN, "-35.00", "500.00", "300.00"),
+                    request("CREDIT", credit));
+
+            assertThat(result.getBalance().subtract(result.getOverdraftBalance()))
+                    .isEqualByComparingTo(new BigDecimal("-335.00").add(new BigDecimal(credit)));
         }
 
         @Test
@@ -304,7 +329,7 @@ class AccountServiceImplTest {
 
             assertThat(result.getOverdraftBalance()).isEqualByComparingTo("200.00");
             assertThat(result.getStatus()).isEqualTo(AccountStatus.OVERDRAWN);
-            assertThat(result.getBalance()).isEqualByComparingTo("65.00");
+            assertThat(result.getBalance()).isEqualByComparingTo("-35.00");
         }
 
         @Test
@@ -316,7 +341,7 @@ class AccountServiceImplTest {
 
             assertThat(result.getOverdraftBalance()).isEqualByComparingTo("0.00");
             assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
-            assertThat(result.getBalance()).isEqualByComparingTo("965.00");
+            assertThat(result.getBalance()).isEqualByComparingTo("665.00");
         }
     }
 

@@ -129,14 +129,19 @@ public class AccountServiceImpl implements AccountService {
         BigDecimal amount = request.getAmount();
 
         if ("CREDIT".equalsIgnoreCase(request.getOperation())) {
-            account.setBalance(account.getBalance().add(amount));
+            // A credit repays the overdraft first and only the remainder
+            // reaches the balance. Adding the whole amount to the balance as
+            // well as reducing the overdraft counted the repaid part twice, so
+            // every deposit into an overdrawn account created that much money.
+            BigDecimal repay = amount.min(account.getOverdraftBalance().max(BigDecimal.ZERO));
+            account.setOverdraftBalance(account.getOverdraftBalance().subtract(repay));
+            account.setBalance(account.getBalance().add(amount.subtract(repay)));
+            // Overdrawn until both the overdraft and any fee left on the
+            // balance are paid.
             if (account.getStatus() == AccountStatus.OVERDRAWN
-                    && account.getOverdraftBalance().compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal repay = amount.min(account.getOverdraftBalance());
-                account.setOverdraftBalance(account.getOverdraftBalance().subtract(repay));
-                if (account.getOverdraftBalance().compareTo(BigDecimal.ZERO) == 0) {
-                    account.setStatus(AccountStatus.ACTIVE);
-                }
+                    && account.getOverdraftBalance().signum() == 0
+                    && account.getBalance().signum() >= 0) {
+                account.setStatus(AccountStatus.ACTIVE);
             }
         } else if ("DEBIT".equalsIgnoreCase(request.getOperation())) {
             BigDecimal available = account.getBalance().add(account.getOverdraftLimit())

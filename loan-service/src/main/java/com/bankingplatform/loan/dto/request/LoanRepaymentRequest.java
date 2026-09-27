@@ -13,5 +13,6 @@ public class LoanRepaymentRequest {
     @DecimalMin("0.01")
     private BigDecimal amount;
 
+    @NotNull
     private Long sourceAccountId;
 }

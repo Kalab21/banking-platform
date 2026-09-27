@@ -200,10 +200,10 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         String paymentRef = UUID.randomUUID().toString();
 
-        if (request.getSourceAccountId() != null) {
-            accountClient.debit(request.getSourceAccountId(), "card-" + paymentRef,
-                    payAmount, "Credit card payment");
-        }
+        // Always debited. A payment with no account to take it from would
+        // restore credit without moving any money.
+        accountClient.debit(request.getSourceAccountId(), "card-" + paymentRef,
+                payAmount, "Credit card payment");
 
         card.setCurrentBalance(card.getCurrentBalance().subtract(payAmount));
         card.setAvailableCredit(card.getAvailableCredit().add(payAmount));
