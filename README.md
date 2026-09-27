@@ -13,7 +13,7 @@ across Spring Boot services and a Next.js customer console.
 **Core stack:** Java 17 · Spring Boot · Kafka · PostgreSQL · Redis · Next.js · React ·
 TypeScript · Docker · AWS/Terraform
 
-**Engineering proof:** 13 backend processes · 1010 CI tests · idempotent money movement ·
+**Engineering proof:** 13 backend processes · 1262 CI tests · idempotent money movement ·
 concurrency-safe balances · resource-level authorization · responsive customer banking UX
 
 > Portfolio demonstration using synthetic data. No real money and no production,
@@ -32,6 +32,10 @@ the running stack.
 | Move money — review | Move money — receipt |
 |---|---|
 | ![Review step naming the amount and both accounts by their last four digits, above a single confirm button](docs/screenshots/23-move-money-review.png) | ![Receipt confirming a completed transfer with the reference the backend issued](docs/screenshots/24-move-money-receipt.png) |
+
+| My applications — an open offer | Staff review queue |
+|---|---|
+| ![An offered personal loan showing the stored amount, APR, term and monthly payment above Accept and Decline](docs/screenshots/28-applications-offer.png) | ![The reviewer's queue of applications referred to manual review, with applicant score and requested amount](docs/screenshots/30-staff-application-queue.png) |
 
 | Account detail | Profile & security |
 |---|---|
@@ -92,8 +96,10 @@ downstream, replacing anything the client sent.
 
 ![Northbank system architecture](docs/architecture/northbank-system-architecture.svg)
 
-Several services both publish and consume: an approved application, for example, flows back
-to `account-service` or `credit-card-service` to create what was approved.
+Several services both publish and consume. An accepted credit offer, for example, is
+published to `credit-card-service` or `loan-service`, which creates the product from the
+offer's terms and publishes a confirmation that `application-service` consumes to record
+the real product id. Deposit accounts are opened synchronously through `account-service`.
 
 **13 backend processes total:** Eureka, the API Gateway and 11 business services. The
 Next.js console runs as a separate process; browser banking requests reach the platform
@@ -107,14 +113,14 @@ through this BFF and the gateway.
 | `eureka-server` | 8761 | — | Service discovery |
 | `api-gateway` | 8080 | — | Routing, JWT validation, rate limiting |
 | `user-service` | 8081 | `user_db` | Auth, JWT issuing, 2FA, KYC, credit score |
-| `account-service` | 8082 | `account_db` | Accounts, balances, overdraft |
-| `application-service` | 8083 | `application_db` | Product application workflow |
+| `application-service` | 8082 | `application_db` | Product application workflow |
+| `account-service` | 8083 | `account_db` | Accounts, balances, overdraft |
 | `transaction-service` | 8084 | `transaction_db` | Deposits, withdrawals, transfers |
 | `payment-service` | 8085 | `payment_db` | Beneficiaries, payments, recurring |
 | `statistics-service` | 8086 | `statistics_db` | Kafka-fed aggregates, Redis cached |
 | `notification-service` | 8087 | `notification_db` | Kafka-fed customer alerts |
 | `fraud-detection-service` | 8088 | `fraud_db` | Rules engine, velocity counters, freeze |
-| `credit-card-service` | 8089 | `creditcard_db` | Cards, interest, statements, rewards |
+| `credit-card-service` | 8089 | `credit_card_db` | Cards, interest, statements, rewards |
 | `loan-service` | 8090 | `loan_db` | Amortization, disbursement, repayment |
 | `integration-service` | 8091 | `integration_db` | Wire / ACH / SWIFT stubs, FX |
 
@@ -135,7 +141,7 @@ Ports, databases and Kafka topics are also listed in
 | **Data** | PostgreSQL 16, database per service, Flyway migrations, `ddl-auto: validate`; Redis 7 for rate limits, velocity counters and read-model cache |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, Brave tracing to Zipkin, `X-Request-Id` correlation |
-| **Testing** | 1010 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 34 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
+| **Testing** | 1262 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 38 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 <details>
@@ -181,6 +187,13 @@ roles.
 record with `balanceAfter` and a generated reference; beneficiaries, internal and external
 payments, and scheduled payments driven by a polling job.
 
+**Credit applications** (`application-service`) — deterministic, versioned underwriting
+(score, debt-to-income, loan-to-value, amount and term limits) that approves, refuses or
+refers to a person, with an immutable decision record; a staff review step for referrals
+and incomplete identity checks; offers whose terms are stored once and accepted or
+declined by the applicant only; and provisioning that reads `PROVISIONED` only once the
+card or loan service confirms the product it created.
+
 **Lending and cards** (`loan-service`, `credit-card-service`) — amortization schedule
 generation, disbursement, repayment and early payoff; card purchases, cash advances, daily
 interest accrual, monthly statements and rewards.
@@ -195,7 +208,8 @@ All three are fed by Kafka.
 
 **Console** (`frontend`) — two-step sign-in challenging for a TOTP code before any session
 cookie is written; customer views for dashboard, accounts, move money, transactions,
-payments, loans, cards, notifications and profile; staff views for KYC review, the
+payments, loans, cards (with a self-service freeze), Explore Credit, product applications,
+My Applications with offer accept/decline, notifications and profile; staff views for KYC review, the
 application queue and fraud alerts. Pages fetch through React Server Components and mutate
 through Server Actions, so the browser never holds a bearer token.
 
@@ -260,14 +274,14 @@ remaining hardening candidates, including findings this project has not fixed �
 
 | Evidence | Result |
 |---|---:|
-| Backend — unit, web-slice and Testcontainers integration | 728 |
-| Frontend unit and component | 213 |
+| Backend — unit, web-slice and Testcontainers integration | 915 |
+| Frontend unit and component | 278 |
 | Offline Playwright (production build, no backend) | 69 |
-| **CI total** | **1010** |
-| Live Playwright against the running stack — on demand | 34 scenarios |
-| PowerShell full-stack suite — on demand | 73 / 73 |
+| **CI total** | **1262** |
+| Live Playwright against the running stack — on demand | 38 scenarios |
+| PowerShell full-stack suite — on demand | 155 / 155 |
 
-The backend total is 589 unit and web-slice tests plus 139 integration tests that run
+The backend total is 766 unit and web-slice tests plus 149 integration tests that run
 `@DataJpaTest` against a real PostgreSQL 16 container, so entity and migration drift fails
 the build and the concurrency and idempotency guarantees are proved against the database
 that enforces them. The live Playwright and PowerShell suites need all 13 backend processes
@@ -275,8 +289,8 @@ running, so they are triggered on demand rather than on every push, and are not 
 the CI total. Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 589 unit + 139 integration = 728
-cd frontend && npm run test                  # frontend: 213 unit/component
+mvn -B --no-transfer-progress clean verify   # backend: 766 unit + 149 integration = 915
+cd frontend && npm run test                  # frontend: 278 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 

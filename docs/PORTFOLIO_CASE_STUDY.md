@@ -11,7 +11,7 @@ boundaries.
 It uses synthetic data and makes no production or regulatory claim.
 
 **At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
-services), 1010 automated tests in CI, 34 live-stack scenarios on demand, and a
+services), 1262 automated tests in CI, 38 live-stack scenarios on demand, and a
 customer console that never holds a bearer token or a full account number.
 
 ## Problem / Context
@@ -42,7 +42,7 @@ plus a Next.js console:
   `fraud-detection`, `integration`. Each owns its schema in its own PostgreSQL
   database.
 - **Messaging** — Kafka for derived state: statistics, notifications, fraud
-  scoring, card and loan issuance from approved applications.
+  scoring, card and loan issuance from accepted offers, and the confirmation back.
 - **Console** — Next.js App Router. React Server Components fetch; Server
   Actions mutate. The browser never holds a bearer token.
 - **Observability** — Micrometer to Prometheus, Grafana dashboards, Brave
@@ -209,9 +209,19 @@ the number with extra steps.
 ## Customer Experience
 
 The console covers dashboard, accounts and account detail, move money,
-transactions, payments, credit cards and card detail, loans and loan detail,
-notifications, and profile and security — plus staff views for KYC review, the
-application queue and fraud alerts.
+transactions, payments, credit cards and card detail (with a self-service
+freeze), loans and loan detail, Explore Credit, product applications, My
+Applications with offer accept and decline, notifications, and profile and
+security — plus staff views for KYC review, the application queue and fraud
+alerts.
+
+Credit follows the lifecycle the backend enforces. A customer applies with only
+what they can state — amount, term, income, existing debt, asset value — never
+a rate, limit or tier. The application page shows the stored offer's terms, and
+Accept and Decline appear only when that offer loaded and is still open; if it
+cannot be read, the page says so and offers no button. Declining takes a second
+click. The product link appears only once the application reads `PROVISIONED`
+with the real product id the card or loan service confirmed.
 
 Moving money is its own route and its own journey: choose transfer, deposit or
 withdrawal, fill in the details, review exactly what is about to happen against
@@ -238,17 +248,19 @@ something false about their money.
 
 ## Verification
 
-1010 automated tests run in CI:
+1262 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
-| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 589 |
-| Backend integration against real PostgreSQL and an embedded Kafka broker | 139 |
-| Frontend unit and component (Vitest, React Testing Library) | 213 |
+| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 766 |
+| Backend integration against real PostgreSQL, Redis and an embedded Kafka broker | 149 |
+| Frontend unit and component (Vitest, React Testing Library) | 278 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
-On demand, against the full running stack: 34 live Playwright scenarios and a
-PowerShell suite that drives registration through to TOTP enrollment.
+On demand, against the full running stack: 38 live Playwright scenarios and a
+155-assertion PowerShell suite that drives registration, money movement, the
+credit lifecycle (including manual review, decline and customer-only offer
+response), scheduled payments and card controls through to TOTP enrollment.
 
 Counts are test cases as the runners report them, not assertions.
 
@@ -288,12 +300,12 @@ Kafka.
 safe; it does not make an automatic in-process retry of a half-completed
 downstream mutation safe.
 
-**Money-moving writes limited to deposit, withdrawal and transfer** — payment
-creation, scheduled payments, loan repayment and card payment all exist in the
-backend, but none of those endpoints requires an idempotency key the way the
-transaction endpoints do. A console flow for them would be the one money path
-where a lost response could not be retried safely, so they are deliberately
-absent rather than half-built.
+**Console money movement limited to deposit, withdrawal and transfer** — loan
+repayment, early payoff and card cash advance, payment and purchase also require
+an `Idempotency-Key` through the same `IdempotencyGuard`, but the console does
+not expose them yet. Payment creation and scheduled payments take no key; they
+rely on scheduled-payment claiming instead, which stops one due payment being
+executed twice but does not make a client's retry of the create request safe.
 
 ## Known Limitations
 
@@ -301,13 +313,20 @@ These are recorded rather than solved, and each is a deliberate stopping point.
 
 1. **A transfer is not atomic across services.** The debit and the credit are
    two calls to `account-service`. If the credit fails after the debit is
-   applied, the transfer is reported as needing reconciliation and the
-   idempotency record settles unknown so no retry can debit twice. There is no
-   saga and no compensating transaction.
-2. **Unknown outcomes are not reconciled automatically.** They are logged for a
-   human. Nothing reads that log.
-3. **No Kafka dead-letter handling.** A poison message hits Spring Kafka's
-   default retry-then-log behavior and is dropped.
+   applied, the idempotency record settles unknown so no retry can debit twice.
+   There is no saga and no compensating transaction.
+2. **Reconciliation reports; it does not repair.** Each transfer attempt is
+   recorded before its legs run. `TransferReconciliationJob` asks
+   `account-service` every five minutes what became of each keyed leg of a
+   stuck attempt and records the answer; an `/internal` endpoint, reachable
+   only inside the Compose network, runs the same pass on demand. Nothing then credits or
+   reverses money on its own: deciding which account is made whole is left to a
+   person. Unknown idempotency outcomes outside transfers are surfaced only as
+   the `banking.idempotency.unknown` gauge.
+3. **Dead-letter topics are written, not replayed.** Consumers retry with
+   bounded exponential backoff, then publish the record to `<topic>.DLT` with
+   its failure headers and move on; deserialization failures go straight
+   there. Nothing consumes the dead-letter topics, so replay is a manual step.
 4. **Service-to-service calls are not authenticated.** The `/internal`
    endpoints rely on network isolation — no host ports, no gateway route —
    rather than mTLS or a service credential.
@@ -318,14 +337,20 @@ These are recorded rather than solved, and each is a deliberate stopping point.
    fire down.
 7. **External rails are simulated.** Wire, ACH and SWIFT are modeled, not
    connected to anything.
-8. **Test depth is uneven.** Three services run against a real PostgreSQL;
-   `payment`, `notification`, `integration` and `application` have
-   authorization suites but no service-layer tests.
+8. **Test depth is uneven.** Account, transaction, payment, application,
+   credit-card, loan and user services and the shared Kafka and idempotency
+   modules have Testcontainers suites; `notification`, `integration`, `fraud`
+   and `statistics` are covered by authorization, contract and unit tests only.
 9. **The live suite runs on demand.** Starting thirteen backend processes on
    every push is not a sensible trade, so only the offline suite is wired into
    CI.
-10. **No per-account login throttling.** The only limit is the gateway's
-    per-IP rate limit, which does not stop a distributed attempt on one account.
+10. **Audit coverage is partial.** Account, application, payment and transaction
+    services write an attributed audit row with each change; loan, credit-card
+    and user services do not yet, so repayments, card payments and KYC reviews
+    are traceable through their own records and events rather than the audit log.
+11. **Second factor is opt-in, including for staff.** Requiring it for
+    employees needs a first-enrolment flow that does not exist yet, because
+    enrolment itself requires a signed-in caller.
 
 ## Technology
 
@@ -361,8 +386,22 @@ against the running stack with a seeded synthetic customer.
 | `19-loans.png` | Balance progress, monthly payment, next payment date |
 | `20-profile-security.png` | Profile with masked SSN and honest identity status |
 | `25-payments.png` | Payees, saved through the console, displayed masked |
+| `26-explore-credit.png` | The four credit products and what each asks of the customer |
+| `27-credit-application.png` | A product form that asks only what the customer can state |
+| `28-applications-offer.png` | The stored offer's terms beside Accept and Decline |
+| `29-card-freeze.png` | Card detail with the self-service freeze — the only card state a customer controls |
+| `30-staff-application-queue.png` | The reviewer's queue of referred applications with their scores |
 
 ## Interview Talking Points
+
+- Ran a final audit against the code rather than the tests, and found money
+  being created: a loan payoff of 0.01 with no funding account closed the whole
+  loan, and a deposit into an overdrawn account was counted twice. Both were
+  pinned in place by tests asserting the wrong behaviour; the fix replaced them
+  with a conservation invariant (net position moves by exactly the amount).
+- Found that scheduled payments had never executed: the timer had no caller
+  identity, so every transfer was refused and marked failed. Fixed by running
+  the transfer as the stored payer, proved live by waiting for the scheduler.
 
 - Found and fixed two rounds of broken object-level authorization, the second in
   services that had no authorization code at all; confirmed live with a second

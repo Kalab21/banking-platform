@@ -503,7 +503,7 @@ if ($loans -and $loans.Count -gt 0) {
 Write-Host "`n=== FLOW 5: Scheduled Payment ===" -ForegroundColor Cyan
 
 # Create beneficiary first
-$ben = Post "$GW/api/payments/beneficiaries" @{ userId=$USER_ID; name="E2E Landlord"; nickname="Landlord"; accountNumber="9876543210"; bankName="Example Bank"; routingNumber="021000021"; beneficiaryType="EXTERNAL_ACH"; currency="USD" } $TOKEN
+$ben = Post "$GW/api/payments/beneficiaries" @{ userId=$USER_ID; name="E2E Landlord"; nickname="Landlord"; accountNumber="9876543210"; bankName="Example Bank"; routingNumber="990000001"; beneficiaryType="EXTERNAL_ACH"; currency="USD" } $TOKEN
 Assert "Create beneficiary" ($ben -and $ben.id)
 $BEN_ID = $ben.id
 
@@ -568,7 +568,7 @@ Assert-Refused "Another customer cannot wire from an account they do not own" "P
 
 Assert-Refused "Another customer cannot ACH from an account they do not own" "POST" `
     "$GW/api/integrations/ach-transfer" $OTHER_TOKEN 403 `
-    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="12345678"; routingNumber="026009593"; bankName="Acme Bank"; amount=100.00; currency="USD"; purpose="Not theirs" }
+    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="12345678"; routingNumber="990000002"; bankName="Acme Bank"; amount=100.00; currency="USD"; purpose="Not theirs" }
 
 if ($wire -and $wire.transferRef) {
     Assert-Refused "Another customer cannot read someone else's transfer by reference" "GET" `
@@ -793,7 +793,7 @@ Assert "FX rate USD->GBP returned" ($fxRate -and $fxRate.rate -gt 0)
 Write-Host "  USD->GBP rate=$($fxRate.rate)"
 
 # SWIFT transfer
-$swift = Post "$GW/api/integrations/swift-transfer" @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Tokyo Partners"; iban="JP1234567890"; swiftCode="BOTKTOKX"; bankName="Bank of Tokyo"; bankCountry="JP"; amount=2000.00; currency="USD"; purpose="Services" } $TOKEN
+$swift = Post "$GW/api/integrations/swift-transfer" @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Harbour Partners"; iban="JP1234567890"; swiftCode="EXMPJPJT"; bankName="Example Bank Japan"; bankCountry="JP"; amount=2000.00; currency="USD"; purpose="Services" } $TOKEN
 Assert "SWIFT transfer initiated" ($swift -and $swift.transferType -eq "SWIFT")
 Assert "SWIFT estimated arrival = T+5" (@(
         (Get-Date).AddDays(5).ToString("yyyy-MM-dd"),

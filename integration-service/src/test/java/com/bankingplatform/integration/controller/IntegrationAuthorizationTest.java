@@ -100,7 +100,7 @@ class IntegrationAuthorizationTest {
     private static String wireBody() {
         return """
                 {"fromAccountId":5,"beneficiaryName":"London Corp Ltd",
-                 "beneficiaryAccount":"GB29NWBK60161331926819","routingNumber":"026009593",
+                 "beneficiaryAccount":"GB29EXMP60161331926819","routingNumber":"990000002",
                  "bankName":"Example Bank","bankCountry":"GB","amount":5000.00,
                  "currency":"USD","purpose":"Business payment"}
                 """;
@@ -109,7 +109,7 @@ class IntegrationAuthorizationTest {
     private static String achBody() {
         return """
                 {"fromAccountId":5,"beneficiaryName":"Acme Payroll",
-                 "beneficiaryAccount":"12345678","routingNumber":"026009593",
+                 "beneficiaryAccount":"12345678","routingNumber":"990000002",
                  "bankName":"Acme Bank","amount":250.00,"currency":"USD","purpose":"Payroll"}
                 """;
     }
@@ -117,7 +117,7 @@ class IntegrationAuthorizationTest {
     private static String swiftBody() {
         return """
                 {"fromAccountId":5,"beneficiaryName":"Tokyo Partners","iban":"JP1234567890",
-                 "swiftCode":"BOTKTOKX","bankName":"Bank of Tokyo","bankCountry":"JP",
+                 "swiftCode":"EXMPJPJT","bankName":"Example Bank Japan","bankCountry":"JP",
                  "amount":2000.00,"currency":"USD","purpose":"Services"}
                 """;
     }

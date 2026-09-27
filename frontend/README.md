@@ -28,7 +28,7 @@ layer and it only knows the gateway's base URL.
 src/
 ├── app/
 │   ├── (auth)/          # login, register — no app chrome
-│   └── (app)/           # authenticated shell: dashboard, accounts, loans, cards, admin
+│   └── (app)/           # authenticated shell: dashboard, accounts, money, cards, loans, credit, applications, admin
 ├── components/
 │   ├── ui/              # primitives (cards, tables, badges, form fields)
 │   └── layout/          # sidebar, sign-out, wordmark
@@ -72,8 +72,8 @@ npm run build       # production build
   /api/auth/login` answers `twoFactorRequired` and issues no token until a valid TOTP code
   is presented; the login form swaps to a code prompt and resubmits. Nothing requires a
   customer to enrol in the first place.
-- **Card numbers are always masked.** The backend returns `cardNumber` in full on
-  `CreditCardResponse`; `maskCardNumber` is applied everywhere it is rendered.
+- **Card numbers are never sent in full.** `CreditCardResponse` carries only
+  `maskedCardNumber` and `last4`, so the console has no full number to leak.
 - **KYC review is per customer.** There is no "all pending documents" endpoint, so the staff
   page looks a customer up by id instead of showing an invented queue.
 - **Charts are drawn from recorded values only.** The balance trend plots real `balanceAfter`

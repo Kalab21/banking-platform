@@ -118,8 +118,11 @@ boolean fails open.
 | Loans: detail, schedule, repayments, payoff quote | yes | **no** | yes | yes |
 | Loans: repay, early payoff, disburse | own only | **no** | yes | yes |
 | Cards: detail, transactions, statements | yes | **no** | yes | yes |
-| Cards: purchase, cash advance, payment, freeze | own only | **no** | yes | yes |
+| Cards: cash advance, payment | own only | **no** | yes | yes |
+| Cards: freeze and unfreeze (`ACTIVE` ↔ `CUSTOMER_FROZEN` only) | own only | **no** | yes, plus bank states | yes, plus bank states |
+| Cards: purchase (simulated merchant), statement generation | **no** | **no** | yes | yes |
 | Open an account, submit an application | for self | **no** | for anyone | for anyone |
+| Accept or decline a credit offer | own only | **no** | **no** | **no** |
 | Move money, pay from an account | from own accounts | **no** | — | — |
 | External transfer (wire / ACH / SWIFT): initiate | from own accounts | **no** | **no** | **no** |
 | External transfer: read by reference | yes | **no** | yes | yes |
@@ -216,6 +219,16 @@ The boundary is the network:
 `GatewayRouteExposureTest` asserts the first two. The third is a Compose property,
 and `docker-compose.dev-ports.yml` exists to re-open those ports deliberately when
 developing rather than by default.
+
+### Work with no caller
+
+A scheduled payment runs from a timer, so there is no request identity to forward.
+`payment-service` reads the paying account's owner through
+`/internal/accounts/{id}` and makes the transfer inside `CallerContext.runAs` as that
+customer; `CallerIdentityFeignInterceptor` forwards a `runAs` identity only when there
+is no inbound request, and an inbound request's identity always wins. `runAs` is the
+only way to set one, and it is only ever set from stored state. `transaction-service`
+then applies the same ownership check it would to the customer's own request.
 
 ## Other controls
 
@@ -416,21 +429,22 @@ test gate rather than folded into a feature change.
 
 Recorded rather than implemented. Each is a separate decision.
 
-### 1. No per-account login throttling — medium
+### 1. No breached-password check — low
 
 **Current policy.** `RegisterRequest` requires at least 8 characters with an
 uppercase letter, a lowercase letter and a number (`@Size(min = 8, max = 100)`
 plus a `@Pattern`), and the console shows the same rule as a live checklist.
-Passwords are stored with BCrypt. The earlier six-character minimum, under
-which `Password1` was acceptable, is gone.
+Passwords are stored with BCrypt. Repeated failures against one account are
+throttled per account in Redis, as described in
+[Guessing one account's password](#guessing-one-accounts-password), on top of
+the gateway's per-IP rate limit.
 
-**What is still missing.** There is no breach-corpus check, and no per-account
-lockout or attempt throttling on `/api/auth/login` — the only limit is the
-gateway's per-IP rate limit, which does not stop a distributed attempt against
-one account.
+**What is still missing.** Nothing checks a new password against a corpus of
+known-breached passwords, so a password that meets the composition rule but is
+widely leaked is accepted.
 
-**Smallest safe fix.** Per-account attempt throttling with a backoff, and a
-check against a known-breached password list at registration.
+**Smallest safe fix.** A k-anonymity range lookup against a breached-password
+list at registration and password change.
 
 ### 2. Two-factor is opt-in — low
 

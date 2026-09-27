@@ -189,7 +189,7 @@ ok "750.00 checking to savings"
 say "Adding a beneficiary"
 api POST /api/payments/beneficiaries "$(cat <<JSON
 {"userId":${USER_ID},"name":"Northwind Properties","nickname":"Landlord",
- "accountNumber":"0000111122","bankName":"Example Bank","routingNumber":"021000021",
+ "accountNumber":"0000111122","bankName":"Example Bank","routingNumber":"990000001",
  "beneficiaryType":"EXTERNAL_ACH","currency":"USD"}
 JSON
 )" "$TOKEN" > /dev/null

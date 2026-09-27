@@ -34,10 +34,13 @@ The backend runs in Docker while the console reloads locally.
 
 Drives the public API through the gateway — no direct database writes, no
 production configuration — and prints the generated credentials. Seeds two
-accounts, twelve transactions, a beneficiary, a loan with its amortization
-schedule and first repayment, a credit card with three purchases and a payment,
-and two KYC documents awaiting review. Names and numbers are synthetic, and
-re-running creates a fresh customer.
+accounts, twelve transactions and a beneficiary; submits two KYC documents and
+has the demo reviewer approve them; then applies for a loan and a credit card,
+accepts both offers and waits for the products to be created, disbursing and
+repaying the loan once and putting three purchases and a payment on the card.
+It needs the demo staff account (`NORTHBANK_DEMO_STAFF_*`, enabled in
+`docker-compose.yml`). Names and numbers are synthetic, and re-running creates a
+fresh customer.
 
 `SEED_BACKDATE=1` additionally spreads the dates, which is the one step that
 writes to the databases directly: `created_at` is a `@CreationTimestamp` and is
@@ -46,11 +49,6 @@ preceding eight weeks with the two legs of a transfer kept on the same
 timestamp, the accounts are opened before their first transaction, and the
 customer is registered before their accounts. It exists so screenshots have a
 real date range, it is off by default, and it needs the Compose stack.
-
-`SEED_BACKDATE=1` additionally spreads the seeded transaction timestamps over the
-preceding weeks so the dashboard balance chart has a date range. That step writes
-to the database directly, because `created_at` is a `@CreationTimestamp` and is
-not settable through the API. It is off by default.
 
 ## Smoke test
 
@@ -118,8 +116,11 @@ Selected routes, all reached through the gateway on `:8080`:
 | `GET` `POST` | `/api/accounts` | Open and list accounts |
 | `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement — requires `Idempotency-Key` |
 | `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments and beneficiaries (owner or staff) |
-| `POST` | `/api/loans`, `/api/credit-cards` | Lending and cards (owner or staff) |
-| `GET` `POST` | `/api/loans/{id}/...`, `/api/credit-cards/{id}/...` | Detail, schedule, repayment, purchase, card payment — owner or staff |
+| `POST` | `/api/applications` | Apply for an account, card or loan (for self; staff for anyone) |
+| `GET` | `/api/applications/{id}/offers` | The offer on an application (owner or staff) |
+| `POST` | `/api/applications/{id}/offer/accept`, `/offer/decline` | Answer the offer — the applicant only, no request body |
+| `PUT` | `/api/applications/{id}/review` | Decide a referred application — employee/admin only |
+| `GET` `POST` | `/api/loans/{id}/...`, `/api/credit-cards/{id}/...` | Detail, schedule, repayment, cash advance, card payment — owner or staff; writes require `Idempotency-Key`. Purchase is staff-only (simulated merchant) |
 | `GET` | `/api/statistics/users/{id}` | A customer's own read models (owner or staff) |
 | `GET` | `/api/statistics/platform`, `/api/statistics/daily` | Platform-wide read models — employee/admin only |
 | `GET` | `/api/notifications` | Paginated user alerts (owner or staff) |
@@ -215,8 +216,9 @@ retry. A failure that reached `account-service` and then lost the thread — a
 timeout, a 5xx, a transfer whose debit landed and whose credit did not — spends
 the key permanently. Whether the balance changed is not knowable from
 `transaction-service`, and a retry would be a coin-flip between a no-op and a
-second debit. Those records are logged for reconciliation rather than resolved
-automatically.
+second debit. Those records are left unknown rather than resolved automatically;
+for transfers, `TransferReconciler` later establishes from `account-service` what
+each leg actually did and records it, without moving money.
 
 This is also why the circuit breaker still has no retry. Idempotency makes a
 *client's* repeat safe; it does not make an automatic in-process retry of a
@@ -267,8 +269,10 @@ the transfer method covers this service's rows and nothing else. If the credit
 fails after the debit has been applied, the transfer is reported as
 `500 — needs reconciliation` rather than as the credit leg's own error, and the
 idempotency record settles as unknown so no retry can debit the source twice.
-There is no compensating transaction: a saga or a transactional outbox would be
-the fix, and neither is implemented.
+There is no saga and no compensating transaction. The transactional outbox makes
+event publication atomic with each service's own write, but it does not span the
+two legs; the transfer reconciler reports what happened to each leg and leaves any
+correction to a person.
 
 **Events for derived state, synchronous calls for authoritative state.** A transfer
 must know immediately whether the debit succeeded, so that is a Feign call.
@@ -288,15 +292,19 @@ tokens. See [SECURITY.md](SECURITY.md).
 60-second default blocks request threads during a broker outage until the service
 appears hung.
 
-**Audit log written inside the domain transaction.** Every state change writes an
-`audit_log` row in the same `@Transactional` unit as the business write.
+**Audit log written inside the domain transaction.** In `account-service`,
+`application-service`, `payment-service` and `transaction-service`, each state change
+writes an `audit_log` row in the same `@Transactional` unit as the business write,
+attributed to the caller the gateway identified (or `SYSTEM` for scheduled work).
+`loan-service`, `credit-card-service` and `user-service` have the table but do not yet
+write to it.
 
 ## Roadmap
 
-1. Extend the JUnit 5 / Mockito and Testcontainers pattern to `payment`,
-   `notification`, `integration` and `application`, which have no service-layer
-   tests.
-2. Transactional outbox and saga for cross-service transfers.
+1. Extend the Testcontainers pattern to `notification`, `integration`, `fraud`
+   and `statistics`, which have unit, contract and authorization tests only.
+2. A compensation policy for transfers the reconciler finds half-applied, and a
+   replay tool for dead-letter topics.
 3. A pending-KYC-documents endpoint so staff review is a queue rather than a
    per-customer lookup.
 4. Extend Resilience4j beyond the `transaction-service` → `account-service` hop,
