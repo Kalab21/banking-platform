@@ -104,8 +104,10 @@ public class InternalAccountController {
      *
      * <p>The answer a caller cannot work out for itself. A transfer whose
      * debit timed out does not know whether the money left; this service
-     * does, because the idempotency record is written by the same transaction
-     * that moved the balance.
+     * keeps an idempotency record per key. The record is completed in its own
+     * transaction just after the balance commits, so an {@code IN_PROGRESS}
+     * record means "not settled", not "not applied" -- a crash between the two
+     * commits leaves a movement that did happen looking unfinished.
      *
      * <p>{@code NOT_FOUND} is a real answer and not an error: it means the
      * request never arrived here, so nothing was applied and the caller is

@@ -10,8 +10,9 @@ import lombok.NoArgsConstructor;
  *
  * <p>Exists so a caller that lost the answer can ask for it rather than
  * guess. A transfer whose debit timed out has no way to know whether the
- * money left; the idempotency record here does, because it is written by the
- * same transaction that moved it.
+ * money left; the idempotency record here is the answer once it settles. It
+ * is completed in its own transaction just after the balance commits, so
+ * {@code IN_PROGRESS} means "not yet known", never "not applied".
  */
 @Data
 @Builder

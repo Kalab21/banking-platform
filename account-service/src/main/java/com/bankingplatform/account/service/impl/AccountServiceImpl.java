@@ -146,8 +146,13 @@ public class AccountServiceImpl implements AccountService {
         } else if ("DEBIT".equalsIgnoreCase(request.getOperation())) {
             BigDecimal available = account.getBalance().add(account.getOverdraftLimit())
                     .subtract(account.getOverdraftBalance());
+            // A debit that dips into the overdraft also costs the fee, so the
+            // fee has to fit inside the limit too; checking the amount alone
+            // let the fee carry the account past its limit.
+            BigDecimal required = account.getBalance().compareTo(amount) >= 0
+                    ? amount : amount.add(OVERDRAFT_FEE);
 
-            if (available.compareTo(amount) < 0) {
+            if (available.compareTo(required) < 0) {
                 throw new InsufficientFundsException(
                         "Insufficient funds. Available: " + available + ", Requested: " + amount);
             }
