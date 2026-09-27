@@ -164,7 +164,7 @@ Ports, databases and Kafka topics are also listed in
 | Testing | JUnit 5, Mockito, AssertJ, Testcontainers; Vitest, React Testing Library, Playwright |
 | Build / CI | Maven multi-module, GitHub Actions, CodeQL, Trivy, Dependabot |
 | Containers | Docker, Docker Compose |
-| Cloud infrastructure | Terraform — AWS ECS Fargate, RDS, MSK, ElastiCache, ALB, WAF, CloudFront, Route 53, ECR, Secrets Manager, VPC |
+| Cloud infrastructure | Terraform definitions (not a hosted deployment) — AWS ECS Fargate, RDS, MSK, ElastiCache, ALB, WAF, CloudFront, Route 53, ECR, Secrets Manager, VPC |
 
 </details>
 
@@ -375,6 +375,15 @@ network placement alone.
 Wire, ACH and SWIFT integrations are simulated adapters. The project demonstrates
 contracts, persistence and failure handling without connecting to real financial networks
 or moving real money.
+
+### Deployment and platform versions
+
+The stack runs and is tested on Docker Compose. `infrastructure/aws/` holds Terraform
+definitions for an AWS layout (ECS Fargate, RDS, MSK, ElastiCache, ALB, WAF, CloudFront);
+no hosted instance is published. The services are on Spring Boot 3.3 and Spring Cloud
+2023.0; moving to the current release train is a coordinated upgrade tracked in
+[SECURITY.md](docs/SECURITY.md#deferred-platform-modernization) rather than a dependency
+bump.
 
 > Additional limitations and future-hardening items are documented in the
 > [engineering case study](docs/PORTFOLIO_CASE_STUDY.md).
