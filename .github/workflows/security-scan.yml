@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Scan filesystem for vulnerable dependencies and misconfiguration
         uses: aquasecurity/trivy-action@v0.36.0
@@ -52,7 +52,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload dependency findings
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-fs.sarif
@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Resolve the shared base image
         id: base
@@ -89,7 +89,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload base image findings
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-base.sarif
