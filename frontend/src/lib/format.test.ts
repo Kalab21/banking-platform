@@ -85,6 +85,17 @@ describe("isCredit", () => {
     expect(isCredit("WITHDRAWAL")).toBe(false);
     expect(isCredit("TRANSFER_OUT")).toBe(false);
   });
+
+  it("treats interest credits and refunds as money in", () => {
+    // They used to fall through to the debit side and show as money out.
+    expect(isCredit("INTEREST_CREDIT")).toBe(true);
+    expect(isCredit("REFUND")).toBe(true);
+  });
+
+  it("treats fees as money out", () => {
+    expect(isCredit("FEE")).toBe(false);
+    expect(isCredit("OVERDRAFT_FEE")).toBe(false);
+  });
 });
 
 describe("formatDate with a date-only value", () => {

@@ -29,6 +29,7 @@ import {
   formatNumber,
   formatPercent,
   humanise,
+  isCardCredit,
 } from "@/lib/format";
 import { VirtualCard } from "@/features/cards/VirtualCard";
 import { FreezeControl } from "@/features/cards/FreezeControl";
@@ -165,7 +166,12 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
 
       <Card>
         <CardHeader title="Card transactions" />
-        {transactions.length === 0 ? (
+        {txPage === null ? (
+          <ErrorState
+            title="Card transactions are unavailable"
+            message="We could not load this card's activity just now. Refresh to try again."
+          />
+        ) : transactions.length === 0 ? (
           <EmptyState
             title="No card transactions yet"
             description="Purchases, payments and fees on this card will be listed here."
@@ -184,9 +190,10 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
                   </p>
                 </div>
                 <Money
-                  amount={t.amount}
+                  amount={isCardCredit(t.type) ? t.amount : -t.amount}
                   currency={card.currency}
                   size="sm"
+                  signed
                   className="shrink-0 font-semibold text-ink"
                 />
               </li>

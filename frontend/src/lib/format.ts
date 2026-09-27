@@ -109,5 +109,12 @@ export function humanise(value: string | null | undefined): string {
 
 /** True when a transaction adds money to the account it belongs to. */
 export function isCredit(type: string): boolean {
-  return type === "DEPOSIT" || type === "TRANSFER_IN";
+  // Interest credits and refunds are money in; they used to fall through to
+  // the debit side and show as money leaving the account.
+  return type === "DEPOSIT" || type === "TRANSFER_IN" || type === "INTEREST_CREDIT" || type === "REFUND";
+}
+
+/** True when a card transaction reduces what the cardholder owes. */
+export function isCardCredit(type: string): boolean {
+  return type === "PAYMENT" || type === "REFUND" || type === "REWARDS_REDEMPTION";
 }
