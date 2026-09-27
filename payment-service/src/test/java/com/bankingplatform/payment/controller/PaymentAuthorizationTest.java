@@ -69,7 +69,7 @@ class PaymentAuthorizationTest {
         mvc = MockMvcBuilders
                 .standaloneSetup(
                         new BeneficiaryController(beneficiaryService),
-                        new PaymentController(paymentService, ownership))
+                        new PaymentController(paymentService, ownership, passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler())
                 .build();
@@ -260,6 +260,46 @@ class PaymentAuthorizationTest {
                     .andExpect(status().isUnauthorized());
 
             verify(paymentService, never()).getByPayerAccount(anyLong());
+        }
+    }
+
+    private static com.bankingplatform.common.idempotency.IdempotencyGuard passThroughIdempotency() {
+        com.bankingplatform.common.idempotency.IdempotencyStore store =
+                org.mockito.Mockito.mock(com.bankingplatform.common.idempotency.IdempotencyStore.class);
+        org.mockito.Mockito.when(store.claim(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any())).thenReturn(java.util.Optional.empty());
+        return new com.bankingplatform.common.idempotency.IdempotencyGuard(store,
+                new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules(),
+                new com.bankingplatform.payment.idempotency.PaymentOutcomeClassifier());
+    }
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("creating a payment is idempotent")
+    class Idempotent {
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("a payment with no Idempotency-Key is refused, so a retry cannot pay twice")
+        void keyRequired() throws Exception {
+            mvc.perform(as(post("/api/payments"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"payerAccountId\":%d,\"amount\":50.00,\"paymentType\":\"BILL\"}"
+                                    .formatted(ACCOUNT_OF_A)))
+                    .andExpect(status().isBadRequest());
+
+            org.mockito.Mockito.verify(paymentService, org.mockito.Mockito.never()).createPayment(org.mockito.ArgumentMatchers.any());
+        }
+
+        @org.junit.jupiter.api.Test
+        @DisplayName("a keyed payment from the customer's own account is created")
+        void keyedPaymentCreated() throws Exception {
+            org.mockito.Mockito.when(paymentService.createPayment(org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(new com.bankingplatform.payment.dto.PaymentResponse());
+            mvc.perform(as(post("/api/payments"), CUSTOMER_A, "CUSTOMER")
+                            .header(com.bankingplatform.common.idempotency.IdempotencyGuard.HEADER, "pay-test-0001")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"payerAccountId\":%d,\"amount\":50.00,\"paymentType\":\"BILL\"}"
+                                    .formatted(ACCOUNT_OF_A)))
+                    .andExpect(status().isCreated());
         }
     }
 }

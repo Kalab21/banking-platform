@@ -1,5 +1,7 @@
 package com.bankingplatform.payment.service.impl;
 
+import com.bankingplatform.payment.dto.WithdrawRequest;
+
 import com.bankingplatform.common.security.CallerContext;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.common.security.Role;
@@ -252,7 +254,17 @@ public class PaymentServiceImpl implements PaymentService {
                     .description(payment.getDescription() != null ? payment.getDescription() : "Payment")
                     .build());
         }
-        // External payment types (ACH, WIRE, SWIFT) would call integration-service — stub for now
+        if (payment.getPaymentType() != PaymentType.INTERNAL) {
+            // Money leaving the bank. The rail is simulated, but the payer's
+            // balance is not: these used to be marked COMPLETED, and announced
+            // as paid, without the account being debited at all.
+            transactionClient.withdraw("payment-" + payment.getPaymentRef(), WithdrawRequest.builder()
+                    .accountId(payment.getPayerAccountId())
+                    .amount(payment.getAmount())
+                    .description(payment.getDescription() != null ? payment.getDescription()
+                            : "Payment — " + payment.getPaymentType())
+                    .build());
+        }
         payment.setStatus(PaymentStatus.COMPLETED);
         payment.setProcessedAt(LocalDateTime.now());
 
@@ -320,6 +332,11 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void validatePaymentRequest(CreatePaymentRequest request) {
+        if (request.getPaymentType() == PaymentType.CREDIT_CARD_PAYMENT) {
+            // A card payment has to reduce the card's balance as well as debit
+            // the account, and only credit-card-service can do the first.
+            throw new PaymentException("Pay a credit card from the card itself: POST /api/credit-cards/{id}/payment");
+        }
         if (request.getPaymentType() == PaymentType.INTERNAL && request.getPayeeAccountId() == null) {
             throw new PaymentException("INTERNAL payment requires payeeAccountId");
         }

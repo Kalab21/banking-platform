@@ -113,13 +113,17 @@ class ScheduledPaymentExecutionIT {
     }
 
     private long payment(String ref, String status) {
+        return payment(ref, status, "INTERNAL");
+    }
+
+    private long payment(String ref, String status, String type) {
         LocalDateTime now = LocalDateTime.now();
         jdbc.update("""
                 INSERT INTO payments
                     (payment_ref, payer_account_id, payee_account_id, payment_type, amount,
                      currency, status, is_recurring, scheduled_at, created_at, updated_at)
-                VALUES (?, 9, 10, 'INTERNAL', 25.00, 'USD', ?, false, ?, now(), ?)
-                """, ref, status, Timestamp.valueOf(now.minusMinutes(1)), Timestamp.valueOf(now));
+                VALUES (?, 9, 10, ?, 25.00, 'USD', ?, false, ?, now(), ?)
+                """, ref, type, status, Timestamp.valueOf(now.minusMinutes(1)), Timestamp.valueOf(now));
         Long id = jdbc.queryForObject("SELECT id FROM payments WHERE payment_ref = ?", Long.class, ref);
         return id == null ? 0 : id;
     }
@@ -155,6 +159,35 @@ class ScheduledPaymentExecutionIT {
         assertThatThrownBy(() -> inTransaction.executeWithoutResult(s -> service.cancel(id)))
                 .isInstanceOf(PaymentException.class);
         assertThat(status(id)).isEqualTo("PROCESSING");
+    }
+
+    @Test
+    @DisplayName("a bill payment debits the payer before it is reported complete")
+    void externalPaymentDebitsThePayer() {
+        // Non-internal payments used to be marked COMPLETED, and announced as
+        // paid, with the payer's balance never touched.
+        long id = payment("exec-bill", "PENDING", "BILL");
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        verify(transactionClient).withdraw(org.mockito.ArgumentMatchers.eq("payment-exec-bill"),
+                org.mockito.ArgumentMatchers.argThat(w -> w.getAccountId() == 9L
+                        && w.getAmount().compareTo(new java.math.BigDecimal("25.00")) == 0));
+        verify(transactionClient, never()).transfer(anyString(), any());
+        assertThat(status(id)).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @DisplayName("a failed debit leaves a bill payment FAILED, not COMPLETED")
+    void refusedDebitFailsThePayment() {
+        when(transactionClient.withdraw(anyString(), any())).thenThrow(new IllegalStateException("insufficient funds"));
+        long id = payment("exec-bill-2", "PENDING", "BILL");
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        assertThat(status(id)).isEqualTo("FAILED");
     }
 
     @Test
