@@ -15,6 +15,8 @@ public interface CreditCardRepository extends JpaRepository<CreditCard, Long> {
     List<CreditCard> findByUserId(Long userId);
     Optional<CreditCard> findByCardNumber(String cardNumber);
     List<CreditCard> findByStatus(CardStatus status);
+
+    List<CreditCard> findByStatusIn(java.util.Collection<CardStatus> statuses);
     boolean existsByCardNumber(String cardNumber);
 
     /**

@@ -317,7 +317,7 @@ public class CreditCardServiceImpl implements CreditCardService {
      */
     @Override
     public void chargeInterest() {
-        List<Long> activeCardIds = cardRepository.findByStatus(CardStatus.ACTIVE).stream()
+        List<Long> activeCardIds = cardRepository.findByStatusIn(CardStatus.CARRIES_BALANCE).stream()
                 .map(CreditCard::getId)
                 .toList();
 
@@ -342,7 +342,7 @@ public class CreditCardServiceImpl implements CreditCardService {
                     interestCharge, "Daily interest charge", null, null);
             charged++;
         }
-        log.info("Charged daily interest on {} of {} active cards", charged, activeCardIds.size());
+        log.info("Charged daily interest on {} of {} cards carrying a balance", charged, activeCardIds.size());
     }
 
     // --- helpers ---
