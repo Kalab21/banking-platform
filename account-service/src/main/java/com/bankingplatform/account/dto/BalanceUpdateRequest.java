@@ -11,6 +11,8 @@ public class BalanceUpdateRequest {
 
     @NotNull
     @Positive
+    @jakarta.validation.constraints.Digits(integer = 15, fraction = 2,
+            message = "must be a whole number of cents")
     private BigDecimal amount;
 
     @NotNull
