@@ -81,6 +81,10 @@ public class PaymentServiceImpl implements PaymentService {
         if (request.getScheduledAt() == null || !request.getScheduledAt().isAfter(LocalDateTime.now())) {
             saved = executePayment(saved);
             saved = paymentRepository.save(saved);
+            // A recurring payment that runs now still recurs. Only the
+            // scheduler used to create the next occurrence, so a series whose
+            // first payment was immediate stopped after one.
+            scheduleNextOccurrence(saved);
         }
 
         audit("PAYMENT", saved.getId(), "CREATED", "ref=" + saved.getPaymentRef());
@@ -210,20 +214,13 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setStatus(PaymentStatus.COMPLETED);
             payment.setProcessedAt(LocalDateTime.now());
 
-            if (payment.isRecurring() && payment.getRecurrencePattern() != null) {
-                LocalDate nextDate = calculateNextDate(LocalDate.now(), payment.getRecurrencePattern());
-                boolean withinEndDate = payment.getEndDate() == null || !nextDate.isAfter(payment.getEndDate());
-                if (withinEndDate) {
-                    // Created in the same transaction as the payment that
-                    // begets it. Two workers processing one payment would
-                    // otherwise each schedule the next occurrence, and the
-                    // customer would be billed twice next month -- which the
-                    // transfer's idempotency key does not protect against,
-                    // because the two occurrences are genuinely different
-                    // payments.
-                    createNextOccurrence(payment, nextDate);
-                }
-            }
+            // Created in the same transaction as the payment that begets it.
+            // Two workers processing one payment would otherwise each schedule
+            // the next occurrence, and the customer would be billed twice next
+            // month -- which the transfer's idempotency key does not protect
+            // against, because the two occurrences are genuinely different
+            // payments.
+            scheduleNextOccurrence(payment);
         } catch (Exception e) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason(e.getMessage());
@@ -298,6 +295,24 @@ public class PaymentServiceImpl implements PaymentService {
                     accountId, e.getClass().getSimpleName());
             return null;
         }
+    }
+
+    /**
+     * The next payment in a recurring series, dated from when this one was due.
+     *
+     * Dating from "today" let the series drift by however late the scheduler
+     * ran. A date that is already past (a long outage) falls back to today, so
+     * a missed run is not replayed month after month in one go.
+     */
+    private void scheduleNextOccurrence(Payment payment) {
+        if (!payment.isRecurring() || payment.getRecurrencePattern() == null) return;
+        LocalDate due = payment.getScheduledAt() != null ? payment.getScheduledAt().toLocalDate() : LocalDate.now();
+        LocalDate nextDate = calculateNextDate(due, payment.getRecurrencePattern());
+        if (!nextDate.isAfter(LocalDate.now())) {
+            nextDate = calculateNextDate(LocalDate.now(), payment.getRecurrencePattern());
+        }
+        if (payment.getEndDate() != null && nextDate.isAfter(payment.getEndDate())) return;
+        createNextOccurrence(payment, nextDate);
     }
 
     private void createNextOccurrence(Payment original, LocalDate nextDate) {

@@ -200,4 +200,48 @@ class ScheduledPaymentExecutionIT {
         verify(transactionClient, never()).transfer(anyString(), any());
         assertThat(status(id)).isEqualTo("CANCELLED");
     }
+
+    @Test
+    @DisplayName("a recurring payment made now still schedules the next one")
+    void immediateRecurringPaymentRecurs() {
+        // Only the scheduler created the next occurrence, so a series whose
+        // first payment ran immediately stopped after one.
+        com.bankingplatform.payment.dto.CreatePaymentRequest request = new com.bankingplatform.payment.dto.CreatePaymentRequest();
+        request.setPayerAccountId(9L);
+        request.setPayeeExternalRef("UTILITY-ACCT-1");
+        request.setPaymentType(com.bankingplatform.payment.model.PaymentType.BILL);
+        request.setAmount(new java.math.BigDecimal("40.00"));
+        request.setCurrency("USD");
+        request.setRecurring(true);
+        request.setRecurrencePattern(com.bankingplatform.payment.model.RecurrencePattern.MONTHLY);
+
+        inTransaction.executeWithoutResult(s -> service.createPayment(request));
+
+        assertThat(jdbc.queryForList("SELECT status FROM payments ORDER BY id", String.class))
+                .containsExactly("COMPLETED", "PENDING");
+        java.time.LocalDate next = jdbc.queryForObject(
+                "SELECT CAST(scheduled_at AS date) FROM payments WHERE status = 'PENDING'", java.time.LocalDate.class);
+        assertThat(next).isEqualTo(java.time.LocalDate.now().plusMonths(1));
+    }
+
+    @Test
+    @DisplayName("a series keeps its day when the scheduler runs late")
+    void recurringSeriesDoesNotDrift() {
+        LocalDateTime due = LocalDateTime.now().minusDays(3).withHour(9).withMinute(0).withSecond(0).withNano(0);
+        jdbc.update("""
+                INSERT INTO payments
+                    (payment_ref, payer_account_id, payee_external_ref, payment_type, amount, currency,
+                     status, is_recurring, recurrence_pattern, scheduled_at, created_at, updated_at)
+                VALUES ('exec-rec', 9, 'UTILITY-ACCT-1', 'BILL', 40.00, 'USD', 'PENDING', true, 'MONTHLY', ?, now(), now())
+                """, Timestamp.valueOf(due));
+        Long id = jdbc.queryForObject("SELECT id FROM payments WHERE payment_ref = 'exec-rec'", Long.class);
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        java.time.LocalDate next = jdbc.queryForObject(
+                "SELECT CAST(scheduled_at AS date) FROM payments WHERE status = 'PENDING'", java.time.LocalDate.class);
+        // Dated from when it was due, not from the late run.
+        assertThat(next).isEqualTo(due.toLocalDate().plusMonths(1));
+    }
 }

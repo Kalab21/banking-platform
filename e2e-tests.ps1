@@ -554,6 +554,15 @@ Assert "An outside payment completes" ($extPay -and $extPay.status -eq "COMPLETE
 Assert "Retrying with the same key returns the same payment" ($extReplay -and $extReplay.id -eq $extPay.id)
 Assert "The payer was debited once for the outside payment" ([decimal](Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).balance -eq $extBefore - 12.34)
 
+# A recurring payment made now still recurs: its next occurrence is waiting,
+# a month out. Only the scheduler used to create one.
+$recurNow = Post "$GW/api/payments" @{ payerAccountId=$ACCOUNT_ID; beneficiaryId=$BEN_ID; paymentType="EXTERNAL_ACH"; amount=1.00; currency="USD"; description="Streaming subscription"; recurring=$true; recurrencePattern="MONTHLY" } $TOKEN
+Assert "A recurring payment made now completes" ($recurNow -and $recurNow.status -eq "COMPLETED") "status=$($recurNow.status)"
+$nextUp = @(Get "$GW/api/payments/account/$ACCOUNT_ID/scheduled" $TOKEN) | Where-Object { $_.description -eq "Streaming subscription" }
+$expectedNext = (Get-Date).ToUniversalTime().AddMonths(1).ToString("yyyy-MM-dd")
+Assert "Its next payment is scheduled a month out" ($nextUp.Count -eq 1 -and "$($nextUp[0].scheduledAt)".StartsWith($expectedNext)) "found=$($nextUp.Count) at=$($nextUp[0].scheduledAt) expected=$expectedNext"
+if ($nextUp.Count -ge 1) { $null = Put "$GW/api/payments/$($nextUp[0].id)/cancel" $null $TOKEN }
+
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== FLOW 6: Wire Transfer ===" -ForegroundColor Cyan
 
