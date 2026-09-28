@@ -133,7 +133,7 @@ public class CreditCardServiceImpl implements CreditCardService {
         requireSufficientCredit(card, request.getAmount());
 
         card.setCurrentBalance(card.getCurrentBalance().add(request.getAmount()));
-        card.setAvailableCredit(card.getAvailableCredit().subtract(request.getAmount()));
+        card.setAvailableCredit(availableCreditOf(card));
         card.setRewardsPoints(card.getRewardsPoints() + request.getAmount().intValue() * REWARDS_RATE_PER_DOLLAR);
         cardRepository.save(card);
 
@@ -170,7 +170,7 @@ public class CreditCardServiceImpl implements CreditCardService {
                 request.getAmount(), "Cash advance from credit card");
 
         card.setCurrentBalance(card.getCurrentBalance().add(totalCharge));
-        card.setAvailableCredit(card.getAvailableCredit().subtract(totalCharge));
+        card.setAvailableCredit(availableCreditOf(card));
         cardRepository.save(card);
 
         saveTx(card, CreditCardTransactionType.FEE, fee, "Cash advance fee", null, null);
@@ -206,7 +206,7 @@ public class CreditCardServiceImpl implements CreditCardService {
                 payAmount, "Credit card payment");
 
         card.setCurrentBalance(card.getCurrentBalance().subtract(payAmount));
-        card.setAvailableCredit(card.getAvailableCredit().add(payAmount));
+        card.setAvailableCredit(availableCreditOf(card));
 
         if (card.getCurrentBalance().compareTo(BigDecimal.ZERO) == 0) {
             card.setMinimumPaymentDue(BigDecimal.ZERO);
@@ -259,6 +259,8 @@ public class CreditCardServiceImpl implements CreditCardService {
                 cardId, CreditCardTransactionType.INTEREST_CHARGE, startOfDay.minusDays(30), endOfDay);
         BigDecimal fees = txRepository.sumByCardIdAndTypeBetween(
                 cardId, CreditCardTransactionType.FEE, startOfDay.minusDays(30), endOfDay);
+        BigDecimal cashAdvances = txRepository.sumByCardIdAndTypeBetween(
+                cardId, CreditCardTransactionType.CASH_ADVANCE, startOfDay.minusDays(30), endOfDay);
 
         BigDecimal closingBalance = card.getCurrentBalance();
         BigDecimal minPayment = closingBalance.multiply(MIN_PAYMENT_RATE)
@@ -270,7 +272,12 @@ public class CreditCardServiceImpl implements CreditCardService {
         CreditCardStatement statement = CreditCardStatement.builder()
                 .creditCard(card)
                 .statementDate(today)
-                .openingBalance(closingBalance.add(purchases).subtract(payments))
+                // Worked back from the closing balance: take off what the
+                // period added and put back what it paid. This used to add
+                // purchases and subtract payments, the wrong way round, so a
+                // month of spending showed an opening balance above the close.
+                .openingBalance(closingBalance.subtract(purchases).subtract(cashAdvances)
+                        .subtract(interest).subtract(fees).add(payments))
                 .closingBalance(closingBalance)
                 .totalPurchases(purchases)
                 .totalPayments(payments)
@@ -333,10 +340,7 @@ public class CreditCardServiceImpl implements CreditCardService {
             if (interestCharge.compareTo(new BigDecimal("0.01")) < 0) continue;
 
             card.setCurrentBalance(card.getCurrentBalance().add(interestCharge));
-            card.setAvailableCredit(card.getCreditLimit().subtract(card.getCurrentBalance()));
-            if (card.getAvailableCredit().compareTo(BigDecimal.ZERO) < 0) {
-                card.setAvailableCredit(BigDecimal.ZERO);
-            }
+            card.setAvailableCredit(availableCreditOf(card));
             cardRepository.save(card);
             saveTx(card, CreditCardTransactionType.INTEREST_CHARGE,
                     interestCharge, "Daily interest charge", null, null);
@@ -346,6 +350,18 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
 
     // --- helpers ---
+
+    /**
+     * What is left to spend, derived from the limit and the balance every time.
+     *
+     * It used to be adjusted by each operation's amount, while interest reset it
+     * from the limit and clamped it at zero. A card that interest took past its
+     * limit was clamped, and paying it off then added the whole payment back on
+     * top: available credit ended above the credit limit.
+     */
+    private static BigDecimal availableCreditOf(CreditCard card) {
+        return card.getCreditLimit().subtract(card.getCurrentBalance()).max(BigDecimal.ZERO);
+    }
 
     private CreditCard findCard(Long cardId) {
         return cardRepository.findById(cardId)
