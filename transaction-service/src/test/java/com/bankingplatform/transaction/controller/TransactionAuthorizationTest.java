@@ -81,11 +81,14 @@ class TransactionAuthorizationTest {
                         transactionService, new AccountOwnershipVerifier(accountClient),
                         passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
-                .setControllerAdvice(new CallerIdentityExceptionHandler())
+                .setControllerAdvice(new CallerIdentityExceptionHandler(),
+                        new com.bankingplatform.transaction.exception.GlobalExceptionHandler())
                 .build();
 
         when(accountClient.getAccountById(ACCOUNT_OF_A)).thenReturn(account(ACCOUNT_OF_A, CUSTOMER_A));
         when(accountClient.getAccountById(ACCOUNT_OF_B)).thenReturn(account(ACCOUNT_OF_B, CUSTOMER_B));
+        when(accountClient.getAccountInternal(ACCOUNT_OF_A)).thenReturn(account(ACCOUNT_OF_A, CUSTOMER_A));
+        when(accountClient.getAccountInternal(ACCOUNT_OF_B)).thenReturn(account(ACCOUNT_OF_B, CUSTOMER_B));
         when(transactionService.deposit(any())).thenReturn(new TransactionResponse());
         when(transactionService.withdraw(any())).thenReturn(new TransactionResponse());
         when(transactionService.transfer(any())).thenReturn(transferResponse());
@@ -162,6 +165,54 @@ class TransactionAuthorizationTest {
                     .andExpect(status().isForbidden());
 
             // No debit, no credit, no transaction row.
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
+        @DisplayName("a transfer to an account that does not exist is refused before anything is debited")
+        void missingDestinationRefused() throws Exception {
+            // The debit used to run first; the credit then failed and the
+            // customer's money sat in a half-applied transfer.
+            when(accountClient.getAccountInternal(999L)).thenThrow(org.mockito.Mockito.mock(feign.FeignException.NotFound.class));
+
+            mvc.perform(as(post("/api/transactions/transfer"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(transferBody(ACCOUNT_OF_A, 999L)))
+                    .andExpect(status().isUnprocessableEntity());
+
+            verifyNoInteractions(transactionService);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "a transfer into a {0} account is refused before anything is debited")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"FROZEN", "CLOSED"})
+        void unusableDestinationRefused(String status) throws Exception {
+            AccountResponse frozen = account(ACCOUNT_OF_B, CUSTOMER_B);
+            frozen.setStatus(status);
+            when(accountClient.getAccountInternal(ACCOUNT_OF_B)).thenReturn(frozen);
+
+            mvc.perform(as(post("/api/transactions/transfer"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(transferBody(ACCOUNT_OF_A, ACCOUNT_OF_B)))
+                    .andExpect(status().isUnprocessableEntity());
+
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
+        @DisplayName("a transfer between accounts in different currencies is refused")
+        void crossCurrencyRefused() throws Exception {
+            AccountResponse usd = account(ACCOUNT_OF_A, CUSTOMER_A);
+            usd.setCurrency("USD");
+            AccountResponse eur = account(ACCOUNT_OF_B, CUSTOMER_B);
+            eur.setCurrency("EUR");
+            when(accountClient.getAccountById(ACCOUNT_OF_A)).thenReturn(usd);
+            when(accountClient.getAccountInternal(ACCOUNT_OF_B)).thenReturn(eur);
+
+            mvc.perform(as(post("/api/transactions/transfer"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(transferBody(ACCOUNT_OF_A, ACCOUNT_OF_B)))
+                    .andExpect(status().isUnprocessableEntity());
+
             verifyNoInteractions(transactionService);
         }
     }

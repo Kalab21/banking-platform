@@ -42,6 +42,11 @@ public class AccountClientFallbackFactory implements FallbackFactory<AccountClie
             }
 
             @Override
+            public AccountResponse getAccountInternal(Long id) {
+                throw rethrow(cause);
+            }
+
+            @Override
             public AccountResponse updateBalance(Long id, String idempotencyKey,
                                                  BalanceUpdateRequest request) {
                 throw rethrow(cause);

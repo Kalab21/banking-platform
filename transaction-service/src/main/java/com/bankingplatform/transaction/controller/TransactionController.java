@@ -88,7 +88,10 @@ public class TransactionController {
         // Only the source is owner-checked. Transferring *to* another
         // customer's account is ordinary banking; transferring *from* one is
         // theft, and was previously possible by supplying any fromAccountId.
-        ownership.requireCanAccess(caller, request.getFromAccountId());
+        AccountResponse source = ownership.requireCanAccess(caller, request.getFromAccountId());
+        // Before the key is claimed and before any money moves, so a bad
+        // destination is a refusal the customer can correct and retry.
+        ownership.requireCanReceive(source, request.getToAccountId());
         return idempotency.execute(idempotencyKey, TRANSFER, caller, request,
                 TransferResponse.class, result -> result.getDebit().getTransactionRef(),
                 () -> transactionService.transfer(request));
