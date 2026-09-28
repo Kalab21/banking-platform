@@ -171,6 +171,23 @@ class CreditCardAuthorizationTest {
     @DisplayName("acting on a card")
     class Writing {
 
+        @org.junit.jupiter.params.ParameterizedTest(name = "staff cannot make a {0} on a customer's card")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"payment", "cash-advance"})
+        void staffCannotMoveTheCardholdersMoney(String action) throws Exception {
+            // Both move money into or out of the cardholder's account; that is
+            // the cardholder's instruction, not the bank's.
+            cardBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/credit-cards/{id}/" + action, CARD_OF_A), STAFF, "EMPLOYEE")
+                            .header(IdempotencyGuard.HEADER, "staff-" + action)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"amount\":50.00,\"sourceAccountId\":5,\"targetAccountId\":5}"))
+                    .andExpect(status().isForbidden());
+
+            verify(creditCardService, never()).makePayment(anyLong(), any());
+            verify(creditCardService, never()).cashAdvance(anyLong(), any());
+        }
+
         @Test
         @DisplayName("a customer cannot freeze another customer's card")
         void foreignStatusDenied() throws Exception {

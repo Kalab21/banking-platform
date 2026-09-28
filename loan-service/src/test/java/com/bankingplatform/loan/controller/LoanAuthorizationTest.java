@@ -206,6 +206,35 @@ class LoanAuthorizationTest {
     @DisplayName("acting on a loan")
     class Writing {
 
+        @org.junit.jupiter.params.ParameterizedTest(name = "staff cannot {0} a customer's loan")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"repay", "payoff"})
+        void staffCannotMoveTheBorrowersMoney(String action) throws Exception {
+            // Staff could repay a customer's loan from the customer's own
+            // account: the customer's money, moved on someone else's say.
+            loanBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/loans/{id}/" + action, LOAN_OF_A), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(repayment()))
+                    .andExpect(status().isForbidden());
+
+            verify(loanService, never()).makeRepayment(anyLong(), any());
+            verify(loanService, never()).earlyPayoff(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("staff cannot receive a customer's loan into an account for them")
+        void staffCannotDisburse() throws Exception {
+            loanBelongsTo(CUSTOMER_A);
+
+            mvc.perform(as(post("/api/loans/{id}/disburse", LOAN_OF_A), STAFF, "ADMIN")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"disbursementAccountId\":5}"))
+                    .andExpect(status().isForbidden());
+
+            verify(loanService, never()).disburseLoan(anyLong(), any());
+        }
+
         @org.junit.jupiter.params.ParameterizedTest(name = "{0} without a funding account is refused")
         @org.junit.jupiter.params.provider.ValueSource(strings = {"repay", "payoff"})
         void noFundingAccountRefused(String action) throws Exception {

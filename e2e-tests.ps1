@@ -303,6 +303,10 @@ if ($STAFF_TOKEN) {
         "$GW/api/transactions/transfer" $STAFF_TOKEN 403 @{ fromAccountId=$ACCOUNT_ID; toAccountId=$ACCOUNT_ID; amount=5.00 }
     Assert-Refused "Staff cannot change their own credit score" "PUT" `
         "$GW/api/users/$STAFF_ID/credit-score" $STAFF_TOKEN 403 @{ delta=100; reason="Self" }
+    # A change larger than the whole score range is refused; one near the
+    # int limit used to wrap negative and set the score to its floor.
+    Assert-Refused "A credit score change beyond the score range is refused" "PUT" `
+        "$GW/api/users/$USER_ID/credit-score" $STAFF_TOKEN 400 @{ delta=2147483647; reason="Overflow" }
     # A customer asking about a name that is not theirs gets the same answer
     # whether or not it exists.
     Assert-Refused "A username that does not exist is not revealed as missing" "GET" `
@@ -870,6 +874,17 @@ if ($VICTIM_ACCOUNT_ID) {
     $toCancel = Post "$GW/api/payments" @{ payerAccountId=$ACCOUNT_ID; payeeAccountId=$VICTIM_ACCOUNT_ID; paymentType="INTERNAL"; amount=5.00; currency="USD"; description="To be cancelled"; scheduledAt=$later } $TOKEN
     $cancelled = Put "$GW/api/payments/$($toCancel.id)/cancel" $null $TOKEN
     Assert "A pending scheduled payment can be cancelled" ($cancelled -and $cancelled.status -eq "CANCELLED") "status=$($cancelled.status)"
+}
+
+# Repaying a loan or paying a card moves the customer's money; staff may read
+# both but not act on the customer's behalf.
+if ($STAFF_TOKEN -and $LOAN_ID) {
+    Assert-Refused "Staff cannot repay a customer's loan from the customer's account" "POST" `
+        "$GW/api/loans/$LOAN_ID/repay" $STAFF_TOKEN 403 @{ amount=10.00; sourceAccountId=$ACCOUNT_ID }
+}
+if ($STAFF_TOKEN -and $CARD_ID) {
+    Assert-Refused "Staff cannot pay a customer's card from the customer's account" "POST" `
+        "$GW/api/credit-cards/$CARD_ID/payment" $STAFF_TOKEN 403 @{ amount=10.00; sourceAccountId=$ACCOUNT_ID }
 }
 
 if ($VICTIM_ACCOUNT_ID -and $LOAN_ID) {

@@ -51,6 +51,15 @@ public class CreditCardController {
         AccessGuard.requireOwnerOrStaff(caller, creditCardService.getCard(cardId).getUserId());
     }
 
+    /**
+     * The cardholder only. A cash advance and a payment move money into or
+     * out of the cardholder's account; staff may read a card but not do
+     * either on the customer's behalf.
+     */
+    private void requireCardholder(CallerIdentity caller, Long cardId) {
+        AccessGuard.requireSelf(caller, creditCardService.getCard(cardId).getUserId());
+    }
+
     // There is deliberately no endpoint here that issues a card.
     //
     // A card used to be issued by POSTing one, with the caller naming its tier,
@@ -124,7 +133,7 @@ public class CreditCardController {
                                                                       @RequestHeader(name = IdempotencyGuard.HEADER,
                                                                               required = false) String idempotencyKey,
                                                                       CallerIdentity caller) {
-        requireOwnsCard(caller, cardId);
+        requireCardholder(caller, cardId);
         return idempotency.execute(idempotencyKey, CASH_ADVANCE, caller, keyed(cardId, request),
                 CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
                 () -> creditCardService.cashAdvance(cardId, request));
@@ -138,7 +147,7 @@ public class CreditCardController {
                                                                       @RequestHeader(name = IdempotencyGuard.HEADER,
                                                                               required = false) String idempotencyKey,
                                                                       CallerIdentity caller) {
-        requireOwnsCard(caller, cardId);
+        requireCardholder(caller, cardId);
         return idempotency.execute(idempotencyKey, CARD_PAYMENT, caller, keyed(cardId, request),
                 CreditCardTransactionResponse.class, CreditCardTransactionResponse::getTransactionRef,
                 () -> creditCardService.makePayment(cardId, request));
