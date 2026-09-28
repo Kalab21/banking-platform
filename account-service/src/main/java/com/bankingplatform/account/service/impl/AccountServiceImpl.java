@@ -200,8 +200,22 @@ public class AccountServiceImpl implements AccountService {
         if (account.getStatus() == AccountStatus.CLOSED) {
             throw new AccountStatusException("Cannot reopen a closed account");
         }
-        account.setStatus(status);
-        audit("ACCOUNT", id, "STATUS_CHANGE", "New status: " + status);
+        boolean owes = account.getOverdraftBalance().signum() > 0 || account.getBalance().signum() < 0;
+        // OVERDRAWN is what the balance says, not a choice. Setting it by hand
+        // marked a funded account overdrawn, and lifting a freeze with ACTIVE
+        // hid a debt the account still carried.
+        if (status == AccountStatus.OVERDRAWN) {
+            throw new AccountStatusException("OVERDRAWN follows the balance and cannot be set");
+        }
+        // Closing an account with money in it stranded the money; closing one
+        // that owes wrote the debt off. It has to be emptied or repaid first.
+        if (status == AccountStatus.CLOSED
+                && (account.getBalance().signum() != 0 || account.getOverdraftBalance().signum() != 0)) {
+            throw new AccountStatusException("Only an account with a zero balance and nothing owed can be closed");
+        }
+        AccountStatus applied = status == AccountStatus.ACTIVE && owes ? AccountStatus.OVERDRAWN : status;
+        account.setStatus(applied);
+        audit("ACCOUNT", id, "STATUS_CHANGE", "New status: " + applied);
         return accountMapper.toResponse(accountRepository.save(account));
     }
 

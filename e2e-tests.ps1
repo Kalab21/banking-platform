@@ -334,6 +334,14 @@ if ($STAFF_TOKEN) {
     Assert "A reviewer completes the identity check" ($kycDone -and $kycDone.kycStatus -eq "APPROVED")
 }
 
+# An account holding money cannot be closed: closing it stranded the money.
+# OVERDRAWN follows the balance and is not a status anyone sets.
+Assert-Refused "Staff cannot close an account that holds money" "PUT" `
+    "$GW/api/accounts/$ACCOUNT_ID/status?status=CLOSED" $STAFF_TOKEN 409
+Assert-Refused "Staff cannot mark an account overdrawn by hand" "PUT" `
+    "$GW/api/accounts/$ACCOUNT_ID/status?status=OVERDRAWN" $STAFF_TOKEN 409
+Assert "The refused close left the account open" ((Get "$GW/api/accounts/$ACCOUNT_ID" $TOKEN).status -ne "CLOSED")
+
 Write-Host "`n=== FLOW 2: Credit Card Lifecycle ===" -ForegroundColor Cyan
 
 # Apply for credit card — will auto-reject (score 0 < 650), then manually approve

@@ -464,4 +464,69 @@ class AccountServiceImplTest {
             verify(eventProducer, never()).publishBalanceUpdated(anyLong(), anyLong(), any(), any());
         }
     }
+
+    // ------------------------------------------------------------ status
+
+    @Nested
+    @DisplayName("status changes")
+    class StatusChanges {
+
+        private Account whenStatusSet(Account existing, AccountStatus status) {
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(existing));
+            when(accountRepository.save(any(Account.class))).thenAnswer(i -> i.getArgument(0));
+            accountService.updateStatus(ACCOUNT_ID, status);
+            verify(accountRepository).save(savedAccount.capture());
+            return savedAccount.getValue();
+        }
+
+        @Test
+        @DisplayName("an account holding money cannot be closed")
+        void fundedAccountCannotClose() {
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
+                    .thenReturn(Optional.of(account(AccountStatus.ACTIVE, "120.00", "500.00", "0.00")));
+            assertThatThrownBy(() -> accountService.updateStatus(ACCOUNT_ID, AccountStatus.CLOSED))
+                    .isInstanceOf(AccountStatusException.class);
+            verify(accountRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("an account that owes cannot be closed")
+        void owingAccountCannotClose() {
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
+                    .thenReturn(Optional.of(account(AccountStatus.OVERDRAWN, "-35.00", "500.00", "200.00")));
+            assertThatThrownBy(() -> accountService.updateStatus(ACCOUNT_ID, AccountStatus.CLOSED))
+                    .isInstanceOf(AccountStatusException.class);
+            verify(accountRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("an empty account can be closed")
+        void emptyAccountCloses() {
+            Account saved = whenStatusSet(account(AccountStatus.ACTIVE, "0.00", "500.00", "0.00"), AccountStatus.CLOSED);
+            assertThat(saved.getStatus()).isEqualTo(AccountStatus.CLOSED);
+        }
+
+        @Test
+        @DisplayName("OVERDRAWN cannot be set by hand")
+        void overdrawnIsNotAChoice() {
+            when(accountRepository.findByIdForUpdate(ACCOUNT_ID))
+                    .thenReturn(Optional.of(account(AccountStatus.ACTIVE, "50.00", "500.00", "0.00")));
+            assertThatThrownBy(() -> accountService.updateStatus(ACCOUNT_ID, AccountStatus.OVERDRAWN))
+                    .isInstanceOf(AccountStatusException.class);
+        }
+
+        @Test
+        @DisplayName("lifting a freeze on an account that owes leaves it overdrawn, not active")
+        void unfreezingKeepsTheDebtVisible() {
+            Account saved = whenStatusSet(account(AccountStatus.FROZEN, "-35.00", "500.00", "200.00"), AccountStatus.ACTIVE);
+            assertThat(saved.getStatus()).isEqualTo(AccountStatus.OVERDRAWN);
+        }
+
+        @Test
+        @DisplayName("lifting a freeze on a funded account makes it active")
+        void unfreezingAFundedAccount() {
+            Account saved = whenStatusSet(account(AccountStatus.FROZEN, "80.00", "500.00", "0.00"), AccountStatus.ACTIVE);
+            assertThat(saved.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+        }
+    }
 }
