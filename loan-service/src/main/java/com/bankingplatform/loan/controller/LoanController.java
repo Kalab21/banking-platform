@@ -51,6 +51,16 @@ public class LoanController {
         AccessGuard.requireOwnerOrStaff(caller, ownerOf(loanId));
     }
 
+    /**
+     * The borrower only. Receiving, repaying and paying off move the
+     * borrower's money in or out of their account, and that is their
+     * instruction to give. Staff may read a loan; they used to be able to
+     * repay it from the customer's account as well.
+     */
+    private void requireBorrower(CallerIdentity caller, Long loanId) {
+        AccessGuard.requireSelf(caller, ownerOf(loanId));
+    }
+
     // There is deliberately no endpoint here that creates a loan.
     //
     // A loan used to be openable by POSTing one, with the caller stating its
@@ -86,7 +96,7 @@ public class LoanController {
     public ResponseEntity<LoanResponse> disburseLoan(@PathVariable Long loanId,
                                                       @Valid @RequestBody DisburseRequest request,
                                                       CallerIdentity caller) {
-        requireOwnsLoan(caller, loanId);
+        requireBorrower(caller, loanId);
         return ResponseEntity.ok(loanService.disburseLoan(loanId, request));
     }
 
@@ -108,7 +118,7 @@ public class LoanController {
                                                                 CallerIdentity caller) {
         // Ownership first, then the guard. A refused request must neither
         // claim a key nor leave a cached result behind it.
-        requireOwnsLoan(caller, loanId);
+        requireBorrower(caller, loanId);
         return idempotency.execute(idempotencyKey, REPAYMENT, caller, keyed(loanId, request),
                 LoanRepaymentResponse.class, LoanRepaymentResponse::getPaymentRef,
                 () -> loanService.makeRepayment(loanId, request));
@@ -122,7 +132,7 @@ public class LoanController {
                                                               @RequestHeader(name = IdempotencyGuard.HEADER,
                                                                       required = false) String idempotencyKey,
                                                               CallerIdentity caller) {
-        requireOwnsLoan(caller, loanId);
+        requireBorrower(caller, loanId);
         return idempotency.execute(idempotencyKey, PAYOFF, caller, keyed(loanId, request),
                 LoanRepaymentResponse.class, LoanRepaymentResponse::getPaymentRef,
                 () -> loanService.earlyPayoff(loanId, request));
