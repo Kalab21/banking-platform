@@ -2,6 +2,8 @@ import "server-only";
 
 import { apiFetch, apiFetchOptional, apiFetchOrNull } from "@/lib/api/client";
 import type {
+  DecisionSnapshot,
+  ReviewRequest,
   Account,
   AmortizationScheduleRow,
   Application,
@@ -391,6 +393,19 @@ export function submitApplication(request: CreateApplicationRequest): Promise<Ap
     method: "POST",
     body: request,
   });
+}
+
+/** Staff only: every decision recorded on an application, oldest first. */
+export function getApplicationDecisions(id: number): Promise<DecisionSnapshot[]> {
+  return apiFetch<DecisionSnapshot[]>(`/api/applications/${id}/decisions`);
+}
+
+/**
+ * Staff only: decide a referred application. An approval becomes an offer the
+ * customer answers; it never creates a product.
+ */
+export function reviewApplication(id: number, request: ReviewRequest): Promise<Application> {
+  return apiFetch<Application>(`/api/applications/${id}/review`, { method: "PUT", body: request });
 }
 
 /** The offers made on an application, newest first. */

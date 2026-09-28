@@ -69,6 +69,16 @@ test("staff review identity documents and verify a customer, and underwriting se
   // Recorded under the signed-in reviewer, not a caller-supplied id.
   expect(approved.reviewedBy).toBe(staff.userId);
 
+  // Rejecting the other asks for a reason first; the first click must not
+  // submit on its own.
+  await page.getByRole("button", { name: "Reject", exact: true }).first().click();
+  await page.getByLabel("Reason for rejection").fill("Address document is out of date");
+  await page.getByRole("button", { name: "Confirm rejection" }).click();
+  await expect(page.getByText("Document rejected.")).toBeVisible({ timeout: 60_000 });
+  const after = await (await request.get(`${GATEWAY}/api/users/${customer.userId}/kyc/documents`, { headers: staff.headers })).json();
+  const rejected = after.find((d: { status: string }) => d.status === "REJECTED");
+  expect(rejected?.rejectionReason).toBe("Address document is out of date");
+
   // Then the customer-level decision, which is what underwriting reads.
   await page.getByRole("button", { name: "Approve identity" }).click();
   await page.getByRole("button", { name: "Confirm approval" }).click();
