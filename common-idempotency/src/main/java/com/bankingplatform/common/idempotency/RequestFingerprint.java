@@ -4,7 +4,9 @@ import com.bankingplatform.common.security.CallerIdentity;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -43,9 +45,15 @@ final class RequestFingerprint {
      * Reads JSON numbers back as {@link BigDecimal} rather than {@code double},
      * so normalisation sees the value that was sent instead of a binary
      * approximation of it.
+     *
+     * <p>Knows java.time as ISO strings. Without the module, the first guarded
+     * request carrying a date (a scheduled payment's {@code scheduledAt}) could
+     * not be fingerprinted at all and failed with a 500 before doing anything.
      */
     private static final ObjectMapper MAPPER = JsonMapper.builder()
             .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .addModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .build();
 
     private RequestFingerprint() {
