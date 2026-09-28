@@ -86,8 +86,14 @@ function ReviewRow({ document }: { document: KycDocument }) {
             >
               Approve
             </Button>
+            {/*
+             * Keyed apart: reusing the clicked "Reject" button as the submit
+             * button made the browser submit on that first click, before a
+             * reason could be typed.
+             */}
             {decision === "REJECTED" ? (
               <Button
+                key="confirm-reject"
                 type="submit"
                 name="decision"
                 value="REJECTED"
@@ -99,6 +105,7 @@ function ReviewRow({ document }: { document: KycDocument }) {
               </Button>
             ) : (
               <Button
+                key="reject"
                 type="button"
                 variant="secondary"
                 onClick={() => setDecision("REJECTED")}

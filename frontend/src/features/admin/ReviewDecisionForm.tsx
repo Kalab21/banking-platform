@@ -60,8 +60,14 @@ export function ReviewDecisionForm({
         />
       ) : null}
 
+      {/*
+       * Keyed so React builds new buttons rather than reusing the ones just
+       * clicked. Reused, the "Approve" button became the submit button during
+       * its own click, and the browser then submitted the form: an approval
+       * recorded before any amount or note was entered.
+       */}
       {decision ? (
-        <div className="flex flex-wrap gap-2">
+        <div key="confirm" className="flex flex-wrap gap-2">
           <Button type="submit" variant={decision === "REJECT" ? "danger" : "primary"} disabled={pending}>
             {pending ? "Recording…" : decision === "APPROVE" ? "Confirm approval" : "Confirm rejection"}
           </Button>
@@ -70,7 +76,7 @@ export function ReviewDecisionForm({
           </Button>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div key="choose" className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => setDecision("APPROVE")}>
             Approve
           </Button>
