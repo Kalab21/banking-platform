@@ -16,10 +16,10 @@ import { BENEFICIARY_IDLE, type BeneficiaryFormState } from "@/features/payments
 /**
  * Saving a payee, from the browser.
  *
- * Deliberately the only write on this page. Creating a payment moves money, and
- * `POST /api/payments` carries no idempotency record the way the transaction
- * endpoints do — so a lost response there could not be retried safely, and that
- * flow stays out of the console until it can. Saving a payee moves nothing.
+ * Deliberately the only write on this page. Creating a payment moves money;
+ * `POST /api/payments` now takes an Idempotency-Key, but the console has no
+ * payment form yet, so payments are made through the API. Saving a payee moves
+ * nothing.
  *
  * The account number lives in this form and nowhere else: it is typed, sent,
  * and the fields are cleared on success. Nothing is written to localStorage or

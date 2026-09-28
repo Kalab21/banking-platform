@@ -1,5 +1,6 @@
 package com.bankingplatform.payment.exception;
 
+import com.bankingplatform.common.idempotency.IdempotencyException;
 import com.bankingplatform.common.observability.LogSafe;
 import feign.FeignException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +32,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PaymentException.class)
     public ResponseEntity<ErrorResponse> handlePayment(PaymentException ex, HttpServletRequest req) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), req.getRequestURI());
+    }
+
+    /**
+     * A missing, reused or still-running Idempotency-Key. The guard chose the
+     * status (400, 409 or 422); in every case this request moved no money.
+     */
+    @ExceptionHandler(IdempotencyException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotency(IdempotencyException ex, HttpServletRequest req) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        if (ex.getRetryAfterSeconds() != null) {
+            response = response.header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return response.body(ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(ex.getStatus().value())
+                .error(ex.getStatus().getReasonPhrase())
+                .message(ex.getMessage())
+                .path(req.getRequestURI())
+                .build());
     }
 
     @ExceptionHandler(FeignException.UnprocessableEntity.class)

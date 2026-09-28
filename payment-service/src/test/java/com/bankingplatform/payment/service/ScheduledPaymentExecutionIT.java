@@ -113,13 +113,17 @@ class ScheduledPaymentExecutionIT {
     }
 
     private long payment(String ref, String status) {
+        return payment(ref, status, "INTERNAL");
+    }
+
+    private long payment(String ref, String status, String type) {
         LocalDateTime now = LocalDateTime.now();
         jdbc.update("""
                 INSERT INTO payments
                     (payment_ref, payer_account_id, payee_account_id, payment_type, amount,
                      currency, status, is_recurring, scheduled_at, created_at, updated_at)
-                VALUES (?, 9, 10, 'INTERNAL', 25.00, 'USD', ?, false, ?, now(), ?)
-                """, ref, status, Timestamp.valueOf(now.minusMinutes(1)), Timestamp.valueOf(now));
+                VALUES (?, 9, 10, ?, 25.00, 'USD', ?, false, ?, now(), ?)
+                """, ref, type, status, Timestamp.valueOf(now.minusMinutes(1)), Timestamp.valueOf(now));
         Long id = jdbc.queryForObject("SELECT id FROM payments WHERE payment_ref = ?", Long.class, ref);
         return id == null ? 0 : id;
     }
@@ -158,6 +162,35 @@ class ScheduledPaymentExecutionIT {
     }
 
     @Test
+    @DisplayName("a bill payment debits the payer before it is reported complete")
+    void externalPaymentDebitsThePayer() {
+        // Non-internal payments used to be marked COMPLETED, and announced as
+        // paid, with the payer's balance never touched.
+        long id = payment("exec-bill", "PENDING", "BILL");
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        verify(transactionClient).withdraw(org.mockito.ArgumentMatchers.eq("payment-exec-bill"),
+                org.mockito.ArgumentMatchers.argThat(w -> w.getAccountId() == 9L
+                        && w.getAmount().compareTo(new java.math.BigDecimal("25.00")) == 0));
+        verify(transactionClient, never()).transfer(anyString(), any());
+        assertThat(status(id)).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @DisplayName("a failed debit leaves a bill payment FAILED, not COMPLETED")
+    void refusedDebitFailsThePayment() {
+        when(transactionClient.withdraw(anyString(), any())).thenThrow(new IllegalStateException("insufficient funds"));
+        long id = payment("exec-bill-2", "PENDING", "BILL");
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        assertThat(status(id)).isEqualTo("FAILED");
+    }
+
+    @Test
     @DisplayName("a payment cancelled before it is processed is not executed")
     void cancelledPaymentIsNotExecuted() {
         long id = payment("exec-3", "CANCELLED");
@@ -166,5 +199,49 @@ class ScheduledPaymentExecutionIT {
 
         verify(transactionClient, never()).transfer(anyString(), any());
         assertThat(status(id)).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    @DisplayName("a recurring payment made now still schedules the next one")
+    void immediateRecurringPaymentRecurs() {
+        // Only the scheduler created the next occurrence, so a series whose
+        // first payment ran immediately stopped after one.
+        com.bankingplatform.payment.dto.CreatePaymentRequest request = new com.bankingplatform.payment.dto.CreatePaymentRequest();
+        request.setPayerAccountId(9L);
+        request.setPayeeExternalRef("UTILITY-ACCT-1");
+        request.setPaymentType(com.bankingplatform.payment.model.PaymentType.BILL);
+        request.setAmount(new java.math.BigDecimal("40.00"));
+        request.setCurrency("USD");
+        request.setRecurring(true);
+        request.setRecurrencePattern(com.bankingplatform.payment.model.RecurrencePattern.MONTHLY);
+
+        inTransaction.executeWithoutResult(s -> service.createPayment(request));
+
+        assertThat(jdbc.queryForList("SELECT status FROM payments ORDER BY id", String.class))
+                .containsExactly("COMPLETED", "PENDING");
+        java.time.LocalDate next = jdbc.queryForObject(
+                "SELECT CAST(scheduled_at AS date) FROM payments WHERE status = 'PENDING'", java.time.LocalDate.class);
+        assertThat(next).isEqualTo(java.time.LocalDate.now().plusMonths(1));
+    }
+
+    @Test
+    @DisplayName("a series keeps its day when the scheduler runs late")
+    void recurringSeriesDoesNotDrift() {
+        LocalDateTime due = LocalDateTime.now().minusDays(3).withHour(9).withMinute(0).withSecond(0).withNano(0);
+        jdbc.update("""
+                INSERT INTO payments
+                    (payment_ref, payer_account_id, payee_external_ref, payment_type, amount, currency,
+                     status, is_recurring, recurrence_pattern, scheduled_at, created_at, updated_at)
+                VALUES ('exec-rec', 9, 'UTILITY-ACCT-1', 'BILL', 40.00, 'USD', 'PENDING', true, 'MONTHLY', ?, now(), now())
+                """, Timestamp.valueOf(due));
+        Long id = jdbc.queryForObject("SELECT id FROM payments WHERE payment_ref = 'exec-rec'", Long.class);
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        java.time.LocalDate next = jdbc.queryForObject(
+                "SELECT CAST(scheduled_at AS date) FROM payments WHERE status = 'PENDING'", java.time.LocalDate.class);
+        // Dated from when it was due, not from the late run.
+        assertThat(next).isEqualTo(due.toLocalDate().plusMonths(1));
     }
 }

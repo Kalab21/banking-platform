@@ -1,5 +1,7 @@
 package com.bankingplatform.payment.controller;
 
+import com.bankingplatform.common.idempotency.IdempotencyGuard;
+
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.payment.dto.CreatePaymentRequest;
 import com.bankingplatform.payment.dto.PaymentResponse;
@@ -33,15 +35,23 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final PaymentOwnershipVerifier ownership;
+    private final IdempotencyGuard idempotency;
 
     @PostMapping
     @Operation(summary = "Create and optionally schedule a payment")
     public ResponseEntity<PaymentResponse> create(@Valid @RequestBody CreatePaymentRequest request,
+                                                   @RequestHeader(name = IdempotencyGuard.HEADER,
+                                                           required = false) String idempotencyKey,
                                                    CallerIdentity caller) {
         // Paying *to* another customer's account is ordinary banking; paying
         // *from* one is not, so only the payer account is owner-checked.
         ownership.requireCanAccessAccount(caller, request.getPayerAccountId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.createPayment(request));
+        // A payment that executes immediately moves money in this request, and
+        // each request used to mint a new reference: a retry after a lost
+        // response paid twice. One key, one payment.
+        return idempotency.execute(idempotencyKey, "PAYMENT", caller, request,
+                PaymentResponse.class, PaymentResponse::getPaymentRef,
+                () -> paymentService.createPayment(request));
     }
 
     @GetMapping("/ref/{ref}")

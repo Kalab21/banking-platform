@@ -2,7 +2,9 @@ package com.bankingplatform.payment.client;
 
 import com.bankingplatform.payment.config.FeignConfig;
 import com.bankingplatform.payment.dto.TransferRequest;
+import com.bankingplatform.payment.dto.TransactionResponse;
 import com.bankingplatform.payment.dto.TransferResponse;
+import com.bankingplatform.payment.dto.WithdrawRequest;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,4 +21,12 @@ public interface TransactionClient {
     @PostMapping("/api/transactions/transfer")
     TransferResponse transfer(@RequestHeader("Idempotency-Key") String idempotencyKey,
                               @RequestBody TransferRequest request);
+
+    /**
+     * Money leaving the bank: a bill, ACH, wire or SWIFT payment. The rail
+     * itself is simulated, but the payer's balance is not.
+     */
+    @PostMapping("/api/transactions/withdraw")
+    TransactionResponse withdraw(@RequestHeader("Idempotency-Key") String idempotencyKey,
+                                 @RequestBody WithdrawRequest request);
 }

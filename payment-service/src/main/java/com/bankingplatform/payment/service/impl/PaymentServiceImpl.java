@@ -1,5 +1,7 @@
 package com.bankingplatform.payment.service.impl;
 
+import com.bankingplatform.payment.dto.WithdrawRequest;
+
 import com.bankingplatform.common.security.CallerContext;
 import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.common.security.Role;
@@ -79,6 +81,10 @@ public class PaymentServiceImpl implements PaymentService {
         if (request.getScheduledAt() == null || !request.getScheduledAt().isAfter(LocalDateTime.now())) {
             saved = executePayment(saved);
             saved = paymentRepository.save(saved);
+            // A recurring payment that runs now still recurs. Only the
+            // scheduler used to create the next occurrence, so a series whose
+            // first payment was immediate stopped after one.
+            scheduleNextOccurrence(saved);
         }
 
         audit("PAYMENT", saved.getId(), "CREATED", "ref=" + saved.getPaymentRef());
@@ -208,20 +214,13 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setStatus(PaymentStatus.COMPLETED);
             payment.setProcessedAt(LocalDateTime.now());
 
-            if (payment.isRecurring() && payment.getRecurrencePattern() != null) {
-                LocalDate nextDate = calculateNextDate(LocalDate.now(), payment.getRecurrencePattern());
-                boolean withinEndDate = payment.getEndDate() == null || !nextDate.isAfter(payment.getEndDate());
-                if (withinEndDate) {
-                    // Created in the same transaction as the payment that
-                    // begets it. Two workers processing one payment would
-                    // otherwise each schedule the next occurrence, and the
-                    // customer would be billed twice next month -- which the
-                    // transfer's idempotency key does not protect against,
-                    // because the two occurrences are genuinely different
-                    // payments.
-                    createNextOccurrence(payment, nextDate);
-                }
-            }
+            // Created in the same transaction as the payment that begets it.
+            // Two workers processing one payment would otherwise each schedule
+            // the next occurrence, and the customer would be billed twice next
+            // month -- which the transfer's idempotency key does not protect
+            // against, because the two occurrences are genuinely different
+            // payments.
+            scheduleNextOccurrence(payment);
         } catch (Exception e) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason(e.getMessage());
@@ -252,7 +251,17 @@ public class PaymentServiceImpl implements PaymentService {
                     .description(payment.getDescription() != null ? payment.getDescription() : "Payment")
                     .build());
         }
-        // External payment types (ACH, WIRE, SWIFT) would call integration-service — stub for now
+        if (payment.getPaymentType() != PaymentType.INTERNAL) {
+            // Money leaving the bank. The rail is simulated, but the payer's
+            // balance is not: these used to be marked COMPLETED, and announced
+            // as paid, without the account being debited at all.
+            transactionClient.withdraw("payment-" + payment.getPaymentRef(), WithdrawRequest.builder()
+                    .accountId(payment.getPayerAccountId())
+                    .amount(payment.getAmount())
+                    .description(payment.getDescription() != null ? payment.getDescription()
+                            : "Payment — " + payment.getPaymentType())
+                    .build());
+        }
         payment.setStatus(PaymentStatus.COMPLETED);
         payment.setProcessedAt(LocalDateTime.now());
 
@@ -288,6 +297,24 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    /**
+     * The next payment in a recurring series, dated from when this one was due.
+     *
+     * Dating from "today" let the series drift by however late the scheduler
+     * ran. A date that is already past (a long outage) falls back to today, so
+     * a missed run is not replayed month after month in one go.
+     */
+    private void scheduleNextOccurrence(Payment payment) {
+        if (!payment.isRecurring() || payment.getRecurrencePattern() == null) return;
+        LocalDate due = payment.getScheduledAt() != null ? payment.getScheduledAt().toLocalDate() : LocalDate.now();
+        LocalDate nextDate = calculateNextDate(due, payment.getRecurrencePattern());
+        if (!nextDate.isAfter(LocalDate.now())) {
+            nextDate = calculateNextDate(LocalDate.now(), payment.getRecurrencePattern());
+        }
+        if (payment.getEndDate() != null && nextDate.isAfter(payment.getEndDate())) return;
+        createNextOccurrence(payment, nextDate);
+    }
+
     private void createNextOccurrence(Payment original, LocalDate nextDate) {
         Payment next = Payment.builder()
                 .paymentRef(UUID.randomUUID().toString())
@@ -320,6 +347,11 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void validatePaymentRequest(CreatePaymentRequest request) {
+        if (request.getPaymentType() == PaymentType.CREDIT_CARD_PAYMENT) {
+            // A card payment has to reduce the card's balance as well as debit
+            // the account, and only credit-card-service can do the first.
+            throw new PaymentException("Pay a credit card from the card itself: POST /api/credit-cards/{id}/payment");
+        }
         if (request.getPaymentType() == PaymentType.INTERNAL && request.getPayeeAccountId() == null) {
             throw new PaymentException("INTERNAL payment requires payeeAccountId");
         }
