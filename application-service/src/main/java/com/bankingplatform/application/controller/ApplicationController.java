@@ -42,12 +42,25 @@ public class ApplicationController {
     private final ApplicationService applicationService;
     private final OfferService offerService;
 
+    /**
+     * A reviewer's notes are the bank's working, not the customer's record.
+     *
+     * The offer response already leaves them out for that reason, but the
+     * application itself carried them to its owner, so a note written for
+     * colleagues was readable by the person it was about. Staff still see them.
+     */
+    private static ApplicationResponse forCaller(ApplicationResponse application, CallerIdentity caller) {
+        if (!caller.isStaff()) application.setReviewerNotes(null);
+        return application;
+    }
+
     @PostMapping
     @Operation(summary = "Submit a new product application")
     public ResponseEntity<ApplicationResponse> submit(@Valid @RequestBody CreateApplicationRequest request,
                                                        CallerIdentity caller) {
         AccessGuard.requireTargetUserAllowed(caller, request.getUserId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(applicationService.submitApplication(request));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(forCaller(applicationService.submitApplication(request), caller));
     }
 
     @GetMapping("/{id}")
@@ -55,7 +68,7 @@ public class ApplicationController {
     public ResponseEntity<ApplicationResponse> getById(@PathVariable Long id, CallerIdentity caller) {
         ApplicationResponse application = applicationService.getById(id);
         AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
-        return ResponseEntity.ok(application);
+        return ResponseEntity.ok(forCaller(application, caller));
     }
 
     @GetMapping("/user/{userId}")
@@ -63,7 +76,9 @@ public class ApplicationController {
     public ResponseEntity<List<ApplicationResponse>> getByUser(@PathVariable Long userId,
                                                                 CallerIdentity caller) {
         AccessGuard.requireTargetUserAllowed(caller, userId);
-        return ResponseEntity.ok(applicationService.getByUserId(userId));
+        return ResponseEntity.ok(applicationService.getByUserId(userId).stream()
+                .map(application -> forCaller(application, caller))
+                .toList());
     }
 
     @GetMapping("/status/{status}")
@@ -143,6 +158,6 @@ public class ApplicationController {
         ApplicationResponse application = applicationService.getById(id);
         AccessGuard.requireOwnerOrStaff(caller, application.getUserId());
 
-        return ResponseEntity.ok(applicationService.cancel(id, application.getUserId()));
+        return ResponseEntity.ok(forCaller(applicationService.cancel(id, application.getUserId()), caller));
     }
 }
