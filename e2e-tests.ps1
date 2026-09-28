@@ -303,6 +303,10 @@ if ($STAFF_TOKEN) {
         "$GW/api/transactions/transfer" $STAFF_TOKEN 403 @{ fromAccountId=$ACCOUNT_ID; toAccountId=$ACCOUNT_ID; amount=5.00 }
     Assert-Refused "Staff cannot change their own credit score" "PUT" `
         "$GW/api/users/$STAFF_ID/credit-score" $STAFF_TOKEN 403 @{ delta=100; reason="Self" }
+    # A change larger than the whole score range is refused; one near the
+    # int limit used to wrap negative and set the score to its floor.
+    Assert-Refused "A credit score change beyond the score range is refused" "PUT" `
+        "$GW/api/users/$USER_ID/credit-score" $STAFF_TOKEN 400 @{ delta=2147483647; reason="Overflow" }
     # A customer asking about a name that is not theirs gets the same answer
     # whether or not it exists.
     Assert-Refused "A username that does not exist is not revealed as missing" "GET" `

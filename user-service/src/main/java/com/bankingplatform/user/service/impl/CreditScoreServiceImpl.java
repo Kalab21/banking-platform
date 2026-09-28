@@ -48,7 +48,10 @@ public class CreditScoreServiceImpl implements CreditScoreService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         int oldScore = user.getCreditScore();
-        int newScore = Math.max(MIN_SCORE, Math.min(MAX_SCORE, oldScore + delta));
+        // Summed as a long: an int delta near Integer.MAX_VALUE wrapped negative
+        // and was then clamped to the floor, so a huge increase set the score
+        // to its minimum.
+        int newScore = (int) Math.max(MIN_SCORE, Math.min(MAX_SCORE, (long) oldScore + delta));
 
         user.setCreditScore(newScore);
         user.setCreditScoreUpdatedAt(LocalDateTime.now());
