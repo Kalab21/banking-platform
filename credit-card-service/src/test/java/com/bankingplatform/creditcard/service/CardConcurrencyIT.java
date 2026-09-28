@@ -259,4 +259,20 @@ class CardConcurrencyIT {
         assertThat(card.getCurrentBalance().add(card.getAvailableCredit()))
                 .isEqualByComparingTo(CREDIT_LIMIT);
     }
+
+    @Test
+    @DisplayName("a frozen card still accrues interest on what it owes")
+    void aFrozenCardStillAccruesInterest() {
+        // Freezing stops new spending; it does not stop the debt. The nightly
+        // job selected ACTIVE cards only, so freezing a card stopped its
+        // interest and a blocked card's balance sat untouched.
+        jdbc.update("UPDATE credit_cards SET status = 'CUSTOMER_FROZEN', current_balance = 500.00, available_credit = 500.00 WHERE id = ?", cardId);
+
+        inTransaction.executeWithoutResult(s -> service.chargeInterest());
+
+        CreditCard card = reread();
+        assertThat(card.getCurrentBalance()).isEqualByComparingTo("500.27");
+        assertThat(card.getAvailableCredit()).isEqualByComparingTo("499.73");
+        assertThat(card.getStatus()).isEqualTo(CardStatus.CUSTOMER_FROZEN);
+    }
 }
