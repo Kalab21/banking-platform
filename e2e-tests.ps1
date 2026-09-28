@@ -319,6 +319,17 @@ if ($STAFF_TOKEN) {
     Assert-Refused "A customer cannot approve their own KYC document" "PUT" `
         "$GW/api/kyc/documents/$DOC1_ID/review" $TOKEN 403 @{ status="APPROVED"; reviewedBy=1 }
 
+    # A reviewer decides each document. The reviewer recorded is the member of
+    # staff who is signed in; a reviewedBy in the body is ignored, so a review
+    # cannot be attributed to someone else.
+    $staffId = $staffAuth.userId
+    $docReviewed = Put "$GW/api/kyc/documents/$DOC1_ID/review" @{ status="APPROVED"; reviewedBy=1 } $STAFF_TOKEN
+    Assert "A reviewer approves a document, recorded under their own id" ($docReviewed -and $docReviewed.status -eq "APPROVED" -and $docReviewed.reviewedBy -eq $staffId) "reviewedBy=$($docReviewed.reviewedBy) staff=$staffId"
+    Assert-Refused "A rejection with no reason is refused" "PUT" `
+        "$GW/api/kyc/documents/$($kycDoc2.id)/review" $STAFF_TOKEN 400 @{ status="REJECTED" }
+    Assert-Refused "A reviewer cannot decide their own identity check" "PUT" `
+        "$GW/api/users/$staffId/kyc/status?status=APPROVED" $STAFF_TOKEN 403
+
     $kycDone = Put "$GW/api/users/$USER_ID/kyc/status?status=APPROVED" $null $STAFF_TOKEN
     Assert "A reviewer completes the identity check" ($kycDone -and $kycDone.kycStatus -eq "APPROVED")
 }

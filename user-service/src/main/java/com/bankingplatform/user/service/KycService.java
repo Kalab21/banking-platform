@@ -11,8 +11,7 @@ import java.util.List;
 public interface KycService {
 
     KycDocumentResponse submitDocument(Long userId, KycDocumentRequest request);
-
-    KycDocumentResponse reviewDocument(Long documentId, ReviewDocumentRequest request);
+    KycDocumentResponse reviewDocument(Long documentId, ReviewDocumentRequest request, Long reviewerId);
 
     UserResponse updateKycStatus(Long userId, KycStatus status);
 

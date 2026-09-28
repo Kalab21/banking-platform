@@ -58,13 +58,14 @@ describe("Badge", () => {
 describe("statusTone", () => {
   it("maps healthy states to the positive tone", () => {
     expect(statusTone("ACTIVE")).toBe("positive");
-    expect(statusTone("VERIFIED")).toBe("positive");
+    expect(statusTone("APPROVED")).toBe("positive");
     expect(statusTone("PAID_OFF")).toBe("positive");
   });
 
   it("maps states needing attention to the caution tone", () => {
     expect(statusTone("PENDING")).toBe("caution");
     expect(statusTone("IN_REVIEW")).toBe("caution");
+    expect(statusTone("UNDER_REVIEW")).toBe("caution");
   });
 
   it("maps blocking and failure states to the critical tone", () => {

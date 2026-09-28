@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { reviewKycDocument, submitKycDocument } from "@/lib/api/banking";
+import { reviewKycDocument, setKycStatus, submitKycDocument } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import { requireSession, requireStaffSession } from "@/lib/session";
 import { fieldErrors, kycDocumentSchema } from "@/lib/validation";
@@ -48,7 +48,7 @@ export async function reviewKycAction(
   _prev: KycFormState,
   formData: FormData,
 ): Promise<KycFormState> {
-  const session = await requireStaffSession();
+  await requireStaffSession();
 
   const documentId = Number(formData.get("documentId"));
   const decision = String(formData.get("decision"));
@@ -63,12 +63,7 @@ export async function reviewKycAction(
   }
 
   try {
-    await reviewKycDocument(
-      documentId,
-      decision,
-      session.userId,
-      decision === "REJECTED" ? rejectionReason : undefined,
-    );
+    await reviewKycDocument(documentId, decision, decision === "REJECTED" ? rejectionReason : undefined);
     revalidatePath("/admin/kyc");
     return { success: `Document ${decision === "APPROVED" ? "approved" : "rejected"}.` };
   } catch (error) {
@@ -76,5 +71,39 @@ export async function reviewKycAction(
       return { error: error.userMessage };
     }
     return { error: "That review could not be recorded." };
+  }
+}
+
+/**
+ * Staff decision on the customer's identity as a whole.
+ *
+ * The backend refuses a customer (`@PreAuthorize`) and refuses a member of
+ * staff deciding their own; the page hiding the control for either is a
+ * convenience, not the rule.
+ */
+export async function setKycStatusAction(
+  _prev: KycFormState,
+  formData: FormData,
+): Promise<KycFormState> {
+  await requireStaffSession();
+
+  const userId = Number(formData.get("userId"));
+  const decision = String(formData.get("decision"));
+  if (!Number.isFinite(userId)) return { error: "That customer could not be identified." };
+  if (decision !== "APPROVED" && decision !== "REJECTED") {
+    return { error: "Choose approve or reject." };
+  }
+
+  try {
+    await setKycStatus(userId, decision);
+    revalidatePath("/admin/kyc");
+    return {
+      success: decision === "APPROVED" ? "Identity approved." : "Identity rejected.",
+    };
+  } catch (error) {
+    if (error instanceof ApiError || error instanceof NetworkError) {
+      return { error: error.userMessage };
+    }
+    return { error: "That decision could not be recorded." };
   }
 }
