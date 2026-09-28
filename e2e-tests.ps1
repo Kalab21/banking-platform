@@ -433,6 +433,19 @@ if ($cards -and $cards.Count -gt 0) {
     Assert "Available credit restored after payment" ($cardPaid.availableCredit -ge $card.creditLimit - 200 - 0.01)
     Write-Host "  AvailableCredit after payment=$($cardPaid.availableCredit)"
 
+    # Available credit is the limit less the balance: never more than the limit.
+    Assert "Available credit is the limit less the balance" ([decimal]$cardPaid.availableCredit -eq [decimal]$cardPaid.creditLimit - [decimal]$cardPaid.currentBalance) "available=$($cardPaid.availableCredit) limit=$($cardPaid.creditLimit) balance=$($cardPaid.currentBalance)"
+
+    # A statement's opening balance works back from its close. It used to add
+    # purchases and subtract payments, the wrong way round.
+    $stmt = Post "$GW/api/credit-cards/$CARD_ID/statements/generate" $null $STAFF_TOKEN
+    if ($stmt) {
+        $worked = [decimal]$stmt.closingBalance - [decimal]$stmt.totalPurchases - [decimal]$stmt.interestCharged - [decimal]$stmt.feesCharged + [decimal]$stmt.totalPayments
+        Assert "The statement opens at its close less charges plus payments" ([decimal]$stmt.openingBalance -eq $worked) "opening=$($stmt.openingBalance) expected=$worked"
+    } else {
+        Assert "Staff can cut a statement" $false
+    }
+
     # Statements
     $stmts = Get "$GW/api/credit-cards/$CARD_ID/statements" $TOKEN
     Write-Host "  Statements count=$($stmts.Count)"
