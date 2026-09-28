@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/session";
-import { getCardStatements, getCardTransactions, getCreditCard } from "@/lib/api/banking";
+import { getAccounts, getCardStatements, getCardTransactions, getCreditCard } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import {
   Badge,
@@ -34,11 +34,15 @@ import {
 import { VirtualCard } from "@/features/cards/VirtualCard";
 import { FreezeControl } from "@/features/cards/FreezeControl";
 import { utilisation } from "@/features/cards/utilisation";
+import { ServicingPayment } from "@/features/servicing/ServicingPayment";
+import { payCardAction } from "@/features/servicing/actions";
+import { cardPaymentChoices, servicingAccounts } from "@/features/servicing/choices";
+import { toMoneyAccountOptions } from "@/features/transactions/money-account";
 
 export const metadata: Metadata = { title: "Credit card" };
 
 export default async function CardDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const session = await requireSession();
   const { id } = await params;
   const cardId = Number(id);
   if (!Number.isFinite(cardId)) notFound();
@@ -46,11 +50,13 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
   let card;
   let txPage;
   let statements;
+  let accounts;
   try {
     card = await getCreditCard(cardId);
-    [txPage, statements] = await Promise.all([
+    [txPage, statements, accounts] = await Promise.all([
       getCardTransactions(cardId, 0, 25),
       getCardStatements(cardId),
+      getAccounts(session.userId),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.isNotFound) notFound();
@@ -153,6 +159,22 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
           </DetailList>
         </div>
       </section>
+
+      <ServicingPayment
+        testId="card-pay"
+        title="Pay your card"
+        description="Pay the minimum, your statement balance, what you owe now, or another amount."
+        action={payCardAction}
+        target={{ name: "cardId", id: card.id }}
+        currency={card.currency}
+        accounts={toMoneyAccountOptions(servicingAccounts(accounts, card.currency))}
+        choices={cardPaymentChoices(card)}
+        allowOther
+        confirmLabel="Confirm payment"
+        reviewNote="A payment larger than what you owe takes only what you owe."
+        available={card.currentBalance > 0}
+        unavailable="Nothing to pay. This card has no balance."
+      />
 
       <Card>
         <CardHeader
