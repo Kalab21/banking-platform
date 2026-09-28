@@ -718,6 +718,10 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
         $mrApproved = Put "$GW/api/applications/$MR_APP_ID/review" @{ decision="APPROVE"; reviewerNotes="Identity documents seen in branch" } $STAFF_TOKEN
         Assert "A reviewer's approval becomes an offer" ($mrApproved -and $mrApproved.status -eq "OFFERED") "status=$($mrApproved.status)"
         Assert "A reviewer's approval creates no product" ($null -eq $mrApproved.productId)
+        # The note was written for colleagues; the applicant's own view of the
+        # application leaves it out, and staff still read it.
+        Assert "The applicant does not see the reviewer's notes" ($null -eq (Get "$GW/api/applications/$MR_APP_ID" $OTHER_TOKEN).reviewerNotes)
+        Assert "Staff still see the reviewer's notes" ((Get "$GW/api/applications/$MR_APP_ID" $STAFF_TOKEN).reviewerNotes -eq "Identity documents seen in branch")
         Assert "The approval produced offer terms" ((CountOf (Get "$GW/api/applications/$MR_APP_ID/offers" $OTHER_TOKEN)) -gt 0)
         Start-Sleep -Seconds 5
         Assert "No card exists until the customer accepts" ((CountOf (Get "$GW/api/credit-cards/user/$OTHER_ID" $OTHER_TOKEN)) -eq 0)

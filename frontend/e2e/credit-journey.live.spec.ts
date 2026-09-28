@@ -142,6 +142,9 @@ test.describe("customer credit", () => {
     await expect(terms.getByText(`${offer.termMonths} months`, { exact: true })).toBeVisible();
 
     await card.getByRole("button", { name: "Accept offer" }).click();
+    // Accepting creates the loan, so it asks once more, naming the terms.
+    await expect(card.getByText(/We will set up your product on exactly these terms/)).toBeVisible();
+    await card.getByRole("button", { name: "Confirm acceptance" }).click();
 
     // Provisioning is a Kafka round trip: the loan service creates the loan and
     // confirms it, and only then does the application carry a product id.
@@ -171,6 +174,17 @@ test.describe("customer credit", () => {
     expect(Number(loan.principal)).toBe(Number(offer.approvedAmount));
     expect(loan.termMonths).toBe(offer.termMonths);
     expect(Number(loan.interestRate)).toBe(Number(offer.apr));
+
+    // The application's own page tells the same story from stored events.
+    await page.goto(`/applications/${application.id}`);
+    const history = page.getByRole("list", { name: "Application history" });
+    await expect(history).toBeVisible({ timeout: 90_000 });
+    await expect(history.getByText("You accepted the offer")).toBeVisible();
+    await expect(history.getByText("Your personal loan is ready")).toBeVisible();
+    await expect(page.getByRole("link", { name: "View your personal loan" })).toHaveAttribute(
+      "href",
+      `/loans/${provisioned.productId}`,
+    );
 
     await page.goto("/applications");
     await expect(card.getByRole("heading", { name: "The terms you accepted" })).toBeVisible();

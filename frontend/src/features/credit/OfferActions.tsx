@@ -12,7 +12,7 @@ import { acceptOfferAction, declineOfferAction, type CreditFormState } from "@/f
  * the terms are read from the stored offer by the backend. An offer the
  * customer could edit on the way past would not be an offer.
  */
-export function OfferActions({ applicationId }: { applicationId: number }) {
+export function OfferActions({ applicationId, terms }: { applicationId: number; terms?: string }) {
   const [acceptState, accept, accepting] = useActionState<CreditFormState, FormData>(
     acceptOfferAction,
     {},
@@ -22,8 +22,10 @@ export function OfferActions({ applicationId }: { applicationId: number }) {
     {},
   );
 
-  // Declining closes the offer for good, so it takes a second, explicit click.
-  const [confirmingDecline, setConfirmingDecline] = useState(false);
+  // Each answer is final, so each takes a second, explicit click: accepting
+  // creates the loan or card, and declining closes the offer for good.
+  const [confirming, setConfirming] = useState<"accept" | "decline" | null>(null);
+  const busy = accepting || declining;
 
   const error = acceptState.error ?? declineState.error;
 
@@ -31,40 +33,42 @@ export function OfferActions({ applicationId }: { applicationId: number }) {
     <div className="grid gap-2">
       {error ? <FormError>{error}</FormError> : null}
 
-      <div className="flex flex-wrap gap-2">
-        <form action={accept}>
+      {confirming === "accept" ? (
+        <form action={accept} className="grid gap-2 rounded-[var(--radius-control)] border border-line bg-sunken p-3">
           <input type="hidden" name="applicationId" value={applicationId} />
-          <Button type="submit" disabled={accepting || declining}>
-            {accepting ? "Accepting…" : "Accept offer"}
+          <p className="text-sm text-ink">
+            {terms ? <>Accept {terms}? </> : <>Accept these terms? </>}
+            We will set up your product on exactly these terms.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={busy}>
+              {accepting ? "Accepting…" : "Confirm acceptance"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setConfirming(null)} disabled={busy}>
+              Back
+            </Button>
+          </div>
+        </form>
+      ) : confirming === "decline" ? (
+        <form action={decline} className="flex flex-wrap gap-2">
+          <input type="hidden" name="applicationId" value={applicationId} />
+          <Button type="submit" variant="danger" disabled={busy}>
+            {declining ? "Declining…" : "Confirm decline"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setConfirming(null)} disabled={busy}>
+            Keep offer
           </Button>
         </form>
-
-        {confirmingDecline ? (
-          <form action={decline} className="flex flex-wrap gap-2">
-            <input type="hidden" name="applicationId" value={applicationId} />
-            <Button type="submit" variant="danger" disabled={accepting || declining}>
-              {declining ? "Declining…" : "Confirm decline"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setConfirmingDecline(false)}
-              disabled={declining}
-            >
-              Keep offer
-            </Button>
-          </form>
-        ) : (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setConfirmingDecline(true)}
-            disabled={accepting || declining}
-          >
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={() => setConfirming("accept")} disabled={busy}>
+            Accept offer
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setConfirming("decline")} disabled={busy}>
             Decline
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <p className="text-xs text-ink-muted">
         Accepting these terms starts setting up your product. Declining closes this offer for good.

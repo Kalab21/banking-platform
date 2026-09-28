@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -79,6 +80,47 @@ class ApplicationAuthorizationTest {
     private static String createBody(long userId) {
         return ("{\"userId\":%d,\"applicationType\":\"CHECKING_ACCOUNT\","
                 + "\"requestedAmount\":100.00,\"currency\":\"USD\"}").formatted(userId);
+    }
+
+    private static ApplicationResponse notedApplicationOf(long ownerId) {
+        ApplicationResponse response = applicationOf(ownerId);
+        response.setReviewerNotes("Checked payslips; income borderline");
+        return response;
+    }
+
+    @Nested
+    @DisplayName("reviewer notes")
+    class ReviewerNotes {
+
+        @Test
+        @DisplayName("are not returned to the customer the application belongs to")
+        void hiddenFromOwnerById() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(notedApplicationOf(CUSTOMER_A));
+
+            mvc.perform(as(get("/api/applications/{id}", 5L), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reviewerNotes").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("are not in the customer's own list")
+        void hiddenFromOwnerList() throws Exception {
+            when(applicationService.getByUserId(CUSTOMER_A)).thenReturn(List.of(notedApplicationOf(CUSTOMER_A)));
+
+            mvc.perform(as(get("/api/applications/user/{id}", CUSTOMER_A), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].reviewerNotes").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("are still returned to staff")
+        void shownToStaff() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(notedApplicationOf(CUSTOMER_A));
+
+            mvc.perform(as(get("/api/applications/{id}", 5L), STAFF, "EMPLOYEE"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reviewerNotes").value("Checked payslips; income borderline"));
+        }
     }
 
     @Nested
