@@ -43,4 +43,15 @@ public enum CardStatus {
     public boolean isTerminal() {
         return this == CLOSED;
     }
+
+    /**
+     * States in which the card's balance is still a debt being carried.
+     *
+     * <p>A freeze or a block stops spending; it does not stop the debt. Interest
+     * and statements used to run only for ACTIVE cards, so a cardholder could
+     * freeze the card the day before interest ran, unfreeze it to spend, and
+     * pay nothing while it sat frozen.
+     */
+    public static final java.util.Set<CardStatus> CARRIES_BALANCE =
+            java.util.EnumSet.of(ACTIVE, CUSTOMER_FROZEN, SYSTEM_BLOCKED);
 }

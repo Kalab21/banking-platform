@@ -22,7 +22,9 @@ public class StatementGeneratorJob {
     public void generateMonthlyStatements() {
         log.info("Running monthly statement generation job");
         int day = LocalDate.now().getDayOfMonth();
-        cardRepository.findByStatus(CardStatus.ACTIVE).stream()
+        // Frozen and blocked cards still carry a balance, so they still get
+        // a statement and a minimum payment.
+        cardRepository.findByStatusIn(CardStatus.CARRIES_BALANCE).stream()
                 .filter(c -> c.getBillingCycleDay() == day)
                 .forEach(card -> {
                     try {
