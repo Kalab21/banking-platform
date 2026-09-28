@@ -125,7 +125,7 @@ Selected routes, all reached through the gateway on `:8080`:
 | `GET` | `/api/statistics/platform`, `/api/statistics/daily` | Platform-wide read models — employee/admin only |
 | `GET` | `/api/notifications` | Paginated user alerts (owner or staff) |
 | `GET` | `/api/fraud/alerts` | Fraud alerts — list, read and review, all employee/admin |
-| `POST` | `/api/integrations/wire`, `/ach`, `/swift` | External rails (simulated) |
+| `POST` | `/api/integrations/wire-transfer`, `/ach-transfer`, `/swift-transfer` | External rails (simulated: recorded, not settled; no balance is debited) |
 
 ## Direct service access
 

@@ -640,6 +640,15 @@ Assert-Refused "Another customer cannot wire from an account they do not own" "P
     "$GW/api/integrations/wire-transfer" $OTHER_TOKEN 403 `
     @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="GB29EXMP60161331926819"; swiftCode="EXMPGB2L"; bankName="Example Bank"; bankCountry="GB"; amount=100.00; currency="USD"; purpose="Not theirs" }
 
+# External transfers are validated before anything is recorded. There were
+# no constraints: a negative amount was stored and announced.
+Assert-Refused "A wire with a negative amount is refused" "POST" `
+    "$GW/api/integrations/wire-transfer" $TOKEN 400 `
+    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="London Corp Ltd"; beneficiaryAccount="GB29EXMP60161331926819"; bankName="Example Bank"; bankCountry="GB"; amount=-50.00; currency="USD"; purpose="Negative" }
+Assert-Refused "An ACH transfer without a valid routing number is refused" "POST" `
+    "$GW/api/integrations/ach-transfer" $TOKEN 400 `
+    @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Acme Payroll"; beneficiaryAccount="12345678"; routingNumber="12AB"; bankName="Acme Bank"; amount=10.00; currency="USD" }
+
 Assert-Refused "Another customer cannot ACH from an account they do not own" "POST" `
     "$GW/api/integrations/ach-transfer" $OTHER_TOKEN 403 `
     @{ fromAccountId=$ACCOUNT_ID; beneficiaryName="Mallory"; beneficiaryAccount="12345678"; routingNumber="990000002"; bankName="Acme Bank"; amount=100.00; currency="USD"; purpose="Not theirs" }

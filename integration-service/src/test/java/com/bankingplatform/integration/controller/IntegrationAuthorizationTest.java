@@ -368,9 +368,12 @@ class IntegrationAuthorizationTest {
                     {"beneficiaryName":"London Corp Ltd","amount":5000.00,"currency":"USD"}
                     """;
 
+            // Refused as malformed (400) by validation, before ownership is
+            // even asked; it was a 403 from the ownership check before the
+            // request had any constraints. Either way nothing goes downstream.
             mvc.perform(as(post("/api/integrations/wire-transfer"), CUSTOMER_A, "CUSTOMER")
                             .contentType(MediaType.APPLICATION_JSON).content(body))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isBadRequest());
 
             verifyNoInteractions(integrationService);
             verifyNoInteractions(accountClient);

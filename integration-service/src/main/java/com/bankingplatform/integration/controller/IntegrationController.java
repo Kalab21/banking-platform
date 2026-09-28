@@ -5,6 +5,7 @@ import com.bankingplatform.integration.dto.*;
 import com.bankingplatform.integration.security.AccountOwnershipVerifier;
 import com.bankingplatform.integration.service.IntegrationService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -47,7 +48,7 @@ public class IntegrationController {
     private final AccountOwnershipVerifier ownership;
 
     @PostMapping("/wire-transfer")
-    public ResponseEntity<TransferResponse> wireTransfer(@RequestBody WireTransferRequest req,
+    public ResponseEntity<TransferResponse> wireTransfer(@Valid @RequestBody WireTransferRequest req,
                                                          CallerIdentity caller) {
         // Before the transfer is persisted and its event published: a refused
         // request must leave no record and no event behind it.
@@ -56,14 +57,14 @@ public class IntegrationController {
     }
 
     @PostMapping("/ach-transfer")
-    public ResponseEntity<TransferResponse> achTransfer(@RequestBody AchTransferRequest req,
+    public ResponseEntity<TransferResponse> achTransfer(@Valid @RequestBody AchTransferRequest req,
                                                         CallerIdentity caller) {
         ownership.requireCanSendFrom(caller, req.getFromAccountId());
         return ResponseEntity.status(HttpStatus.CREATED).body(integrationService.initiateAchTransfer(req));
     }
 
     @PostMapping("/swift-transfer")
-    public ResponseEntity<TransferResponse> swiftTransfer(@RequestBody SwiftTransferRequest req,
+    public ResponseEntity<TransferResponse> swiftTransfer(@Valid @RequestBody SwiftTransferRequest req,
                                                           CallerIdentity caller) {
         ownership.requireCanSendFrom(caller, req.getFromAccountId());
         return ResponseEntity.status(HttpStatus.CREATED).body(integrationService.initiateSwiftTransfer(req));
