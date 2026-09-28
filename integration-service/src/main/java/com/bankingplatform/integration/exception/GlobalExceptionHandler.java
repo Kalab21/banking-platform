@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -117,6 +118,21 @@ public class GlobalExceptionHandler {
 
     private Map<String, Object> errorBody(String message, int status) {
         return Map.of("timestamp", LocalDateTime.now().toString(), "status", status, "error", message);
+    }
+
+    /**
+     * A transfer request that fails validation is the caller's mistake, not a
+     * server fault. There were no constraints at all before: a negative or
+     * sub-cent amount, or a transfer with no source account, was recorded.
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalid(MethodArgumentNotValidException ex) {
+        String fields = ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> e.getField() + " " + e.getDefaultMessage())
+                .sorted()
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("Invalid request");
+        return error(HttpStatus.BAD_REQUEST, fields);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

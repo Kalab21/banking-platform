@@ -231,7 +231,9 @@ reads `SUBMITTED`, and nothing here ever reports an identity as verified — the
 verification provider behind this system, and passing a format check is not verification.
 
 **External rails** (`integration-service`) — wire / ACH / SWIFT endpoints and FX conversion,
-modeling request, response and persistence shape only. No banking network is contacted.
+modeling request, response and persistence shape only. A transfer is validated, checked
+against the source account's owner, recorded and announced; no banking network is contacted
+and the source account's balance is not debited.
 
 **Edge** (`api-gateway`) — Spring Cloud Gateway with Eureka-backed load-balanced routing to
 11 downstream services; a JWT validation filter injecting `X-User-Id` / `X-User-Role`; Redis
@@ -374,7 +376,9 @@ network placement alone.
 
 Wire, ACH and SWIFT integrations are simulated adapters. The project demonstrates
 contracts, persistence and failure handling without connecting to real financial networks
-or moving real money.
+or moving real money: an external transfer is recorded, not settled, and no account balance
+changes because of one. Money leaves an account through transactions, payments, loan
+repayments and card payments, which do debit it.
 
 ### Deployment and platform versions
 
