@@ -216,14 +216,55 @@ export function getLoanRepayments(loanId: number): Promise<LoanRepayment[]> {
   return apiFetchOptional<LoanRepayment[]>(`/api/loans/${loanId}/repayments`, {}, []);
 }
 
+/**
+ * Pays the loan from one of the borrower's accounts.
+ *
+ * The key is required: the backend refuses a money-moving request without one.
+ * This used to send none and let the source account be optional, a shape the
+ * backend had stopped accepting, so nothing could call it successfully.
+ */
 export function repayLoan(
   loanId: number,
   amount: number,
-  sourceAccountId?: number,
+  sourceAccountId: number,
+  idempotencyKey: string,
 ): Promise<LoanRepayment> {
   return apiFetch<LoanRepayment>(`/api/loans/${loanId}/repay`, {
     method: "POST",
     body: { amount, sourceAccountId },
+    idempotencyKey,
+  });
+}
+
+/**
+ * Settles the whole loan. The backend works out the amount itself at the moment
+ * of payoff and ignores `amount` beyond validating it, so the quote on screen is
+ * what is sent, and the receipt reports what was actually taken.
+ */
+export function payOffLoan(
+  loanId: number,
+  amount: number,
+  sourceAccountId: number,
+  idempotencyKey: string,
+): Promise<LoanRepayment> {
+  return apiFetch<LoanRepayment>(`/api/loans/${loanId}/payoff`, {
+    method: "POST",
+    body: { amount, sourceAccountId },
+    idempotencyKey,
+  });
+}
+
+/**
+ * Pays an approved loan's principal into one of the borrower's accounts.
+ *
+ * No Idempotency-Key: a loan is disbursed once. The backend locks the loan,
+ * refuses anything but PENDING, and keys the credit by the loan itself, so a
+ * retry either finds the loan already ACTIVE or credits under the same key.
+ */
+export function disburseLoan(loanId: number, disbursementAccountId: number): Promise<Loan> {
+  return apiFetch<Loan>(`/api/loans/${loanId}/disburse`, {
+    method: "POST",
+    body: { disbursementAccountId },
   });
 }
 
@@ -244,6 +285,20 @@ export function getCardTransactions(
 ): Promise<Page<CreditCardTransaction> | null> {
   return apiFetchOrNull<Page<CreditCardTransaction>>(`/api/credit-cards/${cardId}/transactions`, {
     query: { page, size },
+  });
+}
+
+/** Pays towards the card's balance from one of the cardholder's accounts. */
+export function payCreditCard(
+  cardId: number,
+  amount: number,
+  sourceAccountId: number,
+  idempotencyKey: string,
+): Promise<CreditCardTransaction> {
+  return apiFetch<CreditCardTransaction>(`/api/credit-cards/${cardId}/payment`, {
+    method: "POST",
+    body: { amount, sourceAccountId },
+    idempotencyKey,
   });
 }
 

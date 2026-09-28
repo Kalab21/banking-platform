@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/session";
 import {
+  getAccounts,
   getAmortizationSchedule,
   getLoan,
   getLoanRepayments,
@@ -30,11 +31,19 @@ import {
 import { formatCurrency, formatDate, formatPercent, humanise } from "@/lib/format";
 import { RepaymentProgress } from "@/features/loans/RepaymentProgress";
 import { balanceProgress } from "@/features/loans/progress";
+import { ServicingPayment } from "@/features/servicing/ServicingPayment";
+import {
+  payOffLoanAction,
+  receiveLoanFundsAction,
+  repayLoanAction,
+} from "@/features/servicing/actions";
+import { payoffChoices, repaymentChoices, servicingAccounts } from "@/features/servicing/choices";
+import { toMoneyAccountOptions } from "@/features/transactions/money-account";
 
 export const metadata: Metadata = { title: "Loan" };
 
 export default async function LoanDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const session = await requireSession();
   const { id } = await params;
   const loanId = Number(id);
   if (!Number.isFinite(loanId)) notFound();
@@ -43,12 +52,14 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
   let schedule;
   let quote;
   let repayments;
+  let accounts;
   try {
     loan = await getLoan(loanId);
-    [schedule, quote, repayments] = await Promise.all([
+    [schedule, quote, repayments, accounts] = await Promise.all([
       getAmortizationSchedule(loanId),
       getPayoffQuote(loanId),
       getLoanRepayments(loanId),
+      getAccounts(session.userId),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.isNotFound) notFound();
@@ -64,6 +75,9 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
   }
 
   const progress = balanceProgress(loan.principal, loan.remainingBalance);
+  // Only the narrowed view of each account crosses into the client forms.
+  const payFrom = toMoneyAccountOptions(servicingAccounts(accounts, loan.currency));
+  const active = loan.status === "ACTIVE";
 
   return (
     <>
@@ -144,6 +158,57 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
           <Detail label="Disbursed">{formatDate(loan.disbursedAt)}</Detail>
         </DetailList>
       </section>
+
+      {/*
+       * Always rendered, in this order, whatever the loan's state: each form
+       * decides for itself whether it is available, so a receipt survives the
+       * page refreshing into the loan's new state.
+       */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ServicingPayment
+          testId="receive-funds"
+          title="Receive your loan"
+          description="Your loan is approved. Choose the account the money is paid into."
+          action={receiveLoanFundsAction}
+          target={{ name: "loanId", id: loan.id }}
+          currency={loan.currency}
+          accounts={payFrom}
+          choices={[{ id: "principal", label: "Loan amount", amount: loan.principal }]}
+          accountLabel="Receive into"
+          confirmLabel="Receive funds"
+          reviewNote="Your first instalment falls due one month after the money arrives."
+          keyed={false}
+          available={loan.status === "PENDING"}
+        />
+        <ServicingPayment
+          testId="loan-repay"
+          title="Make a payment"
+          description="Pay your next instalment, or any amount towards the loan."
+          action={repayLoanAction}
+          target={{ name: "loanId", id: loan.id }}
+          currency={loan.currency}
+          accounts={payFrom}
+          choices={repaymentChoices(schedule)}
+          allowOther
+          confirmLabel="Confirm payment"
+          reviewNote="Interest due on the instalment is paid first, then the balance."
+          available={active}
+          unavailable={loan.status === "PAID_OFF" ? "This loan is paid off. Nothing more is owed." : undefined}
+        />
+        <ServicingPayment
+          testId="loan-payoff"
+          title="Pay off this loan"
+          description="Settle everything owed today and close the loan."
+          action={payOffLoanAction}
+          target={{ name: "loanId", id: loan.id }}
+          currency={loan.currency}
+          accounts={payFrom}
+          choices={payoffChoices(quote, loan.currency)}
+          confirmLabel="Pay off loan"
+          reviewNote="The amount is worked out when the payment is made; today it is the figure above. The loan closes and every remaining instalment is settled."
+          available={active && quote !== null}
+        />
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

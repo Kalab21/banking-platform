@@ -199,6 +199,8 @@ export interface AmortizationScheduleRow {
   principalPortion: number;
   interestPortion: number;
   remainingBalance: number;
+  /** Paid so far towards this instalment; less than `scheduledPayment` while PARTIAL. */
+  amountPaid: number;
   status: ScheduleStatus;
   paidAt: string | null;
 }

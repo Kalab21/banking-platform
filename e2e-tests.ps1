@@ -525,6 +525,10 @@ if ($loans -and $loans.Count -gt 0) {
     $tiny = Post "$GW/api/loans/$LOAN_ID/repay" @{ amount=0.01; sourceAccountId=$ACCOUNT_ID } $TOKEN
     $afterTiny = Get "$GW/api/loans/$LOAN_ID" $TOKEN
     Assert "A 0.01 repayment leaves the loan open with its principal owed" ($tiny -and $afterTiny.status -eq "ACTIVE" -and [decimal]$afterTiny.remainingBalance -eq [decimal]$beforeTiny.remainingBalance) "status=$($afterTiny.status) balance=$($afterTiny.remainingBalance)"
+    # The console offers "the rest of this instalment", which needs what has
+    # been paid towards it; the schedule now says.
+    $partRow = (Get "$GW/api/loans/$LOAN_ID/schedule" $TOKEN) | Where-Object { $_.status -eq "PARTIAL" } | Select-Object -First 1
+    Assert "A part-paid instalment reports what has been paid on it" ($partRow -and [decimal]$partRow.amountPaid -eq 0.01) "amountPaid=$($partRow.amountPaid)"
 
     # Get payoff quote
     $quote = Get "$GW/api/loans/$LOAN_ID/payoff-quote" $TOKEN

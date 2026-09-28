@@ -22,7 +22,8 @@ import { ApiError, NetworkError } from "@/lib/api/errors";
  * | transfer debited but the credit failed               | 500    | **partly, unreconciled** |
  */
 export type MoneyOutcome =
-  | { kind: "succeeded"; reference: string; message: string }
+  /** `amount`, when present, is what the backend says it actually moved. */
+  | { kind: "succeeded"; reference: string; message: string; amount?: number }
   | { kind: "rejected"; message: string }
   | { kind: "unknown"; message: string };
 

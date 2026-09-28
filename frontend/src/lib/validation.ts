@@ -282,9 +282,10 @@ export const transferSchema = z
     path: ["toAccountId"],
   });
 
-export const loanRepaymentSchema = z.object({
+/** A payment towards a loan or a card: an amount, from one of the customer's accounts. */
+export const servicingPaymentSchema = z.object({
   amount: money,
-  sourceAccountId: z.string().optional(),
+  sourceAccountId: z.string().regex(/^\d+$/, "Choose the account to pay from"),
 });
 
 export const kycDocumentSchema = z.object({

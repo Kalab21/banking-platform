@@ -17,6 +17,8 @@ public class AmortizationScheduleResponse {
     private BigDecimal principalPortion;
     private BigDecimal interestPortion;
     private BigDecimal remainingBalance;
+    /** Paid so far towards this instalment; less than scheduledPayment while PARTIAL. */
+    private BigDecimal amountPaid;
     private ScheduleStatus status;
     private LocalDateTime paidAt;
 }
