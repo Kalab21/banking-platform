@@ -65,9 +65,13 @@ test("a personal loan application", async ({ page, request }) => {
   await openAs(page, token, "/credit/personal-loan");
   await page.getByLabel("How much would you like to borrow?").fill("6000.00");
   await page.getByLabel("Over how long?").selectOption("36");
+  await page.getByLabel("What is it for?").fill("Kitchen renovation");
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Your annual income before tax").fill("90000.00");
   await page.getByLabel("What you already pay each month towards other debts").fill("450.00");
-  await page.getByLabel("What is it for?").fill("Kitchen renovation");
+  await page.getByRole("button", { name: "Continue" }).click();
+  // The review step: everything stated, before anything is sent.
+  await page.getByTestId("application-review").waitFor();
   await assertNothingSensitive(page);
   await page.screenshot({ path: `${OUT}/27-credit-application.png`, fullPage: false });
 });

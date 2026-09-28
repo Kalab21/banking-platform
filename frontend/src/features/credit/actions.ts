@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { acceptOffer, declineOffer, submitApplication } from "@/lib/api/banking";
 import { ApiError, NetworkError } from "@/lib/api/client";
 import { requireSession } from "@/lib/session";
+import { creditProduct } from "@/features/credit/products";
 import type { CreateApplicationRequest, CreditProductType } from "@/types/api";
 
 export interface CreditFormState {
@@ -42,8 +43,10 @@ export async function applyForCreditAction(
 ): Promise<CreditFormState> {
   const session = await requireSession();
 
+  // Only the four credit products are applied for here. A deposit account is
+  // opened through onboarding, so this does not pass other types on.
   const productType = formData.get("applicationType");
-  if (typeof productType !== "string") {
+  if (typeof productType !== "string" || !creditProduct(productType)) {
     return { error: "Choose a product to apply for." };
   }
 
