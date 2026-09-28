@@ -124,13 +124,22 @@ test.describe("customer credit", () => {
     await startApplication(page, "Personal loan");
     await page.getByLabel("How much would you like to borrow?").fill("4000.00");
     await page.getByLabel("Over how long?").selectOption("24");
+    await page.getByLabel("What is it for?").fill("Kitchen repair");
+    await page.getByRole("button", { name: "Continue" }).click();
     await page.getByLabel("Your annual income before tax").fill("90000.00");
     await page.getByLabel("What you already pay each month towards other debts").fill("450.00");
-    await page.getByLabel("What is it for?").fill("Kitchen repair");
+    await page.getByRole("button", { name: "Continue" }).click();
+    // The last step repeats what was stated before anything is sent.
+    const review = page.getByTestId("application-review");
+    await expect(review).toContainText("$4,000.00");
+    await expect(review).toContainText("24 months");
+    await expect(review).toContainText("$90,000.00");
     await page.getByRole("button", { name: "Submit application" }).click();
-    await page.waitForURL("**/applications");
+    await page.waitForURL(/\/applications\/\d+$/);
 
     const application = await newest(request, session, "PERSONAL_LOAN", before);
+    expect(page.url()).toMatch(new RegExp(`/applications/${application.id}$`));
+    await page.goto("/applications");
     expect(application.status).toBe("OFFERED");
     const offer = await storedOffer(request, session, application.id);
     expect(offer.status).toBe("OFFERED");
@@ -208,10 +217,13 @@ test.describe("customer credit", () => {
     // A card applicant states nothing about the card: no amount, no term.
     await expect(page.getByLabel("How much would you like to borrow?")).toHaveCount(0);
     await expect(page.getByLabel("Over how long?")).toHaveCount(0);
+    await page.getByRole("button", { name: "Continue" }).click();
     await page.getByLabel("Your annual income before tax").fill("90000.00");
     await page.getByLabel("What you already pay each month towards other debts").fill("450.00");
+    await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Submit application" }).click();
-    await page.waitForURL("**/applications");
+    await page.waitForURL(/\/applications\/\d+$/);
+    await page.goto("/applications");
 
     const application = await newest(request, session, "CREDIT_CARD", before);
     expect(application.status).toBe("OFFERED");
