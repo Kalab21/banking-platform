@@ -44,8 +44,9 @@ public class PaymentController {
                                                            required = false) String idempotencyKey,
                                                    CallerIdentity caller) {
         // Paying *to* another customer's account is ordinary banking; paying
-        // *from* one is not, so only the payer account is owner-checked.
-        ownership.requireCanAccessAccount(caller, request.getPayerAccountId());
+        // *from* one is not, so only the payer account is checked -- and only
+        // its owner may pay from it, staff included.
+        ownership.requireCanPayFrom(caller, request.getPayerAccountId());
         // A payment that executes immediately moves money in this request, and
         // each request used to mint a new reference: a retry after a lost
         // response paid twice. One key, one payment.

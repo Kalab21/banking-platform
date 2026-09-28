@@ -97,7 +97,10 @@ public class ApplicationController {
                                                        CallerIdentity caller) {
         // Deciding an application is the bank's side of the transaction. Left
         // open, an applicant could approve their own loan and set the amount.
+        // Staff decide other people's applications. A reviewer approving their
+        // own could lend to themselves on terms they chose.
         AccessGuard.requireStaff(caller);
+        AccessGuard.requireStaffActingForAnother(caller, applicationService.getById(id).getUserId());
         return ResponseEntity.ok(applicationService.review(id, request));
     }
 

@@ -37,7 +37,11 @@ public class CreditScoreController {
     @PreAuthorize("hasRole('EMPLOYEE') or hasRole('ADMIN')")
     public ResponseEntity<CreditScoreResponse> updateScore(
             @PathVariable Long userId,
-            @Valid @RequestBody UpdateCreditScoreRequest request) {
+            @Valid @RequestBody UpdateCreditScoreRequest request,
+            CallerIdentity caller) {
+        // Underwriting reads this score. Staff adjusting their own would be
+        // pricing their own credit.
+        AccessGuard.requireStaffActingForAnother(caller, userId);
         return ResponseEntity.ok(creditScoreService.updateScore(userId, request.getDelta(), request.getReason()));
     }
 }

@@ -47,6 +47,21 @@ public final class AccessGuard {
     }
 
     /** Admin only. */
+    /**
+     * Staff only, and never about themselves.
+     *
+     * <p>For decisions the bank takes about a customer: approving a credit
+     * application, setting an identity status, a credit score, an overdraft
+     * limit or an account's status. A member of staff who is also a customer
+     * is, for their own records, a customer.
+     */
+    public static void requireStaffActingForAnother(CallerIdentity caller, Long subjectUserId) {
+        requireStaff(caller);
+        if (caller.isSelf(subjectUserId)) {
+            throw new AccessDeniedException("Staff cannot make this decision about themselves");
+        }
+    }
+
     public static void requireAdmin(CallerIdentity caller) {
         requireCaller(caller);
         if (!caller.isAdmin()) {

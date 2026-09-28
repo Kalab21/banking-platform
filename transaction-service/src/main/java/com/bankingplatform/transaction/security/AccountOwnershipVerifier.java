@@ -43,6 +43,20 @@ public class AccountOwnershipVerifier {
     }
 
     /**
+     * Confirms the caller may take money out of {@code accountId}: its owner,
+     * and nobody else.
+     *
+     * <p>Staff may read an account and may deposit to it, but a withdrawal or
+     * a transfer out is the holder's instruction. Owner-or-staff here let any
+     * employee move a customer's money to an account of their choosing.
+     */
+    public AccountResponse requireCanDebit(CallerIdentity caller, Long accountId) {
+        AccountResponse account = accountClient.getAccountById(accountId);
+        AccessGuard.requireSelf(caller, account.getUserId());
+        return account;
+    }
+
+    /**
      * Confirms a transfer's destination can take the money, before anything
      * is debited.
      *

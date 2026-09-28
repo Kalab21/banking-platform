@@ -48,7 +48,8 @@ public class AccountController {
         // already staff-only. Stating it while opening the account was the
         // same decision through a side door: a customer could open a checking
         // account with a limit of their choosing and withdraw against it.
-        if (request.getOverdraftLimit() != null && !caller.isStaff()) {
+        // Staff opening their own account are customers for that account.
+        if (request.getOverdraftLimit() != null && (!caller.isStaff() || caller.isSelf(request.getUserId()))) {
             throw new AccessDeniedException("The overdraft limit is set by the bank");
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(accountService.createAccount(request));
@@ -90,8 +91,10 @@ public class AccountController {
                                                          @RequestParam AccountStatus status,
                                                          CallerIdentity caller) {
         // Freezing or closing an account is a staff action. A customer must not
-        // be able to unfreeze an account that fraud detection froze.
+        // be able to unfreeze an account that fraud detection froze -- nor may
+        // a member of staff lift a freeze on their own.
         AccessGuard.requireStaff(caller);
+        AccessGuard.requireStaffActingForAnother(caller, accountService.getAccountById(id).getUserId());
         return ResponseEntity.ok(accountService.updateStatus(id, status));
     }
 
@@ -100,8 +103,10 @@ public class AccountController {
     public ResponseEntity<AccountResponse> updateOverdraftLimit(@PathVariable Long id,
                                                                   @Valid @RequestBody UpdateOverdraftRequest request,
                                                                   CallerIdentity caller) {
-        // An overdraft limit is a lending decision, not a customer preference.
+        // An overdraft limit is a lending decision, not a customer preference,
+        // and not one staff take about their own account.
         AccessGuard.requireStaff(caller);
+        AccessGuard.requireStaffActingForAnother(caller, accountService.getAccountById(id).getUserId());
         return ResponseEntity.ok(accountService.updateOverdraftLimit(id, request));
     }
 }

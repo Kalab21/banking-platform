@@ -42,9 +42,15 @@ public class UserController {
     @GetMapping("/username/{username}")
     @Operation(summary = "Get user by username")
     public ResponseEntity<UserResponse> getUserByUsername(@PathVariable String username, CallerIdentity caller) {
+        // A customer may look up only their own name, refused before the
+        // lookup: answering 404 for unknown names and 403 for taken ones told
+        // any signed-in customer which usernames exist.
+        if (!caller.isStaff() && !username.equals(caller.username())) {
+            throw new com.bankingplatform.common.security.AccessDeniedException("Not permitted to access this resource");
+        }
         UserResponse user = userService.getUserByUsername(username);
-        // Looked up first, then authorised against the owner: a username is
-        // guessable, so it must not be a way around the id-based rule.
+        // Still authorised against the stored owner: a username is guessable,
+        // so it must not be a way around the id-based rule.
         AccessGuard.requireOwnerOrStaff(caller, user.getId());
         return ResponseEntity.ok(user);
     }

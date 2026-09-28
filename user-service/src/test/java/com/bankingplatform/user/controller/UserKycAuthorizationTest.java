@@ -129,6 +129,27 @@ class UserKycAuthorizationTest {
         }
 
         @Test
+        @DisplayName("an unknown username is answered like a taken one, without looking it up")
+        void usernamesCannotBeEnumerated() throws Exception {
+            // 404 for unknown names and 403 for taken ones told any customer
+            // which usernames exist.
+            users.perform(as(get("/api/users/username/{u}", "nobody"), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isForbidden());
+            verify(userService, never()).getUserByUsername("nobody");
+        }
+
+        @Test
+        @DisplayName("a customer may look up their own username")
+        void ownUsernameLookupAllowed() throws Exception {
+            UserResponse self = new UserResponse();
+            self.setId(CUSTOMER_A);
+            self.setUsername("user" + CUSTOMER_A);
+            when(userService.getUserByUsername("user" + CUSTOMER_A)).thenReturn(self);
+            users.perform(as(get("/api/users/username/{u}", "user" + CUSTOMER_A), CUSTOMER_A, "CUSTOMER"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
         @DisplayName("staff may read any profile")
         void staffReadsAnyProfile() throws Exception {
             users.perform(as(get("/api/users/{id}", CUSTOMER_B), STAFF, "EMPLOYEE"))

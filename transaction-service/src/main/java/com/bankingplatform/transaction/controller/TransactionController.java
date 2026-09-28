@@ -72,7 +72,7 @@ public class TransactionController {
             @Parameter(description = KEY_DESCRIPTION)
             @RequestHeader(name = IdempotencyGuard.HEADER, required = false) String idempotencyKey,
             CallerIdentity caller) {
-        ownership.requireCanAccess(caller, request.getAccountId());
+        ownership.requireCanDebit(caller, request.getAccountId());
         return idempotency.execute(idempotencyKey, WITHDRAWAL, caller, request,
                 TransactionResponse.class, TransactionResponse::getTransactionRef,
                 () -> transactionService.withdraw(request));
@@ -88,7 +88,7 @@ public class TransactionController {
         // Only the source is owner-checked. Transferring *to* another
         // customer's account is ordinary banking; transferring *from* one is
         // theft, and was previously possible by supplying any fromAccountId.
-        AccountResponse source = ownership.requireCanAccess(caller, request.getFromAccountId());
+        AccountResponse source = ownership.requireCanDebit(caller, request.getFromAccountId());
         // Before the key is claimed and before any money moves, so a bad
         // destination is a refusal the customer can correct and retry.
         ownership.requireCanReceive(source, request.getToAccountId());

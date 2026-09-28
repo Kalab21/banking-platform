@@ -347,6 +347,20 @@ class ApplicationAuthorizationTest {
     class StaffOperations {
 
         @Test
+        @DisplayName("a member of staff cannot review their own application")
+        void staffCannotReviewOwnApplication() throws Exception {
+            // Otherwise a reviewer could approve credit for themselves.
+            when(applicationService.getById(5L)).thenReturn(applicationOf(STAFF));
+
+            mvc.perform(as(put("/api/applications/{id}/review", 5L), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"decision\":\"APPROVE\"}"))
+                    .andExpect(status().isForbidden());
+
+            verify(applicationService, never()).review(anyLong(), any());
+        }
+
+        @Test
         @DisplayName("a customer cannot work the status queue")
         void customerCannotQueryByStatus() throws Exception {
             mvc.perform(as(get("/api/applications/status/{s}", ApplicationStatus.SUBMITTED),
@@ -381,6 +395,7 @@ class ApplicationAuthorizationTest {
         @Test
         @DisplayName("an employee decides an application")
         void staffReviewAllowed() throws Exception {
+            when(applicationService.getById(5L)).thenReturn(applicationOf(CUSTOMER_B));
             when(applicationService.review(anyLong(), any())).thenReturn(applicationOf(CUSTOMER_B));
 
             mvc.perform(as(put("/api/applications/{id}/review", 5L), STAFF, "EMPLOYEE")

@@ -294,6 +294,21 @@ $staffAuth = Post "$GW/api/auth/login" @{ username=$STAFF_USERNAME; password=$ST
 Assert "A reviewer can sign in" ($staffAuth -and $staffAuth.token)
 $STAFF_TOKEN = $staffAuth.token
 
+# Staff act for the bank, not as the customer and not for themselves.
+if ($STAFF_TOKEN) {
+    $STAFF_ID = $staffAuth.userId
+    Assert-Refused "Staff cannot withdraw from a customer's account" "POST" `
+        "$GW/api/transactions/withdraw" $STAFF_TOKEN 403 @{ accountId=$ACCOUNT_ID; amount=5.00; description="Staff withdrawal" }
+    Assert-Refused "Staff cannot transfer out of a customer's account" "POST" `
+        "$GW/api/transactions/transfer" $STAFF_TOKEN 403 @{ fromAccountId=$ACCOUNT_ID; toAccountId=$ACCOUNT_ID; amount=5.00 }
+    Assert-Refused "Staff cannot change their own credit score" "PUT" `
+        "$GW/api/users/$STAFF_ID/credit-score" $STAFF_TOKEN 403 @{ delta=100; reason="Self" }
+    # A customer asking about a name that is not theirs gets the same answer
+    # whether or not it exists.
+    Assert-Refused "A username that does not exist is not revealed as missing" "GET" `
+        "$GW/api/users/username/no.such.user.$ts" $TOKEN 403
+}
+
 if ($STAFF_TOKEN) {
     # The customer submits what the check needs. Submitting moves them from
     # PENDING to IN_REVIEW — started, and not yet good enough to lend against.

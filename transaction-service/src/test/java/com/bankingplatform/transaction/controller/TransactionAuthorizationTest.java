@@ -373,6 +373,28 @@ class TransactionAuthorizationTest {
     class StaffAndFailClosed {
 
         @Test
+        @DisplayName("staff cannot transfer money out of a customer's account")
+        void staffCannotTransferFromACustomer() throws Exception {
+            // Owner-or-staff let any employee send a customer's money to an
+            // account of their choosing.
+            mvc.perform(as(post("/api/transactions/transfer"), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(transferBody(ACCOUNT_OF_B, ACCOUNT_OF_A)))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
+        @DisplayName("staff cannot withdraw from a customer's account")
+        void staffCannotWithdrawFromACustomer() throws Exception {
+            mvc.perform(as(post("/api/transactions/withdraw"), STAFF, "ADMIN")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"accountId\":%d,\"amount\":25.00}".formatted(ACCOUNT_OF_B)))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
         @DisplayName("staff may read any account's history")
         void staffReadsAnyHistory() throws Exception {
             mvc.perform(as(get("/api/transactions/account/{id}", ACCOUNT_OF_B), STAFF, "EMPLOYEE"))
@@ -391,20 +413,18 @@ class TransactionAuthorizationTest {
         }
 
         @Test
-        @DisplayName("a spoofed admin role with a customer's id does not grant access to another account")
-        void spoofedRoleStillBoundToOwnership() throws Exception {
-            // Even if a caller could set X-User-Role — which the gateway
-            // prevents — the id still decides ownership, so claiming ADMIN
-            // while presenting customer A's id does not unlock B's account.
+        @DisplayName("even an admin role does not unlock a transfer out of another customer's account")
+        void adminRoleDoesNotUnlockSomeoneElsesMoney() throws Exception {
+            // This used to succeed: the admin role granted cross-customer
+            // access to the source account, so the rule rested entirely on the
+            // gateway never letting a role be forged. Money now leaves an
+            // account only on its owner's instruction, whatever the role.
             mvc.perform(as(post("/api/transactions/transfer"), CUSTOMER_A, "ADMIN")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(transferBody(ACCOUNT_OF_B, ACCOUNT_OF_A)))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isForbidden());
 
-            // Documented honestly: role is what grants cross-customer access,
-            // so this asserts the mechanism, and the gateway test in the
-            // regression suite is what proves the role cannot be forged.
-            verify(transactionService).transfer(any());
+            verifyNoInteractions(transactionService);
         }
     }
 }
