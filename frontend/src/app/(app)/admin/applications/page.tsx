@@ -112,7 +112,11 @@ export default async function AdminApplicationsPage({
             <tbody>
               {applications.map((a) => (
                 <tr key={a.id} className="hover:bg-sunken">
-                  <Td>{formatDateTime(a.appliedAt ?? a.createdAt)}</Td>
+                  <Td>
+                    <Link href={`/admin/applications/${a.id}`} className="font-medium text-primary hover:underline">
+                      {formatDateTime(a.appliedAt ?? a.createdAt)}
+                    </Link>
+                  </Td>
                   <Td>#{a.userId}</Td>
                   <Td>
                     {humanise(a.applicationType)}

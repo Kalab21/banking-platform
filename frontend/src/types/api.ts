@@ -490,6 +490,38 @@ export type ReasonCode =
   | "MANUAL_REVIEW_REQUIRED"
   | "INSUFFICIENT_INFORMATION";
 
+/**
+ * `GET /api/applications/{id}/decisions` — staff only. One append-only record
+ * per decision, policy and reviewer alike. Mirrors `DecisionSnapshotResponse`.
+ */
+export interface DecisionSnapshot {
+  decisionId: number;
+  applicationId: number;
+  policyVersion: string;
+  decidedBy: "POLICY" | "REVIEWER";
+  reviewerId: number | null;
+  decision: "APPROVE" | "REJECT" | "REFER";
+  creditScoreAtDecision: number | null;
+  kycStatusAtDecision: string | null;
+  annualIncomeAtDecision: number | null;
+  monthlyDebtAtDecision: number | null;
+  dtiAtDecision: number | null;
+  ltvAtDecision: number | null;
+  assetValueAtDecision: number | null;
+  requestedAmountAtDecision: number | null;
+  requestedTermAtDecision: number | null;
+  approvedAmount: number | null;
+  reasonCodes: ReasonCode[];
+  decidedAt: string;
+}
+
+/** `PUT /api/applications/{id}/review` — staff only. Mirrors `ReviewRequest`. */
+export interface ReviewRequest {
+  decision: "APPROVE" | "REJECT";
+  approvedAmount?: number;
+  reviewerNotes?: string;
+}
+
 /** `GET /api/applications/user/{userId}`. */
 export interface Application {
   id: number;
