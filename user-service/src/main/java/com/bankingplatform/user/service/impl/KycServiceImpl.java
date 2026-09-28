@@ -58,9 +58,14 @@ public class KycServiceImpl implements KycService {
 
     @Override
     @Transactional
-    public KycDocumentResponse reviewDocument(Long documentId, ReviewDocumentRequest request) {
+    public KycDocumentResponse reviewDocument(Long documentId, ReviewDocumentRequest request, Long reviewerId) {
         KycDocument doc = kycDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("KYC document not found: " + documentId));
+        // Checked against the stored document's owner, not anything sent.
+        if (reviewerId != null && reviewerId.equals(doc.getUserId())) {
+            throw new com.bankingplatform.common.security.AccessDeniedException(
+                    "Staff cannot review their own identity documents");
+        }
 
         doc.setStatus(request.getStatus());
         doc.setReviewedBy(request.getReviewedBy());

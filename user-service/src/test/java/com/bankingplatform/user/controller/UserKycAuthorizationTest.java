@@ -76,7 +76,8 @@ class UserKycAuthorizationTest {
     private static MockMvc build(Object controller) {
         return MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
-                .setControllerAdvice(new CallerIdentityExceptionHandler())
+                .setControllerAdvice(new CallerIdentityExceptionHandler(),
+                        new com.bankingplatform.user.exception.GlobalExceptionHandler())
                 .build();
     }
 
@@ -180,6 +181,61 @@ class UserKycAuthorizationTest {
         void staffReadsAnyDocuments() throws Exception {
             kyc.perform(as(get("/api/users/{userId}/kyc/documents", CUSTOMER_B), STAFF, "EMPLOYEE"))
                     .andExpect(status().isOk());
+        }
+    }
+
+    @Nested
+    @DisplayName("staff identity review")
+    class StaffReview {
+
+        @Test
+        @DisplayName("the reviewer recorded is the member of staff, whatever the body says")
+        void reviewerIsTheCaller() throws Exception {
+            // The console used to send its own reviewer id, and could have sent
+            // anyone's; the review would have been attributed to them.
+            when(kycService.reviewDocument(anyLong(), any(), anyLong())).thenReturn(new KycDocumentResponse());
+
+            kyc.perform(as(put("/api/kyc/documents/{id}/review", 5L), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"APPROVED\",\"reviewedBy\":1}"))
+                    .andExpect(status().isOk());
+
+            Mockito.verify(kycService).reviewDocument(org.mockito.ArgumentMatchers.eq(5L),
+                    org.mockito.ArgumentMatchers.argThat(r -> r.getReviewedBy() == STAFF),
+                    org.mockito.ArgumentMatchers.eq(STAFF));
+        }
+
+        @Test
+        @DisplayName("a rejection with no reason is refused")
+        void rejectionNeedsAReason() throws Exception {
+            kyc.perform(as(put("/api/kyc/documents/{id}/review", 5L), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"REJECTED\"}"))
+                    .andExpect(status().isBadRequest());
+
+            Mockito.verify(kycService, Mockito.never()).reviewDocument(anyLong(), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("staff cannot decide their own identity check")
+        void staffCannotApproveThemselves() throws Exception {
+            kyc.perform(as(put("/api/users/{id}/kyc/status", STAFF), STAFF, "EMPLOYEE")
+                            .param("status", "APPROVED"))
+                    .andExpect(status().isForbidden());
+
+            Mockito.verify(kycService, Mockito.never()).updateKycStatus(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("staff may decide a customer's identity check")
+        void staffApprovesCustomer() throws Exception {
+            when(kycService.updateKycStatus(anyLong(), any())).thenReturn(new UserResponse());
+
+            kyc.perform(as(put("/api/users/{id}/kyc/status", CUSTOMER_A), STAFF, "EMPLOYEE")
+                            .param("status", "APPROVED"))
+                    .andExpect(status().isOk());
+
+            Mockito.verify(kycService).updateKycStatus(CUSTOMER_A, com.bankingplatform.user.model.KycStatus.APPROVED);
         }
     }
 

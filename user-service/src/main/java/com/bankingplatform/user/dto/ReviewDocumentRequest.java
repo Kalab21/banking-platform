@@ -12,6 +12,9 @@ public class ReviewDocumentRequest {
 
     private String rejectionReason;
 
-    @NotNull
+    /**
+     * Ignored if sent. The reviewer is the authenticated member of staff, so a
+     * review cannot be recorded against someone else's name.
+     */
     private Long reviewedBy;
 }

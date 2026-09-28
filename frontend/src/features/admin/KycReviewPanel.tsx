@@ -13,7 +13,10 @@ function ReviewRow({ document }: { document: KycDocument }) {
   const [state, action, pending] = useActionState(reviewKycAction, INITIAL);
   const [decision, setDecision] = useState<"APPROVED" | "REJECTED" | null>(null);
 
-  const decided = document.status !== "PENDING";
+  // SUBMITTED and UNDER_REVIEW are awaiting a decision. This compared against
+  // PENDING, a status documents never have, so the approve and reject buttons
+  // never appeared at all.
+  const decided = document.status === "APPROVED" || document.status === "REJECTED";
 
   return (
     <li className="px-5 py-4">
@@ -42,13 +45,21 @@ function ReviewRow({ document }: { document: KycDocument }) {
         <p className="mt-2 text-sm text-critical">Reason: {document.rejectionReason}</p>
       ) : null}
 
+      {/*
+       * Outside the form: a decision refreshes the page into the decided
+       * state, which removes the form, and the confirmation went with it.
+       */}
+      {state.success ? (
+        <div className="mt-3">
+          <SuccessNote>{state.success}</SuccessNote>
+        </div>
+      ) : null}
+
       {decided ? null : (
         <form action={action} className="mt-3 space-y-3">
           <input type="hidden" name="documentId" value={document.id} />
-          <input type="hidden" name="decision" value={decision ?? ""} />
 
           {state.error ? <FormError>{state.error}</FormError> : null}
-          {state.success ? <SuccessNote>{state.success}</SuccessNote> : null}
 
           {decision === "REJECTED" ? (
             <TextField
@@ -61,16 +72,29 @@ function ReviewRow({ document }: { document: KycDocument }) {
           ) : null}
 
           <div className="flex flex-wrap gap-2">
+            {/*
+             * The decision travels as the submitting button's own value. It
+             * used to be a hidden input set from state in the click handler,
+             * which the submission could read before the update landed.
+             */}
             <Button
               type="submit"
-              pending={pending && decision === "APPROVED"}
-              onClick={() => setDecision("APPROVED")}
+              name="decision"
+              value="APPROVED"
+              pending={pending && decision !== "REJECTED"}
               disabled={pending}
             >
               Approve
             </Button>
             {decision === "REJECTED" ? (
-              <Button type="submit" variant="danger" pending={pending} disabled={pending}>
+              <Button
+                type="submit"
+                name="decision"
+                value="REJECTED"
+                variant="danger"
+                pending={pending}
+                disabled={pending}
+              >
                 Confirm rejection
               </Button>
             ) : (

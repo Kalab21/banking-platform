@@ -287,17 +287,35 @@ export function submitKycDocument(
   });
 }
 
-/** Staff only — the backend enforces this with `@PreAuthorize`. */
+/**
+ * Staff only — the backend enforces this with `@PreAuthorize`.
+ *
+ * The body is `ReviewDocumentRequest`: status and, for a rejection, a reason.
+ * The reviewer is the signed-in member of staff, taken from their session by
+ * the backend; this used to send a `reviewerId` query parameter the backend
+ * never read, while its required `reviewedBy` was missing, so every review
+ * failed validation.
+ */
 export function reviewKycDocument(
   documentId: number,
   status: "APPROVED" | "REJECTED",
-  reviewerId: number,
   rejectionReason?: string,
 ): Promise<KycDocument> {
   return apiFetch<KycDocument>(`/api/kyc/documents/${documentId}/review`, {
     method: "PUT",
-    query: { reviewerId },
-    body: { status, rejectionReason },
+    body: rejectionReason ? { status, rejectionReason } : { status },
+  });
+}
+
+/**
+ * Staff only. The customer-level identity decision that underwriting reads.
+ * Approving documents does not set it: a document review says one document is
+ * genuine, this says the customer's identity is verified.
+ */
+export function setKycStatus(userId: number, status: "APPROVED" | "REJECTED"): Promise<UserProfile> {
+  return apiFetch<UserProfile>(`/api/users/${userId}/kyc/status`, {
+    method: "PUT",
+    query: { status },
   });
 }
 

@@ -94,7 +94,6 @@ export function statusTone(status: string | null | undefined): Tone {
   switch (status) {
     case "ACTIVE":
     case "APPROVED":
-    case "VERIFIED":
     case "PAID":
     case "PAID_OFF":
     case "COMPLETED":
@@ -104,6 +103,7 @@ export function statusTone(status: string | null | undefined): Tone {
       return "positive";
     case "PENDING":
     case "IN_REVIEW":
+    case "UNDER_REVIEW":
     // An application still moving through its lifecycle. PROVISIONING is
     // deliberately not positive: a product has been asked for, not confirmed.
     case "SUBMITTED":

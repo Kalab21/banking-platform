@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/primitives";
 import { humanise } from "@/lib/format";
 import { KycReviewList } from "@/features/admin/KycReviewPanel";
+import { KycStatusControl } from "@/features/admin/KycStatusControl";
 
 export const metadata: Metadata = { title: "KYC review" };
 
@@ -30,7 +31,7 @@ export default async function AdminKycPage({
 }: {
   searchParams: Promise<{ userId?: string }>;
 }) {
-  await requireStaffSession();
+  const session = await requireStaffSession();
   const { userId: rawUserId } = await searchParams;
   const userId = rawUserId ? Number(rawUserId) : null;
 
@@ -96,6 +97,14 @@ export default async function AdminKycPage({
             description={`@${profile.username} · customer #${profile.id}`}
             action={<Badge tone={statusTone(profile.kycStatus)}>{humanise(profile.kycStatus)}</Badge>}
           />
+          <CardBody className="border-b border-line">
+            <h3 className="mb-2 text-sm font-semibold text-ink">Identity decision</h3>
+            <KycStatusControl
+              userId={profile.id}
+              status={profile.kycStatus}
+              isSelf={profile.id === session.userId}
+            />
+          </CardBody>
           {documents.length === 0 ? (
             <EmptyState
               title="No documents submitted"

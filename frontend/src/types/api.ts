@@ -10,7 +10,8 @@
 
 export type Role = "CUSTOMER" | "EMPLOYEE" | "ADMIN";
 
-export type KycStatus = "NOT_STARTED" | "PENDING" | "IN_REVIEW" | "VERIFIED" | "REJECTED";
+/** Mirrors user-service's `KycStatus`: the customer-level identity decision. */
+export type KycStatus = "PENDING" | "IN_REVIEW" | "APPROVED" | "REJECTED";
 
 /**
  * `POST /api/auth/login` and `/api/auth/register`.
@@ -333,7 +334,8 @@ export interface PagedNotifications {
 
 // -------------------------------------------------------------------------- kyc
 
-export type DocumentStatus = "PENDING" | "APPROVED" | "REJECTED";
+/** Mirrors user-service's `DocumentStatus`: one submitted document's review. */
+export type DocumentStatus = "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
 
 /** `GET /api/users/{userId}/kyc/documents`. */
 export interface KycDocument {
