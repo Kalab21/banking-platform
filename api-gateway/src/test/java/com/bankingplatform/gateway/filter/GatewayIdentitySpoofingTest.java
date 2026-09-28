@@ -233,5 +233,22 @@ class GatewayIdentitySpoofingTest {
             assertThat(reached.get()).isTrue();
             assertThat(exchange.getResponse().getStatusCode()).isNull();
         }
+
+        @Test
+        @DisplayName("identity headers a caller writes on a public path are removed, not forwarded")
+        void publicPathsStripSuppliedIdentity() {
+            // Public paths used to pass X-User-* through unchanged. A service
+            // behind one that trusts those headers would take them as real.
+            ServerHttpRequest forwarded = forward(MockServerHttpRequest
+                    .post("/api/auth/register")
+                    .header("X-User-Id", String.valueOf(CUSTOMER_B))
+                    .header("X-Username", "userB")
+                    .header("X-User-Role", "ADMIN")
+                    .build());
+
+            assertThat(forwarded.getHeaders().containsKey("X-User-Id")).isFalse();
+            assertThat(forwarded.getHeaders().containsKey("X-Username")).isFalse();
+            assertThat(forwarded.getHeaders().containsKey("X-User-Role")).isFalse();
+        }
     }
 }

@@ -28,6 +28,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             "/swagger-ui"
     );
 
+    private static final List<String> IDENTITY_HEADERS = List.of("X-User-Id", "X-Username", "X-User-Role");
+
     private final JwtUtil jwtUtil;
 
     @Override
@@ -35,7 +37,13 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         String path = exchange.getRequest().getURI().getPath();
 
         if (isPublic(path)) {
-            return chain.filter(exchange);
+            // No token here, so no identity -- including one the client wrote
+            // itself. These headers used to pass through unchanged on public
+            // paths, where a service that trusts them would take them as real.
+            ServerHttpRequest stripped = exchange.getRequest().mutate()
+                    .headers(h -> IDENTITY_HEADERS.forEach(h::remove))
+                    .build();
+            return chain.filter(exchange.mutate().request(stripped).build());
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);

@@ -48,6 +48,7 @@ class AccountAuthorizationTest {
     private static final long CUSTOMER_A = 10L;
     private static final long CUSTOMER_B = 20L;
     private static final long STAFF = 99L;
+    private static final long ACCOUNT_OF_STAFF = 9L;
 
     private static final long ACCOUNT_OF_A = 1L;
     private static final long ACCOUNT_OF_B = 2L;
@@ -231,6 +232,38 @@ class AccountAuthorizationTest {
             mvc.perform(as(put("/api/accounts/{id}/status", ACCOUNT_OF_A), STAFF, "EMPLOYEE")
                             .param("status", AccountStatus.FROZEN.name()))
                     .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("an employee cannot change the status of their own account")
+        void staffCannotChangeOwnStatus() throws Exception {
+            // Otherwise an employee could lift a fraud freeze on their own account.
+            when(accountService.getAccountById(ACCOUNT_OF_STAFF)).thenReturn(accountOwnedBy(STAFF, ACCOUNT_OF_STAFF));
+            mvc.perform(as(put("/api/accounts/{id}/status", ACCOUNT_OF_STAFF), STAFF, "EMPLOYEE")
+                            .param("status", AccountStatus.ACTIVE.name()))
+                    .andExpect(status().isForbidden());
+            verify(accountService, never()).updateStatus(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("an employee cannot set their own overdraft limit")
+        void staffCannotRaiseOwnOverdraft() throws Exception {
+            when(accountService.getAccountById(ACCOUNT_OF_STAFF)).thenReturn(accountOwnedBy(STAFF, ACCOUNT_OF_STAFF));
+            mvc.perform(as(put("/api/accounts/{id}/overdraft-limit", ACCOUNT_OF_STAFF), STAFF, "ADMIN")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"overdraftLimit\":100000.00}"))
+                    .andExpect(status().isForbidden());
+            verify(accountService, never()).updateOverdraftLimit(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("an employee opening their own account cannot set its overdraft limit")
+        void staffCannotOpenOwnAccountWithALimit() throws Exception {
+            mvc.perform(as(post("/api/accounts"), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":%d,\"accountType\":\"CHECKING\",\"overdraftLimit\":50000.00}".formatted(STAFF)))
+                    .andExpect(status().isForbidden());
+            verify(accountService, never()).createAccount(any());
         }
     }
 

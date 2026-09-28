@@ -239,6 +239,20 @@ class PaymentAuthorizationTest {
         }
 
         @Test
+        @DisplayName("staff cannot pay out of a customer's account")
+        void staffCannotPayFromACustomer() throws Exception {
+            // Staff may see and cancel a customer's payments; paying from the
+            // customer's account is the customer's instruction alone.
+            mvc.perform(as(post("/api/payments"), STAFF, "EMPLOYEE")
+                            .header("Idempotency-Key", "staff-pay-1")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"payerAccountId\":%d,\"payeeAccountId\":%d,\"amount\":50.00,\"paymentType\":\"INTERNAL\"}"
+                                    .formatted(ACCOUNT_OF_B, ACCOUNT_OF_A)))
+                    .andExpect(status().isForbidden());
+            verify(paymentService, never()).createPayment(any());
+        }
+
+        @Test
         @DisplayName("a customer cannot cancel another customer's payment")
         void foreignCancelDenied() throws Exception {
             when(paymentService.getById(5L)).thenReturn(paymentFrom(ACCOUNT_OF_B));
