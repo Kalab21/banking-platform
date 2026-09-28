@@ -58,7 +58,7 @@ export function NotificationList({ notifications }: { notifications: Notificatio
         <li
           key={n.id}
           className={`flex items-start gap-3 px-5 py-4 sm:gap-4 ${
-            n.isRead ? "" : "bg-primary-soft/50"
+            n.read ? "" : "bg-primary-soft/50"
           }`}
         >
           {/*
@@ -67,14 +67,14 @@ export function NotificationList({ notifications }: { notifications: Notificatio
            * distinguish the tint still has three other signals.
            */}
           <span className="mt-1.5 flex h-2 w-2 shrink-0 items-center justify-center">
-            {n.isRead ? null : (
+            {n.read ? null : (
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-primary" />
             )}
           </span>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <p className={`text-sm text-ink ${n.isRead ? "font-medium" : "font-semibold"}`}>
+              <p className={`text-sm text-ink ${n.read ? "font-medium" : "font-semibold"}`}>
                 {n.title}
               </p>
               {/*
@@ -83,15 +83,15 @@ export function NotificationList({ notifications }: { notifications: Notificatio
                * "Application Approved" is noise dressed as information.
                */}
               {humanise(n.type).toLowerCase() === n.title.trim().toLowerCase() ? null : (
-                <Badge tone={n.isRead ? "neutral" : "accent"}>{humanise(n.type)}</Badge>
+                <Badge tone={n.read ? "neutral" : "accent"}>{humanise(n.type)}</Badge>
               )}
-              {n.isRead ? null : <span className="sr-only">Unread</span>}
+              {n.read ? null : <span className="sr-only">Unread</span>}
             </div>
             <p className="mt-1 text-sm leading-relaxed text-ink-muted">{n.message}</p>
             <p className="mt-1.5 text-xs text-ink-subtle">{formatDateTime(n.createdAt)}</p>
           </div>
 
-          {n.isRead ? null : (
+          {n.read ? null : (
             <div className="shrink-0">
               <MarkReadButton id={n.id} />
             </div>

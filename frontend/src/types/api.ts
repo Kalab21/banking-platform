@@ -115,13 +115,16 @@ export interface Account {
 
 // ---------------------------------------------------------------- transactions
 
+/** Mirrors transaction-service's `TransactionType`. */
 export type TransactionType =
   | "DEPOSIT"
   | "WITHDRAWAL"
   | "TRANSFER_IN"
   | "TRANSFER_OUT"
-  | "PAYMENT"
-  | "FEE";
+  | "FEE"
+  | "OVERDRAFT_FEE"
+  | "INTEREST_CREDIT"
+  | "REFUND";
 
 /** `GET /api/transactions/{ref}` and the page content of `/api/transactions/account/{id}`. */
 export interface Transaction {
@@ -308,7 +311,12 @@ export interface Notification {
   type: string;
   title: string;
   message: string;
-  isRead: boolean;
+  /**
+   * Named `read` on the wire. The Java field is `boolean isRead`, whose Lombok
+   * getter `isRead()` Jackson serialises as `read`; reading `isRead` here left
+   * every notification looking unread for ever.
+   */
+  read: boolean;
   referenceId: string | null;
   referenceType: string | null;
   createdAt: string;
@@ -384,7 +392,8 @@ export interface Payment {
 
 // ----------------------------------------------------------------------- fraud
 
-export type AlertStatus = "OPEN" | "REVIEWED" | "DISMISSED" | "CONFIRMED";
+/** Mirrors fraud-detection-service's `AlertStatus`. */
+export type AlertStatus = "OPEN" | "REVIEWED" | "RESOLVED" | "FALSE_POSITIVE";
 
 /** `GET /api/fraud/alerts`. */
 export interface FraudAlert {

@@ -107,6 +107,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
  * Several dashboard panels are optional: a brand-new customer has no statistics
  * row and no credit-card record yet. A 404 or 403 on those is a normal empty
  * state, not a page failure.
+ *
+ * Only those. Any other failure is rethrown so the page can say it could not
+ * load: this used to return the fallback for a 500 or a 504 as well, so an
+ * outage read as "you have no accounts", "no loans", or, for staff, "no open
+ * fraud alerts".
  */
 export async function apiFetchOptional<T>(
   path: string,
@@ -117,8 +122,23 @@ export async function apiFetchOptional<T>(
     return await apiFetch<T>(path, options);
   } catch (error) {
     if (error instanceof ApiError && (error.isNotFound || error.isForbidden)) return fallback;
+    throw error;
+  }
+}
+
+/**
+ * A read whose page shows "unavailable" rather than failing outright.
+ *
+ * Returns null for any API refusal or failure other than a lost session, so the
+ * caller must render null as "we could not load this" and never as "there is
+ * nothing". Used where one panel failing should not take down the page.
+ */
+export async function apiFetchOrNull<T>(path: string, options: RequestOptions = {}): Promise<T | null> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (error) {
     if (error instanceof ApiError && error.isUnauthenticated) throw error;
-    if (error instanceof NetworkError) throw error;
-    return fallback;
+    if (error instanceof ApiError || error instanceof NetworkError) return null;
+    throw error;
   }
 }

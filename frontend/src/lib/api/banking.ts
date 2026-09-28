@@ -1,6 +1,6 @@
 import "server-only";
 
-import { apiFetch, apiFetchOptional } from "@/lib/api/client";
+import { apiFetch, apiFetchOptional, apiFetchOrNull } from "@/lib/api/client";
 import type {
   Account,
   AmortizationScheduleRow,
@@ -144,11 +144,11 @@ export function getTransactions(
   page = 0,
   size = 20,
 ): Promise<Page<Transaction> | null> {
-  return apiFetchOptional<Page<Transaction> | null>(
-    `/api/transactions/account/${accountId}`,
-    { query: { page, size } },
-    null,
-  );
+  // Null means the history could not be read; the pages say so rather than
+  // showing an empty history.
+  return apiFetchOrNull<Page<Transaction>>(`/api/transactions/account/${accountId}`, {
+    query: { page, size },
+  });
 }
 
 export function deposit(
@@ -206,7 +206,8 @@ export function getAmortizationSchedule(loanId: number): Promise<AmortizationSch
 }
 
 export function getPayoffQuote(loanId: number): Promise<PayoffQuoteType | null> {
-  return apiFetchOptional<PayoffQuote | null>(`/api/loans/${loanId}/payoff-quote`, {}, null);
+  // A loan that is not active has no quote (422), and the page says so.
+  return apiFetchOrNull<PayoffQuote>(`/api/loans/${loanId}/payoff-quote`);
 }
 
 export function getLoanRepayments(loanId: number): Promise<LoanRepayment[]> {
@@ -239,11 +240,9 @@ export function getCardTransactions(
   page = 0,
   size = 20,
 ): Promise<Page<CreditCardTransaction> | null> {
-  return apiFetchOptional<Page<CreditCardTransaction> | null>(
-    `/api/credit-cards/${cardId}/transactions`,
-    { query: { page, size } },
-    null,
-  );
+  return apiFetchOrNull<Page<CreditCardTransaction>>(`/api/credit-cards/${cardId}/transactions`, {
+    query: { page, size },
+  });
 }
 
 export function getCardStatements(cardId: number): Promise<CreditCardStatement[]> {
