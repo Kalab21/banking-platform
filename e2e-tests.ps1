@@ -190,6 +190,19 @@ if (-not $USER_ID) {
 Write-Host "  UserId=$USER_ID"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# The gateway publishes no API docs. springdoc 2.6 grows a per-locale cache on
+# /v3/api-docs without bound (GHSA-rhhx-6j8h-8cvw), and the gateway used to
+# serve that endpoint to anyone, so each new Accept-Language cost it heap.
+foreach ($docsPath in @("/v3/api-docs", "/swagger-ui.html", "/swagger-ui/index.html")) {
+    $docsStatus = 0
+    try {
+        $docsStatus = [int](Invoke-WebRequest -Uri "$GW$docsPath" -Headers @{ "Accept-Language" = "x-e2e-$([guid]::NewGuid().ToString('N').Substring(0,8))" } -UseBasicParsing -TimeoutSec 15).StatusCode
+    } catch {
+        if ($_.Exception.Response) { $docsStatus = [int]$_.Exception.Response.StatusCode }
+    }
+    Assert "The gateway does not serve $docsPath" ($docsStatus -eq 401 -or $docsStatus -eq 404) "got HTTP $docsStatus"
+}
+
 Write-Host "`n=== FLOW 1: Account Opening ===" -ForegroundColor Cyan
 
 # A deposit account is not a request for money, so the application carries no

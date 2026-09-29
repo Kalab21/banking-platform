@@ -115,10 +115,14 @@ docker compose down          # add -v to also drop the Postgres volume
 
 ## API documentation
 
-Every service exposes springdoc-openapi:
+The API docs are off in the normal stack (see GHSA-rhhx-6j8h-8cvw in
+[SECURITY.md](SECURITY.md#dependency-advisories)). Starting with
+`docker-compose.dev-ports.yml` turns them on for each service's local port:
 
 - Swagger UI — `http://localhost:<service-port>/swagger-ui.html`
 - OpenAPI JSON — `http://localhost:<service-port>/v3/api-docs`
+
+The gateway never serves them.
 
 Selected routes, all reached through the gateway on `:8080`:
 

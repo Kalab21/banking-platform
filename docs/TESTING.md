@@ -94,7 +94,7 @@ assertion counts, which are larger and less comparable.
 | Component | Vitest, React Testing Library | `ApplicationsPage` — Accept/Decline only beside a loaded, open offer; failed reads never shown as empty; lapsed offers labelled (counted in the 385 above) | 21 |
 | Unit | Vitest | `customer-credit` — request bodies sent as one JSON object, bodyless accept/decline, strict reads (counted in the 385 above) | 16 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
-| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport, the credit journey (apply → stored terms → accept → the real loan; decline; card freeze) | 38, on demand |
+| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport, the credit journey (apply → stored terms → accept → the real loan; decline; card freeze) | 46, on demand |
 | End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack: money movement and overdraft arithmetic, the credit lifecycle with manual review, decline and customer-only offer response, scheduled payments executed by the scheduler, card authority, staff-only and cross-customer refusals, the Kafka-driven credit-score update, staff authority limits, payment debits and recurrence, card and loan arithmetic, and payoff and currency refusals before any debit | 197, on demand |
 
 ## Commands

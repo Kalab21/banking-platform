@@ -110,10 +110,16 @@ management:
     tracing:
       endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
+# Off unless SPRINGDOC_ENABLED=true. springdoc 2.6 grows a per-locale cache
+# on /v3/api-docs without bound (GHSA-rhhx-6j8h-8cvw), and nothing in the
+# running product needs the docs; docker-compose.dev-ports.yml turns them on
+# for local, direct-port use. See docs/SECURITY.md.
 springdoc:
   api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
 
 logging:
