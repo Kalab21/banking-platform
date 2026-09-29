@@ -49,7 +49,9 @@ async function reviewAndConfirm(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => expect(submissions.length).toBeGreaterThan(0));
 }
 
-describe("paying a loan or card", () => {
+// Driven through userEvent, several steps a test; the 5 s default was exceeded
+// on a loaded host with the stack running, once, in the first test to render.
+describe("paying a loan or card", { timeout: 15_000 }, () => {
   it("sends the chosen amount from the chosen account, for this card", async () => {
     const user = userEvent.setup();
     render(<ServicingPayment {...props()} />);

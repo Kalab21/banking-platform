@@ -1,9 +1,9 @@
 # Testing
 
-1262 automated tests run in CI: 915 backend (766 unit and web-slice, 149
-integration against real PostgreSQL, Redis and an embedded Kafka broker), 278
-frontend unit/component and 69 offline end-to-end. A further 38 live-stack
-Playwright scenarios and a 155-assertion PowerShell full-stack suite run on
+1445 automated tests run in CI: 992 backend (838 unit and web-slice, 154
+integration against real PostgreSQL, Redis and an embedded Kafka broker), 384
+frontend unit/component and 69 offline end-to-end. A further 46 live-stack
+Playwright scenarios and a 185-assertion PowerShell full-stack suite run on
 demand and are not counted in the CI total.
 
 Counts are per test case as the runners report them — JUnit `tests` in the
@@ -14,8 +14,8 @@ assertion counts, which are larger and less comparable.
 
 | Layer | Tooling | Scope | Result |
 |---|---|---|---|
-| Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | 30 |
-| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | 26 |
+| Unit | JUnit 5, Mockito, AssertJ | `AccountServiceImpl` balance and overdraft rules | 36 |
+| Unit | JUnit 5, Mockito, AssertJ | `LoanServiceImpl` amortization, repayment, payoff | 30 |
 | Unit | JUnit 5, Mockito, AssertJ | `CreditCardMasking` PAN masking and `last4` derivation | 12 |
 | Unit | JUnit 5, Mockito, AssertJ | `LoginTwoFactor` TOTP gate at sign-in | 6 |
 | Unit | JUnit 5, AssertJ | `RequestIdPropagation` — id minted, preserved, sanitised, forwarded | 18 |
@@ -29,17 +29,17 @@ assertion counts, which are larger and less comparable.
 | Authorization | JUnit 5, AssertJ | `AccessGuard` — the rules themselves | 23 |
 | Authorization | JUnit 5, AssertJ | `OwnershipMatrix` — all four principals against every resource class | 20 |
 | Authorization | JUnit 5, MockMvc | `CallerIdentityExceptionHandler` — denial maps to 403, missing identity to 401 | 6 |
-| Authorization | JUnit 5, MockMvc | `AccountAuthorization` — account ownership, staff-only operations, fail-closed | 19 |
-| Authorization | JUnit 5, MockMvc | `BalanceMutationBoundary` — public path removed, internal path intact | 6 |
-| Authorization | JUnit 5, MockMvc | `TransactionAuthorization` — money movement and transaction visibility | 13 |
-| Authorization | JUnit 5, MockMvc | `UserKycAuthorization` — profile, KYC and username-lookup ownership | 12 |
+| Authorization | JUnit 5, MockMvc | `AccountAuthorization` — account ownership, staff-only operations, fail-closed | 25 |
+| Authorization | JUnit 5, MockMvc | `BalanceMutationBoundary` — public path removed, internal path intact | 7 |
+| Authorization | JUnit 5, MockMvc | `TransactionAuthorization` — money movement and transaction visibility | 22 |
+| Authorization | JUnit 5, MockMvc | `UserKycAuthorization` — profile, KYC and username-lookup ownership | 18 |
 | Authorization | JUnit 5, MockMvc | `StatisticsAuthorization` — per-user ownership, platform figures staff-only | 10 |
 | Authorization | JUnit 5, MockMvc | `FraudAuthorization` — alerts staff-only, reviewer from caller identity | 8 |
-| Authorization | JUnit 5, MockMvc | `PaymentAuthorization` — payee and payment ownership, payer account resolved | 14 |
+| Authorization | JUnit 5, MockMvc | `PaymentAuthorization` — payee and payment ownership, payer account resolved | 17 |
 | Authorization | JUnit 5, MockMvc | `NotificationAuthorization` — own notifications only | 7 |
-| Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 25 |
-| Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 19 |
-| Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 19 |
+| Authorization | JUnit 5, MockMvc | `ApplicationAuthorization` — own applications, staff queue and decision | 29 |
+| Authorization | JUnit 5, MockMvc | `LoanAuthorization` — loan detail, schedule, repayment and payoff by owner | 22 |
+| Authorization | JUnit 5, MockMvc | `CreditCardAuthorization` — card detail, transactions, statements and every write | 21 |
 | Event contract | JUnit 5, Jackson | `EventContract` — envelope, versioning, type routing, unknown-type fallback, partition keys, no sensitive field on any event | 16 |
 | Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (notification) — every notification that was dead now fires from the producer's own event, over JSON, and a legacy record with no user is skipped rather than stalling the partition | 15 |
 | Event contract | JUnit 5, Jackson, Mockito | `EventContractConsumption` (statistics) — counters attribute to the right user, submitted applications are counted | 5 |
@@ -48,7 +48,7 @@ assertion counts, which are larger and less comparable.
 | Event contract | JUnit 5, Jackson, Mockito | `ApplicationEventContract` (loan, credit-card) — an approval issues the right product on the right terms, and an approval missing its product type or applicant issues nothing | 14 |
 | Authorization | JUnit 5, MockMvc | `IntegrationAuthorization` — external transfers may only be sent from an owned account, staff included; reads are owner-or-staff | 17 |
 | Authorization | JUnit 5, MockMvc | `TwoFactorAuthorization` — second-factor setup, verify and disable are self-only, and staff cannot bypass it | 10 |
-| Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 10 |
+| Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 11 |
 | Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off, actuator publishes only health/info/prometheus | 6 |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 |
@@ -63,6 +63,15 @@ assertion counts, which are larger and less comparable.
 | Cards | JUnit 5 | `CardStatusTransitions` — a cardholder may freeze and unfreeze, never clear a bank state | 11 |
 | Money | JUnit 5, Mockito | `AccountOwnershipGuard` (loan, credit-card) — funding accounts must be the customer's own, and must be named | 12 |
 | Identity | JUnit 5 | `CallerIdentityFeignInterceptor` — request identity wins, a scheduled job's identity is forwarded, a spoofed header is dropped | 3 |
+| Money | JUnit 5, Mockito | `CardArithmetic` — available credit never exceeds the limit after interest and a payoff; a statement opens at its close less charges plus payments | 2 |
+| Money | JUnit 5, Mockito | `InterestCharge` — a frozen or system-blocked card still accrues interest; closed and defaulted cards do not | 5 |
+| Money | JUnit 5, Mockito | `CreditScoreBounds` — a delta cannot overflow the score, and one wider than the score range is refused | 5 |
+| Authorization | JUnit 5, MockMvc | `CreditScoreAuthorization` — staff cannot change their own score | 2 |
+| Authorization | JUnit 5, Mockito | `KycSelfReview` — a reviewer cannot decide their own documents | 1 |
+| Validation | JUnit 5, MockMvc | `IntegrationValidation` — wire, ACH and SWIFT refuse bad amounts, routing numbers and a missing source, and record nothing | 6 |
+| Idempotency | JUnit 5 | `RequestFingerprint` — requests carrying dates fingerprint, and two scheduled times differ | 2 |
+| Mapping | JUnit 5 | `AmortizationMapper` — a part-paid instalment reports what has been paid | 1 |
+| Integration | Testcontainers, PostgreSQL 16 | `CardConcurrencyIT` — concurrent purchases respect the limit; a frozen card accrues interest | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountRepositoryIT` — migrations and persistence | 6 |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `IdempotentMoneyMovementIT` — concurrent duplicates, replay, key release | 8 |
@@ -75,23 +84,23 @@ assertion counts, which are larger and less comparable.
 | Integration | Testcontainers, PostgreSQL 16 | `OfferExpiryIT` — accepting or declining a lapsed offer commits EXPIRED rather than rolling it back | 3 |
 | Integration | Testcontainers, PostgreSQL 16 | `ProductConfirmationIT` — a confirmation records the real product id, once | 3 |
 | Integration | Testcontainers, PostgreSQL 16 | `ScheduledPaymentClaimingIT` — concurrent workers claim each due payment once | 6 |
-| Integration | Testcontainers, PostgreSQL 16 | `ScheduledPaymentExecutionIT` — the transfer runs as the payer; a claimed payment cannot be cancelled; a cancelled one never runs | 3 |
+| Integration | Testcontainers, PostgreSQL 16 | `ScheduledPaymentExecutionIT` — the transfer runs as the payer; a claimed payment cannot be cancelled; a cancelled one never runs | 7 |
 | Integration | Testcontainers, PostgreSQL 16 | `TransferReconciliationIT` — each leg's outcome asked of account-service; unreachable or unsettled legs are not a verdict | 9 |
-| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment, customer credit | 278 |
-| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 278 above) | 13 |
-| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 278 above) | 9 |
-| Component | Vitest, React Testing Library | `LoginForm` and `loginAction` — the second-factor challenge, and no session cookie before the code succeeds (counted in the 278 above) | 8 |
-| Component | Vitest, React Testing Library | `ApplicationsPage` — Accept/Decline only beside a loaded, open offer; failed reads never shown as empty; lapsed offers labelled (counted in the 278 above) | 21 |
-| Unit | Vitest | `customer-credit` — request bodies sent as one JSON object, bodyless accept/decline, strict reads (counted in the 278 above) | 16 |
+| Unit | Vitest, React Testing Library | Formatting, masking, JWT decode, validation, role nav, API errors, UI components, password rules, phone formatting, the money-account view model, money-outcome classification, customer wording for a refused payment, customer credit, loan and card servicing, the application timeline, the credit wizard, staff review and KYC | 384 |
+| Component | Vitest, React Testing Library | `MoveMoney` — one key per operation, double-submit, unknown outcome, receipt (counted in the 384 above) | 13 |
+| Component | Vitest, React Testing Library | `AddBeneficiary` — no userId field, masked confirmation, cleared fields, empty storage (counted in the 384 above) | 9 |
+| Component | Vitest, React Testing Library | `LoginForm` and `loginAction` — the second-factor challenge, and no session cookie before the code succeeds (counted in the 384 above) | 8 |
+| Component | Vitest, React Testing Library | `ApplicationsPage` — Accept/Decline only beside a loaded, open offer; failed reads never shown as empty; lapsed offers labelled (counted in the 384 above) | 21 |
+| Unit | Vitest | `customer-credit` — request bodies sent as one JSON object, bodyless accept/decline, strict reads (counted in the 384 above) | 16 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
 | End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport, the credit journey (apply → stored terms → accept → the real loan; decline; card freeze) | 38, on demand |
-| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack: money movement and overdraft arithmetic, the credit lifecycle with manual review, decline and customer-only offer response, scheduled payments executed by the scheduler, card authority, staff-only and cross-customer refusals, and the Kafka-driven credit-score update | 155, on demand |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack: money movement and overdraft arithmetic, the credit lifecycle with manual review, decline and customer-only offer response, scheduled payments executed by the scheduler, card authority, staff-only and cross-customer refusals, the Kafka-driven credit-score update, staff authority limits, payment debits and recurrence, and card and loan arithmetic | 185, on demand |
 
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 766 unit + 149 integration = 915
-cd frontend && npm run test                  # frontend: 278 unit/component
+mvn -B --no-transfer-progress clean verify   # backend: 838 unit + 154 integration = 992
+cd frontend && npm run test                  # frontend: 384 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 
@@ -217,10 +226,14 @@ architecture guarantees: the session cookie is httpOnly, the token never appears
 in the HTML sent to the browser, and a page that cannot load its data says so
 rather than rendering a zero. No backend required.
 
-**Live (38 tests, on demand).** Requires all 13 backend processes plus a seeded customer.
+**Live (46 tests, on demand).** Requires all 13 backend processes plus a seeded customer.
 Covers sign-in to a dashboard showing real balances, account and transaction
 history, the full money-movement journeys, loan amortization, card masking,
-staff-route denial for a customer, sign-out, onboarding, and a phone viewport.
+staff-route denial for a customer, sign-out, onboarding, a phone viewport, the
+credit journey through the three-step application to a real loan, receiving,
+repaying and paying off a loan and paying a card with every figure checked
+against the gateway, and the staff workflows: document and identity review, and
+approving or rejecting a referred application.
 
 Two live groups are worth calling out. `move-money.live.spec.ts` drives deposit,
 withdrawal and transfer through details, review and receipt, and then reads the
@@ -271,7 +284,7 @@ those values replaced with the ones derived from the token.
 `e2e-tests.ps1` drives the whole platform through the gateway: registration,
 account opening, money movement, a credit-card application through Kafka to an
 issued card, a loan through disbursement and repayment, KYC submission,
-notifications, external rails and TOTP enrolment. 155 assertions.
+notifications, external rails and TOTP enrolment. 185 assertions.
 
 It also proves an event-driven workflow end to end. The loan repayment in
 Flow 3 publishes `LOAN_REPAYMENT_MADE`, and `user-service` raises the credit

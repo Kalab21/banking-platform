@@ -11,7 +11,7 @@ boundaries.
 It uses synthetic data and makes no production or regulatory claim.
 
 **At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
-services), 1262 automated tests in CI, 38 live-stack scenarios on demand, and a
+services), 1445 automated tests in CI, 46 live-stack scenarios on demand, and a
 customer console that never holds a bearer token or a full account number.
 
 ## Problem / Context
@@ -248,17 +248,17 @@ something false about their money.
 
 ## Verification
 
-1262 automated tests run in CI:
+1445 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
-| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 766 |
-| Backend integration against real PostgreSQL, Redis and an embedded Kafka broker | 149 |
-| Frontend unit and component (Vitest, React Testing Library) | 278 |
+| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 838 |
+| Backend integration against real PostgreSQL, Redis and an embedded Kafka broker | 154 |
+| Frontend unit and component (Vitest, React Testing Library) | 384 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
-On demand, against the full running stack: 38 live Playwright scenarios and a
-155-assertion PowerShell suite that drives registration, money movement, the
+On demand, against the full running stack: 46 live Playwright scenarios and a
+185-assertion PowerShell suite that drives registration, money movement, the
 credit lifecycle (including manual review, decline and customer-only offer
 response), scheduled payments and card controls through to TOTP enrollment.
 
@@ -300,12 +300,14 @@ Kafka.
 safe; it does not make an automatic in-process retry of a half-completed
 downstream mutation safe.
 
-**Console money movement limited to deposit, withdrawal and transfer** — loan
-repayment, early payoff and card cash advance, payment and purchase also require
-an `Idempotency-Key` through the same `IdempotencyGuard`, but the console does
-not expose them yet. Payment creation and scheduled payments take no key; they
-rely on scheduled-payment claiming instead, which stops one due payment being
-executed twice but does not make a client's retry of the create request safe.
+**The console moves money on the customer's instruction only** — deposit,
+withdrawal and transfer, loan repayment and payoff, and card payment are all in
+the console and all go through the same review step and `IdempotencyGuard`.
+Creating a payment requires a key too; a scheduled payment's later execution
+relies on scheduled-payment claiming, which stops one due payment being executed
+twice. There is no console form for creating a payment or taking a cash advance:
+both are API-only, and card purchases are simulated by staff because there is no
+card network.
 
 ## Known Limitations
 
@@ -335,8 +337,9 @@ These are recorded rather than solved, and each is a deliberate stopping point.
 6. **Observability stops short of operations.** No log aggregator, traces held
    in memory and lost on restart, no alerting rules and no route for one to
    fire down.
-7. **External rails are simulated.** Wire, ACH and SWIFT are modeled, not
-   connected to anything.
+7. **External rails are simulated.** Wire, ACH and SWIFT requests are
+   validated, owner-checked and recorded, but not connected to anything, and
+   they debit no balance.
 8. **Test depth is uneven.** Account, transaction, payment, application,
    credit-card, loan and user services and the shared Kafka and idempotency
    modules have Testcontainers suites; `notification`, `integration`, `fraud`
@@ -386,11 +389,16 @@ against the running stack with a seeded synthetic customer.
 | `19-loans.png` | Balance progress, monthly payment, next payment date |
 | `20-profile-security.png` | Profile with masked SSN and honest identity status |
 | `25-payments.png` | Payees, saved through the console, displayed masked |
-| `26-explore-credit.png` | The four credit products and what each asks of the customer |
-| `27-credit-application.png` | A product form that asks only what the customer can state |
+| `26-explore-credit.png` | The four credit products, what each application asks, and what happens next |
+| `27-credit-application.png` | The last of three steps: every stated answer, with a way back to change it |
 | `28-applications-offer.png` | The stored offer's terms beside Accept and Decline |
 | `29-card-freeze.png` | Card detail with the self-service freeze — the only card state a customer controls |
 | `30-staff-application-queue.png` | The reviewer's queue of referred applications with their scores |
+| `31-staff-review-workbench.png` | One referred application: what was stated, the policy's reason codes, and Approve or Reject |
+| `32-staff-kyc-review.png` | Per-document review and the identity decision underwriting reads |
+| `33-application-detail.png` | An application's own page, its history built only from stored timestamps |
+| `34-loan-payment.png` | Paying what is left of a part-paid instalment, or paying the loan off |
+| `35-card-payment.png` | Paying a card: the amounts it owes, or another amount |
 
 ## Interview Talking Points
 
