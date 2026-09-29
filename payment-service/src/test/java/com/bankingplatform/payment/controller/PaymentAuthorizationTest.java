@@ -70,7 +70,7 @@ class PaymentAuthorizationTest {
         mvc = MockMvcBuilders
                 .standaloneSetup(
                         new BeneficiaryController(beneficiaryService),
-                        new PaymentController(paymentService, ownership, passThroughIdempotency()))
+                        new PaymentController(paymentService, ownership, beneficiaryService, passThroughIdempotency()))
                 .setCustomArgumentResolvers(new CallerIdentityArgumentResolver())
                 .setControllerAdvice(new CallerIdentityExceptionHandler(), new GlobalExceptionHandler())
                 .build();
@@ -223,6 +223,20 @@ class PaymentAuthorizationTest {
 
             mvc.perform(as(get("/api/payments/ref/{ref}", "PAY-B"), CUSTOMER_A, "CUSTOMER"))
                     .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("a customer cannot pay to another customer's saved payee")
+        void foreignBeneficiaryDenied() throws Exception {
+            // The beneficiary id used to be stored unchecked.
+            when(beneficiaryService.getById(77L)).thenReturn(beneficiaryOf(CUSTOMER_B));
+            mvc.perform(as(post("/api/payments"), CUSTOMER_A, "CUSTOMER")
+                            .header("Idempotency-Key", "foreign-payee-1")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"payerAccountId\":%d,\"beneficiaryId\":77,\"amount\":50.00,\"paymentType\":\"EXTERNAL_ACH\"}"
+                                    .formatted(ACCOUNT_OF_A)))
+                    .andExpect(status().isForbidden());
+            verify(paymentService, never()).createPayment(any());
         }
 
         @Test

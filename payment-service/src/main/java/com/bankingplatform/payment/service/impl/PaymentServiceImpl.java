@@ -1,5 +1,6 @@
 package com.bankingplatform.payment.service.impl;
 
+import com.bankingplatform.payment.idempotency.PaymentOutcomeClassifier;
 import com.bankingplatform.payment.dto.WithdrawRequest;
 
 import com.bankingplatform.common.security.CallerContext;
@@ -222,8 +223,23 @@ public class PaymentServiceImpl implements PaymentService {
             // payments.
             scheduleNextOccurrence(payment);
         } catch (Exception e) {
+            boolean declined = e instanceof RuntimeException runtime
+                    && new PaymentOutcomeClassifier().movedNoMoney(runtime);
             payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason(e.getMessage());
+            // A decline moved nothing; anything else may have. The status stays
+            // FAILED, but the reason says which, so no one reads an unconfirmed
+            // debit as a clean failure.
+            String reason = declined ? String.valueOf(e.getMessage())
+                    : "Outcome unconfirmed; check the account before paying again: " + e.getMessage();
+            // The column holds 500 characters; a Feign message carrying a
+            // response body can be longer, and failing the save would leave
+            // the payment stuck in PROCESSING.
+            payment.setFailureReason(reason.length() > 500 ? reason.substring(0, 500) : reason);
+            if (declined) {
+                // One declined month is not the end of a recurring series. It
+                // used to be: the next occurrence was only created on success.
+                scheduleNextOccurrence(payment);
+            }
             log.error("Scheduled payment {} failed: {}", payment.getPaymentRef(), e.getMessage());
             eventProducer.publishPaymentFailed(payment.getId(), payment.getPaymentRef(),
                     payment.getPayerAccountId(), payerUserId);
@@ -354,6 +370,14 @@ public class PaymentServiceImpl implements PaymentService {
         }
         if (request.getPaymentType() == PaymentType.INTERNAL && request.getPayeeAccountId() == null) {
             throw new PaymentException("INTERNAL payment requires payeeAccountId");
+        }
+        // Money that leaves Northbank has to be going somewhere. Only INTERNAL
+        // payments were checked for a payee, so a WIRE or BILL payment naming
+        // none debited the payer and recorded nobody as receiving it.
+        if (request.getPaymentType() != PaymentType.INTERNAL
+                && request.getBeneficiaryId() == null
+                && (request.getPayeeExternalRef() == null || request.getPayeeExternalRef().isBlank())) {
+            throw new PaymentException("A payment outside Northbank needs a payee: a saved beneficiary or an external reference");
         }
         if (request.isRecurring() && request.getRecurrencePattern() == null) {
             throw new PaymentException("Recurring payment requires recurrencePattern");

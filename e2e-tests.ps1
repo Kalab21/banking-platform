@@ -582,6 +582,11 @@ Write-Host "`n=== FLOW 5: Scheduled Payment ===" -ForegroundColor Cyan
 # Create beneficiary first
 $ben = Post "$GW/api/payments/beneficiaries" @{ userId=$USER_ID; name="E2E Landlord"; nickname="Landlord"; accountNumber="9876543210"; bankName="Example Bank"; routingNumber="990000001"; beneficiaryType="EXTERNAL_ACH"; currency="USD" } $TOKEN
 Assert "Create beneficiary" ($ben -and $ben.id)
+# The payee's external account number leaves the service masked.
+Assert "A saved payee's account number is returned masked" ($ben -and "$($ben.accountNumber)" -ne "9876543210" -and "$($ben.accountNumber)".EndsWith("3210")) "accountNumber=$($ben.accountNumber)"
+# A payment outside Northbank has to name who receives it.
+Assert-Refused "An external payment naming no payee is refused" "POST" `
+    "$GW/api/payments" $TOKEN 422 @{ payerAccountId=$ACCOUNT_ID; paymentType="WIRE"; amount=5.00; currency="USD"; description="To nobody" }
 $BEN_ID = $ben.id
 
 # Schedule a recurring payment for tomorrow
