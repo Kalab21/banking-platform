@@ -1,6 +1,6 @@
 # Testing
 
-1445 automated tests run in CI: 992 backend (838 unit and web-slice, 154
+1447 automated tests run in CI: 994 backend (840 unit and web-slice, 154
 integration against real PostgreSQL, Redis and an embedded Kafka broker), 384
 frontend unit/component and 69 offline end-to-end. A further 46 live-stack
 Playwright scenarios and a 185-assertion PowerShell full-stack suite run on
@@ -71,6 +71,7 @@ assertion counts, which are larger and less comparable.
 | Validation | JUnit 5, MockMvc | `IntegrationValidation` — wire, ACH and SWIFT refuse bad amounts, routing numbers and a missing source, and record nothing | 6 |
 | Idempotency | JUnit 5 | `RequestFingerprint` — requests carrying dates fingerprint, and two scheduled times differ | 2 |
 | Mapping | JUnit 5 | `AmortizationMapper` — a part-paid instalment reports what has been paid | 1 |
+| Money | JUnit 5 | `InstalmentDates` — instalment n falls due n months after the start, with no drift after a short month | 2 |
 | Integration | Testcontainers, PostgreSQL 16 | `CardConcurrencyIT` — concurrent purchases respect the limit; a frozen card accrues interest | 4 |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountRepositoryIT` — migrations and persistence | 6 |
 | Integration | Testcontainers, PostgreSQL 16 | `AccountBalanceConcurrencyIT` — concurrent debits serialise, no lost update | 4 |
@@ -99,7 +100,7 @@ assertion counts, which are larger and less comparable.
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 838 unit + 154 integration = 992
+mvn -B --no-transfer-progress clean verify   # backend: 840 unit + 154 integration = 994
 cd frontend && npm run test                  # frontend: 384 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
