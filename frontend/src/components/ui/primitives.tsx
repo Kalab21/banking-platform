@@ -114,6 +114,7 @@ export function statusTone(status: string | null | undefined): Tone {
     case "CUSTOMER_FROZEN":
     case "PARTIAL":
     case "SCHEDULED":
+    case "PROCESSING":
       return "caution";
     // A customer's own freeze is a precaution they took, not a fault: it reads
     // as caution above. These are states the bank imposed or that ended the
@@ -129,6 +130,9 @@ export function statusTone(status: string | null | undefined): Tone {
     case "BLOCKED":
     case "OVERDRAWN":
       return "critical";
+    // Ended by the customer, not a fault.
+    case "CANCELLED":
+      return "neutral";
     default:
       return "neutral";
   }

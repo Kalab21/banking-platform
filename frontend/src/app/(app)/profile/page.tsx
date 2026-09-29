@@ -144,7 +144,7 @@ export default async function ProfilePage() {
               </Detail>
               <Detail label="Credit score">
                 <span className="tabular">
-                  {creditScore ? `${creditScore.score} · ${creditScore.rating}` : "Not yet scored"}
+                  {creditScore ? `${creditScore.score} · ${humanise(creditScore.rating)}` : "Not yet scored"}
                 </span>
               </Detail>
             </DetailList>

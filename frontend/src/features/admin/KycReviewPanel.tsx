@@ -9,7 +9,7 @@ import type { KycDocument } from "@/types/api";
 
 const INITIAL: KycFormState = {};
 
-function ReviewRow({ document }: { document: KycDocument }) {
+function ReviewRow({ document, isSelf }: { document: KycDocument; isSelf: boolean }) {
   const [state, action, pending] = useActionState(reviewKycAction, INITIAL);
   const [decision, setDecision] = useState<"APPROVED" | "REJECTED" | null>(null);
 
@@ -55,7 +55,9 @@ function ReviewRow({ document }: { document: KycDocument }) {
         </div>
       ) : null}
 
-      {decided ? null : (
+      {decided ? null : isSelf ? (
+        <p className="mt-3 text-sm text-ink-subtle">You cannot review your own identity documents.</p>
+      ) : (
         <form action={action} className="mt-3 space-y-3">
           <input type="hidden" name="documentId" value={document.id} />
 
@@ -121,11 +123,16 @@ function ReviewRow({ document }: { document: KycDocument }) {
   );
 }
 
-export function KycReviewList({ documents }: { documents: KycDocument[] }) {
+/**
+ * `isSelf` hides the controls on a member of staff's own documents. The backend
+ * refuses those reviews anyway; offering the buttons only to fail was the
+ * console promising something it could not do.
+ */
+export function KycReviewList({ documents, isSelf = false }: { documents: KycDocument[]; isSelf?: boolean }) {
   return (
     <ul className="divide-y divide-line">
       {documents.map((d) => (
-        <ReviewRow key={d.id} document={d} />
+        <ReviewRow key={d.id} document={d} isSelf={isSelf} />
       ))}
     </ul>
   );

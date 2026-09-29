@@ -208,7 +208,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
                   </p>
                   <p className="truncate text-xs text-ink-subtle">
                     {formatDateTime(t.createdAt)}
-                    {t.merchantCategory ? ` · ${t.merchantCategory}` : ""} · {humanise(t.type)}
+                    {t.merchantCategory ? ` · ${humanise(t.merchantCategory)}` : ""} · {humanise(t.type)}
                   </p>
                 </div>
                 <Money
