@@ -237,7 +237,12 @@ test.describe("customer credit", () => {
     await card.getByRole("button", { name: "Decline" }).click();
     await card.getByRole("button", { name: "Confirm decline" }).click();
 
-    await expect(card.getByRole("heading", { name: "The offer you declined" })).toBeVisible();
+    // The heading appears once the decline has been stored and the list
+    // re-rendered from it, normally within 2 s. A stack paging for memory
+    // stalls every service at once (a plain offer read measured 10 s), so the
+    // wait is bounded at 30 s rather than the 5 s default; it still fails if
+    // the decline never lands.
+    await expect(card.getByRole("heading", { name: "The offer you declined" })).toBeVisible({ timeout: 30_000 });
     await expect(card.getByRole("button", { name: "Accept offer" })).toHaveCount(0);
     expect((await storedOffer(request, session, application.id)).status).toBe("DECLINED");
 
