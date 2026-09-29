@@ -1,353 +1,180 @@
-# Northbank — Event-Driven Banking Platform
+# Northbank Banking Platform
 
-A full-stack retail banking platform demonstrating secure money movement, distributed
-systems, customer identity, lending, cards, fraud detection and event-driven processing
-across Spring Boot services and a Next.js customer console.
+A full-stack, event-driven retail banking platform: Java 17 and Spring Boot
+microservices, a Next.js customer and staff console, Kafka, PostgreSQL and Redis,
+all running locally on Docker Compose.
 
 [![CI](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Kalab21/banking-platform/actions/workflows/codeql.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/codeql.yml)
 [![Security Scan](https://github.com/Kalab21/banking-platform/actions/workflows/security-scan.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/security-scan.yml)
 
-**Role:** Java Software Engineer | Full-Stack & Distributed Systems Engineering
+> A portfolio project built on synthetic data. It moves no real money and makes no
+> production, regulatory or compliance claim.
 
-**Core stack:** Java 17 · Spring Boot · Kafka · PostgreSQL · Redis · Next.js · React ·
-TypeScript · Docker · AWS/Terraform
+![The customer dashboard: total balance, account cards, balance history, recent activity and credit, loan and security summaries](docs/screenshots/13-dashboard-desktop.png)
 
-**Engineering proof:** 13 backend processes · 1447 CI tests · idempotent money movement ·
-concurrency-safe balances · resource-level authorization · responsive customer banking UX
+## What Northbank demonstrates
 
-> Portfolio demonstration using synthetic data. No real money and no production,
-> regulatory or compliance claim.
+- **Event-driven microservices**: 11 business services, each owning its own
+  PostgreSQL database, behind an API gateway, with Kafka for derived state.
+- **Correct money movement**: row locks on every balance change, idempotency keys
+  on every money-moving request, and outcomes reported as unknown when the platform
+  cannot know them.
+- **A full lending lifecycle**: application, versioned underwriting, staff review,
+  offer, customer decision, provisioning, and loan and card servicing.
+- **Customer and staff authority**: ownership checked against stored records.
+  Staff never take money out of a customer's account, never accept an offer on
+  the customer's behalf, and never decide about themselves.
+- **Reliable events**: a transactional outbox, retry with dead-letter topics, and
+  idempotent consumers.
+- **A full-stack console**: a Next.js backend-for-frontend for customers and staff.
+  The browser never holds a bearer token.
+- **Delivery**: Docker Compose for the whole stack, CI with CodeQL and Trivy, and
+  Terraform for an AWS layout (not deployed).
+- **Verification**: 1,476 automated tests in CI, plus live full-stack suites run
+  against the real stack.
 
----
+## Product experience
 
-## The product
-
-Every figure below is the seeded synthetic customer's real data, read through the gateway
-from the services that own it. The images are captured automatically by Playwright against
-the running stack.
-
-![Customer dashboard showing total balance, account cards, balance history and recent activity](docs/screenshots/13-dashboard-desktop.png)
-
-| Move money — review | Move money — receipt |
+| Move money: review before confirming | Explore credit |
 |---|---|
-| ![Review step naming the amount and both accounts by their last four digits, above a single confirm button](docs/screenshots/23-move-money-review.png) | ![Receipt confirming a completed transfer with the reference the backend issued](docs/screenshots/24-move-money-receipt.png) |
+| ![The review step naming the amount and both accounts by their last four digits, above one confirm button](docs/screenshots/23-move-money-review.png) | ![Four credit products, what each application asks, and what happens after applying](docs/screenshots/26-explore-credit.png) |
 
-| An application and its history | Staff review workbench |
+| Guided credit application | An application and its history |
 |---|---|
-| ![One application's page: a history of submitted, approved and offered with stored times, what the customer stated, and the offer's terms above Accept and Decline](docs/screenshots/33-application-detail.png) | ![A referred application with the applicant, what they stated, the policy's decision and reason code, and Approve or Reject](docs/screenshots/31-staff-review-workbench.png) |
+| ![The last of three steps, repeating every answer with a way to change it](docs/screenshots/27-credit-application.png) | ![An application's own page with its history from stored timestamps, and the offer's terms above Accept and Decline](docs/screenshots/33-application-detail.png) |
 
-| Paying a loan | Paying a card |
+| Paying a loan | Staff review of a referred application |
 |---|---|
-| ![A loan page offering the rest of a part-paid instalment or another amount, and a payoff at today's figure](docs/screenshots/34-loan-payment.png) | ![A card page offering its current balance or another amount, paid from one of the customer's accounts](docs/screenshots/35-card-payment.png) |
+| ![A loan offering the rest of a part-paid instalment, another amount, or payoff at today's figure](docs/screenshots/34-loan-payment.png) | ![A referred application with the applicant, what they stated, the policy's reason code, and Approve or Reject](docs/screenshots/31-staff-review-workbench.png) |
 
-| Account detail | Profile & security |
-|---|---|
-| ![Account page with the running balance after every transaction and the account information panel](docs/screenshots/16-account-detail.png) | ![Profile page grouped into personal, contact, address and identity sections with a masked Social Security number](docs/screenshots/20-profile-security.png) |
+The full set is in [`docs/screenshots/`](docs/screenshots/).
 
-<p align="center">
-  <img src="docs/media/dashboard-mobile-top.png" alt="Dashboard on a phone viewport" width="300">
-  <br>
-  <em>The same dashboard at 390px — the full-length capture is <a href="docs/screenshots/14-dashboard-mobile.png">14-dashboard-mobile.png</a>.</em>
-</p>
+## The credit journey
 
-> **More product views:** the complete synthetic customer-flow screenshot set is in
-> [`docs/screenshots/`](docs/screenshots/), and the reasoning behind the product decisions
-> is in the [engineering case study](docs/PORTFOLIO_CASE_STUDY.md).
+```text
+Explore credit → Apply (3 steps) → Underwrite → Staff review if referred
+      → Offer → Customer accepts or declines → Provision → Service the loan or card
+```
 
----
-
-## Engineering highlights
-
-**Safe money movement.** Deposits, withdrawals, transfers, payments, loan repayments and
-card payments require an `Idempotency-Key` tied to one logical operation. The console mints the key when the customer reaches the review
-step and reuses it for every attempt at that same payment, so a retry is the same operation
-rather than a second one.
-
-**Concurrency correctness.** Every balance-changing path loads the account with
-`SELECT ... FOR UPDATE`, so the read, the sufficiency check and the write happen under a row
-lock. Two simultaneous debits of 80 against 100 leave 20 and one refusal, proved against a
-real PostgreSQL container rather than a mock.
-
-**Resource ownership.** Authorization is checked against the owner recorded with the
-resource, never against a `userId` in the path or body. A valid token is not permission to
-read a particular account, and the gateway overwrites any identity headers the client sent.
-
-**Honest unknown outcomes.** A request whose result the platform cannot establish — a
-timeout, or a transfer that debited and failed to credit — is reported as unknown. The
-screen claims neither success nor failure, offers no button that would send the money
-again, and points at the transaction history.
-
-**Sensitive-data boundaries.** Full account numbers are removed before the React
-Server → Client boundary, so they never reach the browser in the HTML, the RSC payload or
-the DOM. Of a Social Security number only the last four digits are ever stored, and card
-responses carry a masked value with `last4`.
-
-**Event-driven derived state.** Kafka carries domain events to statistics, notifications
-and fraud scoring, so none of those systems sits on the money-movement critical path.
-Producers are pinned to `max.block.ms: 1000` so a broker outage fails fast instead of
-blocking a balance transaction.
-
----
+- **Underwriting** is a deterministic, versioned policy: score, debt-to-income,
+  loan-to-value, amount and term, and identity check. Each decision is stored as an
+  immutable record with its reason codes.
+- **An offer's terms are stored once.** The customer accepts exactly those terms.
+  Only the applicant can accept or decline; staff and admins are refused.
+- **Provisioning happens once.** The card or loan service creates the product from
+  the accepted terms and confirms its real id. A redelivered event creates nothing
+  new.
+- **Servicing is in the console**: receive a loan, pay an instalment or any amount,
+  pay the loan off, and pay a card.
 
 ## Architecture
 
-Independent services per business domain, each owning its own PostgreSQL database.
-Asynchronous propagation over Kafka, so a transaction can update statistics, fire
-notifications and trigger fraud scoring without the money path depending on any of them. A
-single authenticated entry point validates JWTs once and forwards the identity it derived
-downstream, replacing anything the client sent.
+```mermaid
+flowchart LR
+    Browser["Browser"] --> Console["Next.js console<br/>(backend-for-frontend)"]
+    Console --> Gateway["API Gateway<br/>JWT, rate limiting"]
+    Gateway --> Services["11 domain services<br/>accounts, transactions, payments,<br/>applications, loans, cards, users, …"]
+    Services --> Postgres[("PostgreSQL<br/>one database per service")]
+    Services --> Redis[("Redis")]
+    Services <--> Kafka[["Kafka<br/>outbox → topics → consumers"]]
+    Gateway -. discovery .- Eureka["Eureka"]
+    Services -. metrics, traces .-> Obs["Prometheus · Grafana · Zipkin"]
+```
 
-![Northbank system architecture](docs/architecture/northbank-system-architecture.svg)
+- **Synchronous calls carry authoritative state.** A transfer must know whether its
+  debit succeeded, so that is a Feign call.
+- **Kafka carries derived state:** statistics, notifications, fraud scoring, and
+  product issuance from accepted offers.
+- **The browser never holds a bearer token.** The console calls the gateway from the
+  server.
 
-Several services both publish and consume. An accepted credit offer, for example, is
-published to `credit-card-service` or `loan-service`, which creates the product from the
-offer's terms and publishes a confirmation that `application-service` consumes to record
-the real product id. Deposit accounts are opened synchronously through `account-service`.
+Service inventory, data ownership, event flows and design decisions are in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**13 backend processes total:** Eureka, the API Gateway and 11 business services. The
-Next.js console runs as a separate process; browser banking requests reach the platform
-through this BFF and the gateway.
-
-<details>
-<summary><strong>Service inventory and ports</strong></summary>
-
-| Process | Port | Database | Responsibility |
-|---|---|---|---|
-| `eureka-server` | 8761 | — | Service discovery |
-| `api-gateway` | 8080 | — | Routing, JWT validation, rate limiting |
-| `user-service` | 8081 | `user_db` | Auth, JWT issuing, 2FA, KYC, credit score |
-| `application-service` | 8082 | `application_db` | Product application workflow |
-| `account-service` | 8083 | `account_db` | Accounts, balances, overdraft |
-| `transaction-service` | 8084 | `transaction_db` | Deposits, withdrawals, transfers |
-| `payment-service` | 8085 | `payment_db` | Beneficiaries, payments, recurring |
-| `statistics-service` | 8086 | `statistics_db` | Kafka-fed aggregates, Redis cached |
-| `notification-service` | 8087 | `notification_db` | Kafka-fed customer alerts |
-| `fraud-detection-service` | 8088 | `fraud_db` | Rules engine, velocity counters, freeze |
-| `credit-card-service` | 8089 | `credit_card_db` | Cards, interest, statements, rewards |
-| `loan-service` | 8090 | `loan_db` | Amortization, disbursement, repayment |
-| `integration-service` | 8091 | `integration_db` | Wire / ACH / SWIFT stubs, FX |
-
-Ports, databases and Kafka topics are also listed in
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-
-</details>
-
----
-
-## At a glance
+## Technology
 
 | | |
 |---|---|
-| **Backend** | Java 17, Spring Boot 3.3.6, Spring Cloud Gateway + Eureka, OpenFeign |
-| **Frontend** | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, Recharts |
-| **Messaging** | Apache Kafka — domain events for statistics, notifications, fraud signals and application-driven issuance workflows |
-| **Data** | PostgreSQL 16, database per service, Flyway migrations, `ddl-auto: validate`; Redis 7 for rate limits, velocity counters and read-model cache |
-| **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
-| **Observability** | Micrometer to Prometheus and Grafana, Brave tracing to Zipkin, `X-Request-Id` correlation |
-| **Testing** | 1447 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 46 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
-| **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
+| **Backend** | Java 17, Spring Boot 3.3, Spring Cloud Gateway, Eureka, OpenFeign, Resilience4j |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| **Data and messaging** | PostgreSQL 16 with Flyway, Redis 7, Apache Kafka |
+| **Security** | JWT at the gateway, BCrypt, TOTP two-factor, per-resource ownership checks |
+| **Observability** | Micrometer, Prometheus, Grafana, Zipkin, `X-Request-Id` correlation |
+| **Testing and delivery** | JUnit 5, Testcontainers, Vitest, Playwright, GitHub Actions, CodeQL, Trivy, Terraform for AWS (not deployed) |
 
-<details>
-<summary><strong>Full technology stack with versions</strong></summary>
+## Engineering highlights
 
-| Layer | Technology |
-|---|---|
-| Language / runtime | Java 17 |
-| Framework | Spring Boot 3.3.6 |
-| Cloud / distributed | Spring Cloud 2023.0.3 — Gateway, Netflix Eureka, OpenFeign |
-| Security | Spring Security, JJWT 0.12.6, BCrypt, `dev.samstevens.totp` |
-| Persistence | Spring Data JPA / Hibernate, PostgreSQL 16, Flyway |
-| Messaging | Apache Kafka (Confluent `cp-kafka` 7.6.1) |
-| Caching / counters | Redis 7 |
-| Mapping | MapStruct 1.5.5, Lombok |
-| API docs | springdoc-openapi 2.6.0 |
-| Observability | Actuator, Micrometer, Prometheus, Grafana, Micrometer Tracing (Brave), Zipkin |
-| Resilience | Resilience4j circuit breaker on `transaction-service` → `account-service` |
-| Frontend | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, Recharts 3, Zod |
-| Testing | JUnit 5, Mockito, AssertJ, Testcontainers; Vitest, React Testing Library, Playwright |
-| Build / CI | Maven multi-module, GitHub Actions, CodeQL, Trivy, Dependabot |
-| Containers | Docker, Docker Compose |
-| Cloud infrastructure | Terraform definitions (not a hosted deployment) — AWS ECS Fargate, RDS, MSK, ElastiCache, ALB, WAF, CloudFront, Route 53, ECR, Secrets Manager, VPC |
+- **`SELECT … FOR UPDATE`** on every balance change. Two concurrent debits are
+  applied one after the other, and this is proven against a real PostgreSQL.
+- **Idempotency keys** on deposits, withdrawals, transfers, payments, loan
+  repayments and card payments. The key is minted when the customer reaches the
+  review step and reused on every retry.
+- **A transactional outbox** in every producer, so a committed change is never left
+  unannounced. Consumers retry with backoff, send failures to a dead-letter topic,
+  and discard duplicates.
+- **Append-only decision evidence** for underwriting and review, and **stored offer
+  terms** that the customer accepts as made.
+- **Provisioning confirmation**: an application reads `PROVISIONED` only after the
+  product service confirms a real product id.
+- **Reconciliation**: a transfer that debited but failed to credit is recorded first,
+  then reconciled leg by leg. Deciding who is made whole is left to a person.
+- **Request ids and traces** that follow a request across every synchronous hop.
 
-</details>
+The reasoning behind each decision is in the
+[engineering case study](docs/PORTFOLIO_CASE_STUDY.md).
 
----
+## Security
 
-## Product capabilities
+- The gateway validates the JWT and replaces any identity headers the client sent.
+- Each service authorizes against the owner recorded with the resource, never
+  against an id in the request.
+- Money leaves an account only on its owner's instruction.
+- Bank-controlled fields cannot be set by a customer: score, APR, limit, tier,
+  approved amount and overdraft.
+- Only the last four digits of an identity number are stored. Card numbers are
+  masked, and full account numbers never reach the browser.
 
-Only capabilities implemented in this repository are listed.
+See [docs/SECURITY.md](docs/SECURITY.md) for the threat model, the full
+authorization table and the dependency advisories.
 
-**Identity and onboarding** (`user-service`) — a five-step onboarding wizard collecting
-sign-in details, legal name and date of birth, a US residential address and identity
-details; registration and login issuing JWTs with BCrypt-hashed passwords; TOTP two-factor
-authentication (RFC 6238) enforced at sign-in; KYC document submission, staff review of each
-document, and a staff identity decision that underwriting reads; credit score tracking
-updated from loan and card events; `CUSTOMER` / `EMPLOYEE` / `ADMIN` roles.
+## Testing
 
-**Accounts and money movement** (`account-service`, `transaction-service`,
-`payment-service`) — checking, savings and business accounts with overdraft protection and
-`FROZEN` / `CLOSED` states (only an empty account can be closed, and `OVERDRAWN` follows the
-balance); deposit, withdrawal and transfer, each producing an immutable record with
-`balanceAfter` and a generated reference, with a transfer's destination checked before the
-source is debited; beneficiaries; internal and external payments that debit the payer once;
-and scheduled and recurring payments driven by a polling job.
+| Suite | Where it runs | Count |
+|---|---|---:|
+| Backend unit and web-slice | CI | 864 |
+| Backend integration (Testcontainers, PostgreSQL, Redis, embedded Kafka) | CI | 158 |
+| Frontend unit and component | CI | 385 |
+| Playwright against a production build, no backend | CI | 69 |
+| **Total in CI** | | **1,476** |
+| Playwright against the full running stack | on demand | 46 |
+| PowerShell full-stack suite (assertions) | on demand | 197 |
 
-**Credit applications** (`application-service`) — deterministic, versioned underwriting
-(score, debt-to-income, loan-to-value, amount and term limits) that approves, refuses or
-refers to a person, with an immutable decision record; a staff review step for referrals
-and incomplete identity checks; offers whose terms are stored once and accepted or
-declined by the applicant only; and provisioning that reads `PROVISIONED` only once the
-card or loan service confirms the product it created.
+The live suites need all 13 backend processes running, so they are run on demand
+rather than on every push. See [docs/TESTING.md](docs/TESTING.md).
 
-**Lending and cards** (`loan-service`, `credit-card-service`) — amortization schedule
-generation, disbursement, repayment against the earliest unpaid instalment and early payoff,
-with a loan closing only when its principal is paid; card purchases (simulated by staff: there
-is no card network), cash advances, daily interest accrual that continues while a card is
-frozen, monthly statements and rewards points.
+## Known limitations
 
-**Risk and derived state** (`fraud-detection-service`, `statistics-service`,
-`notification-service`) — a rules engine with Redis-backed velocity counters that can freeze
-an account; platform, per-user and daily-snapshot aggregates; paginated customer alerts.
-All three are fed by Kafka.
+- A transfer between accounts is not globally atomic. Partial outcomes are
+  reconciled and reported, not repaired automatically.
+- Service-to-service calls rely on network isolation rather than mTLS.
+- The wire, ACH and SWIFT rails are simulated: they are recorded, not settled.
+- There is no credit bureau and no hosted production deployment.
 
-<details>
-<summary><strong>More detail on the console, identity handling and the edge</strong></summary>
-
-**Console** (`frontend`) — two-step sign-in challenging for a TOTP code before any session
-cookie is written. Customer views: dashboard, accounts, move money, transactions, payments,
-loans (receive an approved loan, pay an instalment or any amount, pay off), cards (pay the
-minimum, the statement balance, the current balance or another amount; a self-service
-freeze), Explore Credit, a three-step application with a review of every answer, My
-Applications and each application's own page with a history built from stored events, offer
-accept and decline (each confirmed), notifications and profile. Staff views: KYC review with
-per-document decisions and an identity decision, the application queue, a workbench for each
-referred application showing the evidence and decision history, and fraud alerts. Pages fetch
-through React Server Components and mutate through Server Actions, so the browser never holds
-a bearer token.
-
-Moving money is its own route and its own journey: choose transfer, deposit or withdrawal,
-fill in the details, review exactly what is about to happen against masked accounts, and
-confirm once. Loan and card payments follow the same three steps, and their receipts show
-what the backend reports taking, which differs from the request when a payment is capped at
-what is owed. The id sent as the `Idempotency-Key` is minted when the customer reaches the
-review step and reused for every attempt at that same payment. A request whose outcome the
-platform cannot establish says so, claims neither success nor failure, offers no button that
-would send it again, and points at the transaction history.
-
-What a Client Component receives is narrowed on the server. Anything handed across that
-boundary is serialized into the page, so the money forms get a view model carrying an id, a
-label and a masked number rather than the account record.
-
-**Identity numbers.** Of the Social Security number given at onboarding, only the last four
-digits are kept: the server checks the format, derives those four digits and discards the
-rest. No column holds the whole number and no endpoint returns one. The identity-details
-record reads `SUBMITTED` and nothing automated ever marks it verified: there is no
-verification provider behind this system, and passing a format check is not verification. A
-customer's KYC status becomes `APPROVED` only when a member of staff reviews their documents
-and decides, and staff cannot decide their own.
-
-**External rails** (`integration-service`) — wire / ACH / SWIFT endpoints and FX conversion,
-modeling request, response and persistence shape only. A transfer is validated, checked
-against the source account's owner, recorded and announced; no banking network is contacted
-and the source account's balance is not debited.
-
-**Edge** (`api-gateway`) — Spring Cloud Gateway with Eureka-backed load-balanced routing to
-11 downstream services; a JWT validation filter injecting `X-User-Id` / `X-User-Role`; Redis
-rate limiting keyed per client IP.
-
-</details>
-
----
-
-## Security & reliability
-
-| Control | Implementation |
-|---|---|
-| Authentication | JWT bearer tokens issued by `user-service`, signed HS256 |
-| Browser session | JWT held in an httpOnly, SameSite=Lax cookie; page JavaScript cannot read it |
-| Two-factor | TOTP (RFC 6238) enforced at sign-in: with 2FA enabled, a correct password alone issues no token |
-| Edge enforcement | The gateway validates the JWT before any route is reached, then overwrites any client-supplied `X-User-Id` / `X-Username` / `X-User-Role`; on public paths it removes them |
-| Authorization | Each service authorizes against the resource's recorded owner. Staff may act across customers only where a workflow requires it, never to move money out of a customer's account, and never on decisions about themselves (their own application, identity, credit score, account status or overdraft) |
-| Internal operations | Direct balance mutation is service-to-service only, on `/internal/**`, which the gateway does not route |
-| Balance integrity | `SELECT ... FOR UPDATE` on every balance change; no lost update under concurrent debits |
-| Idempotency | `Idempotency-Key` on money movement, with a unique constraint and a request fingerprint |
-| Data minimization | The full card number never crosses the API boundary; only the last four digits of an identity number are stored; account numbers stop at the server |
-| Automation | CodeQL on Java and TypeScript, Trivy on dependencies, Dockerfiles and the runtime base image, Dependabot weekly |
-
-**Circuit breaker scope.** Resilience4j guards one hop — the Feign calls from
-`transaction-service` to `account-service` that perform the debit and credit inside a
-transfer, with a shorter timeout than the platform default. There is deliberately no retry:
-`updateBalance` is not itself idempotent, so an automatic retry after a timeout could apply
-a debit twice. What an idempotency key makes safe is a *client* repeating a request, not a
-service silently repeating a half-finished downstream mutation. When the breaker is open the
-caller receives `503`; a timeout returns `504` and the outcome is reported as unknown.
-
-The full model — how identity is derived, the rule table, the internal boundary and the
-remaining hardening candidates, including findings this project has not fixed — is in
-[docs/SECURITY.md](docs/SECURITY.md).
-
----
-
-## Verification
-
-| Evidence | Result |
-|---|---:|
-| Backend — unit, web-slice and Testcontainers integration | 994 |
-| Frontend unit and component | 384 |
-| Offline Playwright (production build, no backend) | 69 |
-| **CI total** | **1447** |
-| Live Playwright against the running stack — on demand | 46 scenarios |
-| PowerShell full-stack suite — on demand | 185 / 185 |
-
-The backend total is 840 unit and web-slice tests plus 154 integration tests that run
-`@DataJpaTest` against a real PostgreSQL 16 container, so entity and migration drift fails
-the build and the concurrency and idempotency guarantees are proved against the database
-that enforces them. The live Playwright and PowerShell suites need all 13 backend processes
-running, so they are triggered on demand rather than on every push, and are not counted in
-the CI total. Counts are test cases as the runners report them, not assertions.
-
-```bash
-mvn -B --no-transfer-progress clean verify   # backend: 840 unit + 154 integration = 994
-cd frontend && npm run test                  # frontend: 384 unit/component
-cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
-```
-
-Suite-by-suite detail is in [docs/TESTING.md](docs/TESTING.md).
-
----
-
-## Observability
-
-**Micrometer → Prometheus → Grafana, with Brave tracing to Zipkin and `X-Request-Id`
-correlation across service boundaries.** Each service exposes `health`, `info` and
-`prometheus` and nothing else; metrics are tagged with `application`, so one scrape
-configuration and one dashboard cover every process. Telemetry runs in its own Compose file
-and the application does not depend on it.
-
-```bash
-docker compose -f docker-compose.observability.yml up -d
-```
-
-Grafana <http://localhost:3001> · Prometheus <http://localhost:9090> · Zipkin
-<http://localhost:9411>
-
-[Observability details](docs/OBSERVABILITY.md)
-
----
+The full list is in the
+[case study](docs/PORTFOLIO_CASE_STUDY.md#known-limitations).
 
 ## Run locally
 
-**Prerequisites:** JDK 17+, Maven 3.8+, Docker Desktop.
+Prerequisites: JDK 17+, Maven 3.8+, Docker Desktop.
 
 ```bash
 git clone https://github.com/Kalab21/banking-platform.git
 cd banking-platform
-
-cp .env.example .env     # then edit the values
-mvn clean package        # build the service jars
-docker compose up -d     # Postgres, Kafka, Redis, Eureka, the gateway and 11 services
-./scripts/seed-demo.sh   # optional: a populated synthetic customer, credentials printed
+cp .env.example .env      # then set the values
+mvn clean package         # build the service jars
+docker compose up -d      # infrastructure, gateway, Eureka and 11 services
+./scripts/seed-demo.sh    # optional: a synthetic customer; credentials are printed
 ```
 
 | Endpoint | URL |
@@ -357,123 +184,28 @@ docker compose up -d     # Postgres, Kafka, Redis, Eureka, the gateway and 11 se
 | Eureka dashboard | <http://localhost:8761> |
 | Kafka UI | <http://localhost:8095> |
 
-The business services publish no host ports: application traffic goes through the gateway,
-which is what makes its authentication unavoidable. IDE-based setup, frontend-only
-development, the API reference and build notes are in
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+IDE-based setup, frontend-only development, the API reference and
+troubleshooting are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
----
+## Documentation
 
-## Engineering tradeoffs
+| Document | What it covers |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | Topology, service boundaries, data ownership, design decisions |
+| [Security](docs/SECURITY.md) | Threats, authentication, authorization, sensitive data, advisories |
+| [Testing](docs/TESTING.md) | Strategy, suites, counts, commands |
+| [Events](docs/EVENTS.md) | Kafka contracts, delivery, retry, dead-letter topics, idempotency |
+| [Observability](docs/OBSERVABILITY.md) | Metrics, tracing, dashboards |
+| [Development](docs/DEVELOPMENT.md) | Local setup, ports, commands, troubleshooting |
+| [Case study](docs/PORTFOLIO_CASE_STUDY.md) | Decisions, trade-offs, limitations |
 
-### Distributed transfer consistency
+## Copyright & Usage
 
-Account-to-account transfers cross a service boundary rather than using a distributed
-transaction. Partial or uncertain outcomes are surfaced as unknown and require
-reconciliation rather than an unsafe automatic retry.
+© 2026–present Kalabe Kebede. All Rights Reserved.
 
-Publishing is no longer part of that problem. Every producer on the platform writes
-its event to a transactional outbox in the same transaction as the change, and a
-relay sends it afterwards, so a committed change cannot go unannounced.
+Northbank is proprietary portfolio software, published for recruitment, demonstration
+and technical evaluation. It is not open source. No permission is granted to reuse,
+modify, redistribute or commercially exploit its original material without written
+permission. Third-party components remain under their own licences.
 
-A transfer that debits one account and fails to credit the other is now recorded
-before it starts, in a transaction of its own, so the evidence survives the
-rollback. A reconciler asks account-service what became of each leg — the legs
-are keyed, so the answer is knowable rather than inferred — and records it. It
-deliberately stops there: which account to make whole is a decision about
-someone's money, and the platform does not make it automatically.
-
-### Service-to-service identity
-
-Internal calls rely on isolation inside the local Compose network. A shared production
-cluster would require workload identity, signed service credentials or mTLS rather than
-network placement alone.
-
-### External financial rails
-
-Wire, ACH and SWIFT integrations are simulated adapters. The project demonstrates
-contracts, persistence and failure handling without connecting to real financial networks
-or moving real money: an external transfer is recorded, not settled, and no account balance
-changes because of one. Money leaves an account through transactions, payments, loan
-repayments and card payments, which do debit it.
-
-### Deployment and platform versions
-
-The stack runs and is tested on Docker Compose. `infrastructure/aws/` holds Terraform
-definitions for an AWS layout (ECS Fargate, RDS, MSK, ElastiCache, ALB, WAF, CloudFront);
-no hosted instance is published. The services are on Spring Boot 3.3 and Spring Cloud
-2023.0; moving to the current release train is a coordinated upgrade tracked in
-[SECURITY.md](docs/SECURITY.md#deferred-platform-modernization) rather than a dependency
-bump.
-
-> Additional limitations and future-hardening items are documented in the
-> [engineering case study](docs/PORTFOLIO_CASE_STUDY.md).
-
----
-
-## Engineering documentation
-
-- [Architecture & local development](docs/DEVELOPMENT.md)
-- [Security model](docs/SECURITY.md)
-- [Testing strategy](docs/TESTING.md)
-- [Observability](docs/OBSERVABILITY.md)
-- [Portfolio engineering case study](docs/PORTFOLIO_CASE_STUDY.md)
-- [Full screenshot gallery](docs/screenshots/)
-
-<details>
-<summary><strong>Repository structure</strong></summary>
-
-```
-banking-platform/
-├── pom.xml                           # Maven parent - dependency and version management
-├── docker-compose.yml                # Full stack: infrastructure + all 13 backend processes
-├── docker-compose.infra.yml          # Infrastructure only, for IDE-based development
-├── docker-compose.observability.yml  # Prometheus, Grafana, Zipkin (optional)
-├── Dockerfile                        # Shared JRE 17 Alpine image, non-root
-├── e2e-tests.ps1                     # End-to-end suite against the running stack
-├── .env.example                      # Environment template - no real credentials
-│
-├── frontend/                    # Next.js banking console (App Router, TypeScript)
-│   ├── src/app/(auth)/          #   login, register
-│   ├── src/app/(app)/           #   authenticated shell incl. /admin
-│   ├── src/features/            #   server actions + client components per domain
-│   ├── src/lib/api/             #   the only outbound HTTP layer (gateway only)
-│   └── Dockerfile               #   standalone production image, non-root
-│
-├── observability/               # Telemetry configuration, provisioned on startup
-├── common-observability/        # Shared X-Request-Id filter and Feign interceptor
-├── common-security/             # Caller identity, access guard, denial handling
-├── eureka-server/               # Service discovery
-├── api-gateway/                 # Edge: routing, JWT filter, rate limiting
-├── user-service/                # Auth, JWT, 2FA, KYC, credit score
-├── application-service/         # Product application workflow
-├── account-service/             # Accounts, balances, overdraft
-├── transaction-service/         # Deposits, withdrawals, transfers
-├── payment-service/             # Beneficiaries, payments, recurring
-├── credit-card-service/         # Cards, interest, statements, rewards
-├── loan-service/                # Amortization, disbursement, repayment
-├── statistics-service/          # Kafka-fed aggregates, Redis cached
-├── notification-service/        # Kafka-fed customer alerts
-├── fraud-detection-service/     # Rules engine, Redis velocity, freeze
-├── integration-service/         # Wire/ACH/SWIFT stubs, FX
-│
-├── docs/                        # Architecture, security, testing and case-study documents
-├── docker/postgres/init-db.sql  # Creates one database per service
-├── .github/workflows/           # CI, CodeQL, security scan
-└── infrastructure/aws/          # Terraform: ECS, RDS, MSK, ElastiCache, ALB, WAF, Route 53
-```
-
-Each service follows the same layered package layout: `controller`, `service` plus `impl`,
-`repository`, `model`, `dto`, `mapper`, `kafka`, `config`, `exception`.
-
-</details>
-
----
-
-## Usage
-
-This repository is provided for portfolio and demonstration purposes only. All rights
-reserved. No permission is granted to copy, modify, redistribute, or reuse the source code
-without explicit written permission from the author.
-
-Copyright (c) 2026 Kalabe Kebede. All rights reserved.
+See [LICENSE](LICENSE) for the full terms.
