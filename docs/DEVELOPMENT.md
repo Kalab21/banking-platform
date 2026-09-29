@@ -114,13 +114,14 @@ Selected routes, all reached through the gateway on `:8080`:
 | `POST` | `/api/auth/register`, `/api/auth/login` | Obtain a JWT |
 | `POST` | `/api/auth/2fa/setup`, `/api/auth/2fa/verify` | TOTP enrolment and verification |
 | `GET` `POST` | `/api/accounts` | Open and list accounts |
-| `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement — requires `Idempotency-Key` |
-| `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments and beneficiaries (owner or staff) |
+| `POST` | `/api/transactions/deposit`, `/withdraw`, `/transfer` | Money movement — requires `Idempotency-Key`; withdraw and transfer-out are the account owner's only |
+| `POST` | `/api/payments`, `/api/payments/beneficiaries` | Payments (the payer account's owner only; requires `Idempotency-Key`) and beneficiaries (owner or staff) |
 | `POST` | `/api/applications` | Apply for an account, card or loan (for self; staff for anyone) |
 | `GET` | `/api/applications/{id}/offers` | The offer on an application (owner or staff) |
 | `POST` | `/api/applications/{id}/offer/accept`, `/offer/decline` | Answer the offer — the applicant only, no request body |
-| `PUT` | `/api/applications/{id}/review` | Decide a referred application — employee/admin only |
-| `GET` `POST` | `/api/loans/{id}/...`, `/api/credit-cards/{id}/...` | Detail, schedule, repayment, cash advance, card payment — owner or staff; writes require `Idempotency-Key`. Purchase is staff-only (simulated merchant) |
+| `PUT` | `/api/applications/{id}/review` | Decide a referred application — employee/admin only, never their own |
+| `GET` | `/api/applications/{id}/decisions` | Every decision on an application, with its reason codes — employee/admin only |
+| `GET` `POST` | `/api/loans/{id}/...`, `/api/credit-cards/{id}/...` | Reads (detail, schedule, repayments, statements) are owner or staff. Disburse, repay, payoff, cash advance and card payment are the borrower's or cardholder's only; repay, payoff and the card writes require `Idempotency-Key`. Purchase is staff-only (simulated merchant) |
 | `GET` | `/api/statistics/users/{id}` | A customer's own read models (owner or staff) |
 | `GET` | `/api/statistics/platform`, `/api/statistics/daily` | Platform-wide read models — employee/admin only |
 | `GET` | `/api/notifications` | Paginated user alerts (owner or staff) |
@@ -188,7 +189,8 @@ a static bundle.
 Hibernate verifies the schema at boot but never changes it.
 
 **An idempotency key on every money-movement request.** `POST /api/transactions/deposit`,
-`/withdraw` and `/transfer` require an `Idempotency-Key` header: an opaque,
+`/withdraw` and `/transfer`, `POST /api/payments`, loan repayment and payoff, and card
+payment, cash advance and purchase require an `Idempotency-Key` header: an opaque,
 client-generated value naming one logical operation. It is deliberately not
 derived from the amount, the accounts or the time, because two genuinely
 identical transfers a minute apart must both be able to succeed.

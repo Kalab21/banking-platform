@@ -13,7 +13,7 @@ across Spring Boot services and a Next.js customer console.
 **Core stack:** Java 17 · Spring Boot · Kafka · PostgreSQL · Redis · Next.js · React ·
 TypeScript · Docker · AWS/Terraform
 
-**Engineering proof:** 13 backend processes · 1262 CI tests · idempotent money movement ·
+**Engineering proof:** 13 backend processes · 1447 CI tests · idempotent money movement ·
 concurrency-safe balances · resource-level authorization · responsive customer banking UX
 
 > Portfolio demonstration using synthetic data. No real money and no production,
@@ -33,9 +33,13 @@ the running stack.
 |---|---|
 | ![Review step naming the amount and both accounts by their last four digits, above a single confirm button](docs/screenshots/23-move-money-review.png) | ![Receipt confirming a completed transfer with the reference the backend issued](docs/screenshots/24-move-money-receipt.png) |
 
-| My applications — an open offer | Staff review queue |
+| An application and its history | Staff review workbench |
 |---|---|
-| ![An offered personal loan showing the stored amount, APR, term and monthly payment above Accept and Decline](docs/screenshots/28-applications-offer.png) | ![The reviewer's queue of applications referred to manual review, with applicant score and requested amount](docs/screenshots/30-staff-application-queue.png) |
+| ![One application's page: a history of submitted, approved and offered with stored times, what the customer stated, and the offer's terms above Accept and Decline](docs/screenshots/33-application-detail.png) | ![A referred application with the applicant, what they stated, the policy's decision and reason code, and Approve or Reject](docs/screenshots/31-staff-review-workbench.png) |
+
+| Paying a loan | Paying a card |
+|---|---|
+| ![A loan page offering the rest of a part-paid instalment or another amount, and a payoff at today's figure](docs/screenshots/34-loan-payment.png) | ![A card page offering its current balance or another amount, paid from one of the customer's accounts](docs/screenshots/35-card-payment.png) |
 
 | Account detail | Profile & security |
 |---|---|
@@ -55,8 +59,8 @@ the running stack.
 
 ## Engineering highlights
 
-**Safe money movement.** Deposit, withdrawal and transfer require an `Idempotency-Key` tied
-to one logical operation. The console mints the key when the customer reaches the review
+**Safe money movement.** Deposits, withdrawals, transfers, payments, loan repayments and
+card payments require an `Idempotency-Key` tied to one logical operation. The console mints the key when the customer reaches the review
 step and reuses it for every attempt at that same payment, so a retry is the same operation
 rather than a second one.
 
@@ -141,7 +145,7 @@ Ports, databases and Kafka topics are also listed in
 | **Data** | PostgreSQL 16, database per service, Flyway migrations, `ddl-auto: validate`; Redis 7 for rate limits, velocity counters and read-model cache |
 | **Security** | JWT verified at the gateway, BCrypt, TOTP two-factor at sign-in, per-resource ownership and role checks in the services |
 | **Observability** | Micrometer to Prometheus and Grafana, Brave tracing to Zipkin, `X-Request-Id` correlation |
-| **Testing** | 1262 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 38 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
+| **Testing** | 1447 tests in CI (JUnit 5, Mockito, Testcontainers, Vitest, Playwright), plus 46 live-stack Playwright scenarios and a PowerShell full-stack suite on demand |
 | **Delivery** | Docker Compose, GitHub Actions CI, CodeQL + Trivy scanning, Terraform for AWS |
 
 <details>
@@ -177,15 +181,17 @@ Only capabilities implemented in this repository are listed.
 **Identity and onboarding** (`user-service`) — a five-step onboarding wizard collecting
 sign-in details, legal name and date of birth, a US residential address and identity
 details; registration and login issuing JWTs with BCrypt-hashed passwords; TOTP two-factor
-authentication (RFC 6238) enforced at sign-in; KYC document submission with employee review;
-credit score tracking updated from loan and card events; `CUSTOMER` / `EMPLOYEE` / `ADMIN`
-roles.
+authentication (RFC 6238) enforced at sign-in; KYC document submission, staff review of each
+document, and a staff identity decision that underwriting reads; credit score tracking
+updated from loan and card events; `CUSTOMER` / `EMPLOYEE` / `ADMIN` roles.
 
 **Accounts and money movement** (`account-service`, `transaction-service`,
 `payment-service`) — checking, savings and business accounts with overdraft protection and
-`FROZEN` / `CLOSED` states; deposit, withdrawal and transfer, each producing an immutable
-record with `balanceAfter` and a generated reference; beneficiaries, internal and external
-payments, and scheduled payments driven by a polling job.
+`FROZEN` / `CLOSED` states (only an empty account can be closed, and `OVERDRAWN` follows the
+balance); deposit, withdrawal and transfer, each producing an immutable record with
+`balanceAfter` and a generated reference, with a transfer's destination checked before the
+source is debited; beneficiaries; internal and external payments that debit the payer once;
+and scheduled and recurring payments driven by a polling job.
 
 **Credit applications** (`application-service`) — deterministic, versioned underwriting
 (score, debt-to-income, loan-to-value, amount and term limits) that approves, refuses or
@@ -195,8 +201,10 @@ declined by the applicant only; and provisioning that reads `PROVISIONED` only o
 card or loan service confirms the product it created.
 
 **Lending and cards** (`loan-service`, `credit-card-service`) — amortization schedule
-generation, disbursement, repayment and early payoff; card purchases, cash advances, daily
-interest accrual, monthly statements and rewards.
+generation, disbursement, repayment against the earliest unpaid instalment and early payoff,
+with a loan closing only when its principal is paid; card purchases (simulated by staff: there
+is no card network), cash advances, daily interest accrual that continues while a card is
+frozen, monthly statements and rewards points.
 
 **Risk and derived state** (`fraud-detection-service`, `statistics-service`,
 `notification-service`) — a rules engine with Redis-backed velocity counters that can freeze
@@ -207,15 +215,22 @@ All three are fed by Kafka.
 <summary><strong>More detail on the console, identity handling and the edge</strong></summary>
 
 **Console** (`frontend`) — two-step sign-in challenging for a TOTP code before any session
-cookie is written; customer views for dashboard, accounts, move money, transactions,
-payments, loans, cards (with a self-service freeze), Explore Credit, product applications,
-My Applications with offer accept/decline, notifications and profile; staff views for KYC review, the
-application queue and fraud alerts. Pages fetch through React Server Components and mutate
-through Server Actions, so the browser never holds a bearer token.
+cookie is written. Customer views: dashboard, accounts, move money, transactions, payments,
+loans (receive an approved loan, pay an instalment or any amount, pay off), cards (pay the
+minimum, the statement balance, the current balance or another amount; a self-service
+freeze), Explore Credit, a three-step application with a review of every answer, My
+Applications and each application's own page with a history built from stored events, offer
+accept and decline (each confirmed), notifications and profile. Staff views: KYC review with
+per-document decisions and an identity decision, the application queue, a workbench for each
+referred application showing the evidence and decision history, and fraud alerts. Pages fetch
+through React Server Components and mutate through Server Actions, so the browser never holds
+a bearer token.
 
 Moving money is its own route and its own journey: choose transfer, deposit or withdrawal,
 fill in the details, review exactly what is about to happen against masked accounts, and
-confirm once. The id sent as the `Idempotency-Key` is minted when the customer reaches the
+confirm once. Loan and card payments follow the same three steps, and their receipts show
+what the backend reports taking, which differs from the request when a payment is capped at
+what is owed. The id sent as the `Idempotency-Key` is minted when the customer reaches the
 review step and reused for every attempt at that same payment. A request whose outcome the
 platform cannot establish says so, claims neither success nor failure, offers no button that
 would send it again, and points at the transaction history.
@@ -226,9 +241,11 @@ label and a masked number rather than the account record.
 
 **Identity numbers.** Of the Social Security number given at onboarding, only the last four
 digits are kept: the server checks the format, derives those four digits and discards the
-rest. No column holds the whole number and no endpoint returns one. The identity status
-reads `SUBMITTED`, and nothing here ever reports an identity as verified — there is no
-verification provider behind this system, and passing a format check is not verification.
+rest. No column holds the whole number and no endpoint returns one. The identity-details
+record reads `SUBMITTED` and nothing automated ever marks it verified: there is no
+verification provider behind this system, and passing a format check is not verification. A
+customer's KYC status becomes `APPROVED` only when a member of staff reviews their documents
+and decides, and staff cannot decide their own.
 
 **External rails** (`integration-service`) — wire / ACH / SWIFT endpoints and FX conversion,
 modeling request, response and persistence shape only. A transfer is validated, checked
@@ -250,8 +267,8 @@ rate limiting keyed per client IP.
 | Authentication | JWT bearer tokens issued by `user-service`, signed HS256 |
 | Browser session | JWT held in an httpOnly, SameSite=Lax cookie; page JavaScript cannot read it |
 | Two-factor | TOTP (RFC 6238) enforced at sign-in: with 2FA enabled, a correct password alone issues no token |
-| Edge enforcement | The gateway validates the JWT before any route is reached, then overwrites any client-supplied `X-User-Id` / `X-Username` / `X-User-Role` |
-| Authorization | Each service authorizes against the resource's recorded owner; staff roles may act across customers only where a workflow requires it |
+| Edge enforcement | The gateway validates the JWT before any route is reached, then overwrites any client-supplied `X-User-Id` / `X-Username` / `X-User-Role`; on public paths it removes them |
+| Authorization | Each service authorizes against the resource's recorded owner. Staff may act across customers only where a workflow requires it, never to move money out of a customer's account, and never on decisions about themselves (their own application, identity, credit score, account status or overdraft) |
 | Internal operations | Direct balance mutation is service-to-service only, on `/internal/**`, which the gateway does not route |
 | Balance integrity | `SELECT ... FOR UPDATE` on every balance change; no lost update under concurrent debits |
 | Idempotency | `Idempotency-Key` on money movement, with a unique constraint and a request fingerprint |
@@ -276,14 +293,14 @@ remaining hardening candidates, including findings this project has not fixed �
 
 | Evidence | Result |
 |---|---:|
-| Backend — unit, web-slice and Testcontainers integration | 915 |
-| Frontend unit and component | 278 |
+| Backend — unit, web-slice and Testcontainers integration | 994 |
+| Frontend unit and component | 384 |
 | Offline Playwright (production build, no backend) | 69 |
-| **CI total** | **1262** |
-| Live Playwright against the running stack — on demand | 38 scenarios |
-| PowerShell full-stack suite — on demand | 155 / 155 |
+| **CI total** | **1447** |
+| Live Playwright against the running stack — on demand | 46 scenarios |
+| PowerShell full-stack suite — on demand | 185 / 185 |
 
-The backend total is 766 unit and web-slice tests plus 149 integration tests that run
+The backend total is 840 unit and web-slice tests plus 154 integration tests that run
 `@DataJpaTest` against a real PostgreSQL 16 container, so entity and migration drift fails
 the build and the concurrency and idempotency guarantees are proved against the database
 that enforces them. The live Playwright and PowerShell suites need all 13 backend processes
@@ -291,8 +308,8 @@ running, so they are triggered on demand rather than on every push, and are not 
 the CI total. Counts are test cases as the runners report them, not assertions.
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 766 unit + 149 integration = 915
-cd frontend && npm run test                  # frontend: 278 unit/component
+mvn -B --no-transfer-progress clean verify   # backend: 840 unit + 154 integration = 994
+cd frontend && npm run test                  # frontend: 384 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
 

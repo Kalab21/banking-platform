@@ -78,8 +78,10 @@ This is the property the rest of the model depends on, and it is covered by
 `GatewayIdentitySpoofingTest`, including under varied header casing.
 
 Public routes — `/api/auth/register`, `/api/auth/login`, actuator and the API docs
-— skip the filter and establish no identity. Protected routes in the services
-reject identity-less requests, so a public path is not a way in.
+— establish no identity. The filter still runs on them to remove any `X-User-*`
+headers the client wrote; they used to pass through unchanged, and a service behind
+a public path that trusted them would have taken them as real. Protected routes in
+the services reject identity-less requests, so a public path is not a way in.
 
 Because `/actuator` is one of those public paths, and because the gateway is the
 only service whose actuator sits on the public port, whatever the gateway
@@ -108,6 +110,7 @@ boolean fails open.
 | `requireStaff` | employee or admin |
 | `requireAdmin` | admin only |
 | `requireTargetUserAllowed` | a customer may act only for themselves; staff for anyone |
+| `requireStaffActingForAnother` | employee or admin, and never when the subject is the caller |
 
 ### What each principal may reach
 
@@ -116,22 +119,23 @@ boolean fails open.
 | Accounts, transactions, profile, KYC, per-user statistics | yes | **no** | yes | yes |
 | Payees, payments, notifications, applications | yes | **no** | yes | yes |
 | Loans: detail, schedule, repayments, payoff quote | yes | **no** | yes | yes |
-| Loans: repay, early payoff, disburse | own only | **no** | yes | yes |
+| Loans: receive, repay, early payoff | own only | **no** | **no** | **no** |
 | Cards: detail, transactions, statements | yes | **no** | yes | yes |
-| Cards: cash advance, payment | own only | **no** | yes | yes |
+| Cards: cash advance, payment | own only | **no** | **no** | **no** |
 | Cards: freeze and unfreeze (`ACTIVE` ↔ `CUSTOMER_FROZEN` only) | own only | **no** | yes, plus bank states | yes, plus bank states |
 | Cards: purchase (simulated merchant), statement generation | **no** | **no** | yes | yes |
 | Open an account, submit an application | for self | **no** | for anyone | for anyone |
 | Accept or decline a credit offer | own only | **no** | **no** | **no** |
-| Move money, pay from an account | from own accounts | **no** | — | — |
+| Withdraw, transfer out, pay from an account | from own accounts | **no** | **no** | **no** |
 | External transfer (wire / ACH / SWIFT): initiate | from own accounts | **no** | **no** | **no** |
 | External transfer: read by reference | yes | **no** | yes | yes |
 | Second factor: enrol, confirm, remove | own only | **no** | **no** | **no** |
 | Cancel an application, remove a payee | own only | **no** | yes | yes |
-| Freeze account, overdraft limit | **no** | **no** | yes | yes |
+| Account status, overdraft limit | **no** | **no** | yes, not their own | yes, not their own |
 | Platform and daily statistics | **no** | **no** | yes | yes |
-| KYC review, credit-score update | **no** | **no** | yes | yes |
-| Application queue by status, manual decision | **no** | **no** | yes | yes |
+| KYC document review and identity decision, credit-score update | **no** | **no** | yes, not their own | yes, not their own |
+| Application queue by status | **no** | **no** | yes | yes |
+| Manual decision on a referred application | **no** | **no** | yes, not their own | yes, not their own |
 | Fraud alerts: list, read, review | **no** | **no** | yes | yes |
 
 An id in a path or a `userId` in a request body is caller input. It is checked
@@ -173,8 +177,8 @@ IBAN, routing number and amount. It now resolves the owning user from
 `account-service` and authorises against it before the transfer is persisted,
 so a refused request writes no row and publishes no event.
 
-Sending and reading use **different** rules there, which is the one place this
-platform deliberately departs from `requireOwnerOrStaff` for an account
+Sending and reading use **different** rules there, which was the first place this
+platform deliberately departed from `requireOwnerOrStaff` for an account
 operation. Reading a transfer is owner-or-staff, matching transaction history.
 Initiating one is owner-only, including for employees and admins: an external
 transfer is the single action that moves money out of the bank along a rail
@@ -191,6 +195,18 @@ rule is `requireSelf` rather than `requireOwnerOrStaff`: an employee may review
 a customer's KYC documents because a workflow needs it, but no role needs to
 manage someone else's second factor, and a staff account that could remove one
 could take it off before signing in as that customer.
+
+A fourth pass, an audit of every controller, took the same reading for all money
+leaving an account. Withdrawals, transfers out and payments had been
+owner-or-staff on the source account, so an employee could send a customer's
+money to an account of their choosing; loan repayments and payoffs, cash
+advances and card payments were owner-or-staff too, so an employee could repay a
+customer's debt from the customer's own account. All of these are now the
+account holder's alone. The same audit found staff able to decide about
+themselves — approve their own credit application, set their own identity
+status or credit score, change their own account's status or overdraft limit —
+and those are refused by `requireStaffActingForAnother`. A member of staff who is
+also a customer is a customer for their own records.
 
 Fraud alerts are staff-only in every direction. An alert is a control applied to
 a customer, so the customer it names is not among the principals who may read or
@@ -241,6 +257,10 @@ then applies the same ownership check it would to the customer's own request.
 | Browser session | JWT in an httpOnly, SameSite=Lax cookie, never readable by page JavaScript |
 | What reaches the browser | A Server Component hands Client Components a narrowed view, not the API record. See below |
 | Rate limiting | Redis token bucket at the gateway, per client IP |
+| Money leaving an account | Only the account's owner can take money out of it: withdrawals, transfers out, payments, loan repayments and payoffs, and card payments are `requireSelf` against the stored owner. Staff can read, deposit and cancel, but an employee cannot move a customer's money to an account of their choosing |
+| Decisions about oneself | Approving a referred application, reviewing KYC documents, setting an identity status or credit score, and changing an account's status or overdraft limit are refused when the subject is the member of staff (`requireStaffActingForAnother`). Staff opening their own account cannot set its overdraft limit |
+| Reviewer attribution | A KYC review is recorded under the signed-in reviewer; any `reviewedBy` in the request body is ignored |
+| Username lookup | A customer is refused before the lookup for any name but their own, so a 404 cannot reveal which usernames exist |
 | Second-factor management | Enrolling, confirming and removing an authenticator are self-only — `AccessGuard.requireSelf`, not owner-or-staff. No role can take another account's second factor off |
 | Outward transfer rails | A wire, ACH or SWIFT transfer may only be initiated from an account the caller owns, resolved from `account-service` rather than read from the request. Staff are not exempt |
 | What travels on Kafka | Events carry identifiers and, where a message names something to a customer, a masked form. Never a full account number, PAN, SSN, password, token or TOTP secret. `ACCOUNT_CREATED` used to carry the full account number for no consumer; a contract test now asserts no event declares such a field |
@@ -251,7 +271,7 @@ then applies the same ownership check it would to the customer's own request.
 | Log injection | The request path is reduced to the RFC 3986 path alphabet before being logged |
 | Static analysis | CodeQL on Java and TypeScript; Trivy over dependencies, Dockerfiles and the base image |
 | Signing key | `JWT_SECRET` is required from the environment at runtime. No signing key is committed or used as a fallback: both services refuse to start without it, and reject a key shorter than 256 bits |
-| Repeated money movement | Deposits, withdrawals and transfers require an `Idempotency-Key`, recorded under a unique constraint with a fingerprint of the caller and the request. A repeat returns the original result; a concurrent duplicate executes once |
+| Repeated money movement | Deposits, withdrawals, transfers, payments, loan repayments and payoffs, and card payments require an `Idempotency-Key`, recorded under a unique constraint with a fingerprint of the caller and the request. A repeat returns the original result; a concurrent duplicate executes once |
 | Concurrent balance changes | The account row is read `SELECT ... FOR UPDATE` on every path that changes it, so two debits serialise and the second is checked against what the first left |
 
 ### Data minimization at the Server/Client boundary
@@ -301,11 +321,14 @@ would look like a protection without being one. A keyed HMAC with a secret held
 outside the database would be defensible, but only in aid of something that
 actually needs to match identities across records, and nothing here does.
 
-Nothing in this system verifies an identity. There is no verification provider
-behind it, so the stored status is `SUBMITTED`, the enum has no other value, and
-no screen reports an identity as verified. Passing a format check is not
-verification, and saying otherwise would be the product making a claim about
-itself that is not true.
+Nothing automated in this system verifies an identity. There is no verification
+provider behind it, so the identity-details record's status is `SUBMITTED` and its
+enum has no other value. Passing a format check is not verification, and saying
+otherwise would be the product making a claim about itself that is not true. What
+does exist is a person's decision: a member of staff reviews the submitted
+documents and sets the customer's KYC status to `APPROVED` or `REJECTED`. That is
+recorded under the reviewer, refused for their own identity, and it is what
+underwriting reads.
 
 ## A corrupted fraud counter is not evidence
 

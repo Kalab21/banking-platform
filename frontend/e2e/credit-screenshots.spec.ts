@@ -135,3 +135,93 @@ test("staff application queue", async ({ page, request }) => {
   await assertNothingSensitive(page);
   await page.screenshot({ path: `${OUT}/30-staff-application-queue.png`, fullPage: false });
 });
+
+/** A referred application from a fresh, unverified customer: the real route into review. */
+async function referredApplication(request: APIRequestContext) {
+  const stamp = Date.now().toString().slice(-8);
+  const reg = await request.post(`${GATEWAY}/api/auth/register`, {
+    data: {
+      username: `review.shot.${stamp}`, email: `review.shot.${stamp}@example.com`, password: PASSWORD,
+      firstName: "Jordan", lastName: "Lee", dateOfBirth: "1989-02-20", phone: "2405550152",
+      streetAddress: "3 Sample Lane", city: "Silver Spring", state: "MD", postalCode: "20910",
+      ssn: "123-45-6789",
+    },
+  });
+  expect(reg.ok()).toBe(true);
+  const customer = await reg.json();
+  const headers = { Authorization: `Bearer ${customer.token}` };
+  for (const [documentType, documentRef] of [["PASSPORT", `DEMO-PASSPORT-${stamp}`], ["PROOF_OF_ADDRESS", `DEMO-ADDRESS-${stamp}`]]) {
+    await request.post(`${GATEWAY}/api/users/${customer.userId}/kyc/documents`, { headers, data: { documentType, documentRef } });
+  }
+  const applied = await request.post(`${GATEWAY}/api/applications`, {
+    headers,
+    data: {
+      userId: customer.userId, applicationType: "PERSONAL_LOAN", currency: "USD", requestedAmount: 6000,
+      termMonths: 24, purpose: "Car repairs", annualIncome: 80000, monthlyDebtObligations: 400,
+    },
+  });
+  const application = await applied.json();
+  expect(application.status).toBe("MANUAL_REVIEW");
+  return { applicationId: application.id as number, userId: customer.userId as number };
+}
+
+test("staff review workbench for a referred application", async ({ page, request }) => {
+  const { applicationId } = await referredApplication(request);
+  const staff = await login(request, STAFF_USERNAME, STAFF_PASSWORD);
+  await openAs(page, staff.token, `/admin/applications/${applicationId}`);
+  await assertNothingSensitive(page);
+  await page.screenshot({ path: `${OUT}/31-staff-review-workbench.png`, fullPage: false });
+});
+
+test("staff identity review", async ({ page, request }) => {
+  const { userId } = await referredApplication(request);
+  const staff = await login(request, STAFF_USERNAME, STAFF_PASSWORD);
+  await openAs(page, staff.token, `/admin/kyc?userId=${userId}`);
+  await expect(page.getByText("Identity decision")).toBeVisible();
+  await assertNothingSensitive(page);
+  await page.screenshot({ path: `${OUT}/32-staff-kyc-review.png`, fullPage: false });
+});
+
+test("an application's own page with its history", async ({ page, request }) => {
+  const { token, userId, headers } = await login(request, USERNAME, PASSWORD);
+  const applied = await request.post(`${GATEWAY}/api/applications`, {
+    headers,
+    data: {
+      userId, applicationType: "PERSONAL_LOAN", currency: "USD", requestedAmount: 5000,
+      termMonths: 24, purpose: "Home office", annualIncome: 90000, monthlyDebtObligations: 450,
+    },
+  });
+  const application = await applied.json();
+  expect(application.status).toBe("OFFERED");
+  await openAs(page, token, `/applications/${application.id}`);
+  await expect(page.getByRole("list", { name: "Application history" })).toBeVisible();
+  await assertNothingSensitive(page);
+  await page.screenshot({ path: `${OUT}/33-application-detail.png`, fullPage: false });
+});
+
+test("paying a loan from the console", async ({ page, request }) => {
+  const { token, userId, headers } = await login(request, USERNAME, PASSWORD);
+  const loans: { id: number; status: string }[] = await (
+    await request.get(`${GATEWAY}/api/loans/user/${userId}`, { headers })
+  ).json();
+  const loan = loans.find((l) => l.status === "ACTIVE");
+  test.skip(!loan, "The seeded customer has no active loan.");
+  await openAs(page, token, `/loans/${loan!.id}`);
+  const form = page.getByTestId("loan-repay-form");
+  await form.scrollIntoViewIfNeeded();
+  await assertNothingSensitive(page);
+  await page.screenshot({ path: `${OUT}/34-loan-payment.png`, fullPage: false });
+});
+
+test("paying a card from the console", async ({ page, request }) => {
+  const { token, userId, headers } = await login(request, USERNAME, PASSWORD);
+  const cards: { id: number; status: string; currentBalance: number }[] = await (
+    await request.get(`${GATEWAY}/api/credit-cards/user/${userId}`, { headers })
+  ).json();
+  const card = cards.find((c) => c.status === "ACTIVE" && Number(c.currentBalance) > 0);
+  test.skip(!card, "The seeded customer has no active card with a balance.");
+  await openAs(page, token, `/cards/${card!.id}`);
+  await page.getByTestId("card-pay-form").scrollIntoViewIfNeeded();
+  await assertNothingSensitive(page);
+  await page.screenshot({ path: `${OUT}/35-card-payment.png`, fullPage: false });
+});
