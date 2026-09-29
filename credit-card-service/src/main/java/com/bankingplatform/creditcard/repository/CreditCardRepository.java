@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CreditCardRepository extends JpaRepository<CreditCard, Long> {
+    boolean existsByApplicationId(Long applicationId);
     List<CreditCard> findByUserId(Long userId);
     Optional<CreditCard> findByCardNumber(String cardNumber);
     List<CreditCard> findByStatus(CardStatus status);

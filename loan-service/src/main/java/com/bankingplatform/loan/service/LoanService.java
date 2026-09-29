@@ -23,4 +23,7 @@ public interface LoanService {
     PayoffQuoteResponse getPayoffQuote(Long loanId);
 
     void markMissedPayments();
+
+    /** Whether a loan has already been issued for this application. */
+    boolean existsForApplication(Long applicationId);
 }

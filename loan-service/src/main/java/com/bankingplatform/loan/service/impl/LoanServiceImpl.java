@@ -403,4 +403,10 @@ public class LoanServiceImpl implements LoanService {
         } while (repaymentRepository.existsByPaymentRef(ref));
         return ref;
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsForApplication(Long applicationId) {
+        return loanRepository.existsByApplicationId(applicationId);
+    }
 }

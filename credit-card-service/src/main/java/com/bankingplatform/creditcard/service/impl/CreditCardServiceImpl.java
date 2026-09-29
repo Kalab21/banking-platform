@@ -443,4 +443,10 @@ public class CreditCardServiceImpl implements CreditCardService {
         } while (cardRepository.existsByCardNumber(number));
         return number;
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsForApplication(Long applicationId) {
+        return cardRepository.existsByApplicationId(applicationId);
+    }
 }
