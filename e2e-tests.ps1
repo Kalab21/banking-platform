@@ -760,6 +760,9 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
     $mrApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="CREDIT_CARD"; currency="USD"; purpose="Manual review journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
     Assert "An unverified customer's credit application is referred" ($mrApp -and $mrApp.status -eq "MANUAL_REVIEW") "status=$($mrApp.status)"
     $MR_APP_ID = $mrApp.id
+    # A second referral, made now while the customer is still unverified; the
+    # flow below approves their identity, after which policy would decide it.
+    $rjApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=3000.00; termMonths=12; currency="USD"; purpose="Rejection journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
 
     if ($MR_APP_ID) {
         Assert-Refused "The applicant cannot resolve their own referral" "PUT" `
@@ -768,6 +771,20 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
 
         $mrDecisions = @(Get "$GW/api/applications/$MR_APP_ID/decisions" $STAFF_TOKEN)
         Assert "A reviewer sees why it was referred" (($mrDecisions | ForEach-Object { $_.reasonCodes }) -contains "KYC_REVIEW_REQUIRED")
+
+        # A reviewer may lend where the policy would not, but not to someone
+        # whose identity is unverified: the approval waits for the identity.
+        Assert-Refused "A reviewer cannot approve credit for an unverified customer" "PUT" `
+            "$GW/api/applications/$MR_APP_ID/review" $STAFF_TOKEN 409 @{ decision="APPROVE"; reviewerNotes="Too early" }
+        # And the identity itself is approved on evidence, not on its own.
+        Assert-Refused "An identity cannot be approved with no approved document" "PUT" `
+            "$GW/api/users/$OTHER_ID/kyc/status?status=APPROVED" $STAFF_TOKEN 400
+        $otherDoc = Post "$GW/api/users/$OTHER_ID/kyc/documents" @{ documentType="PASSPORT"; documentRef="s3://kyc-docs/passport-mr-$ts.jpg" } $OTHER_TOKEN
+        Assert-Refused "Staff cannot submit a document on a customer's behalf" "POST" `
+            "$GW/api/users/$OTHER_ID/kyc/documents" $STAFF_TOKEN 403 @{ documentType="PASSPORT"; documentRef="s3://kyc-docs/staff-upload-$ts.jpg" }
+        $null = Put "$GW/api/kyc/documents/$($otherDoc.id)/review" @{ status="APPROVED" } $STAFF_TOKEN
+        $otherKyc = Put "$GW/api/users/$OTHER_ID/kyc/status?status=APPROVED" $null $STAFF_TOKEN
+        Assert "The customer's identity is approved on an approved document" ($otherKyc -and $otherKyc.kycStatus -eq "APPROVED") "kyc=$($otherKyc.kycStatus)"
 
         $mrApproved = Put "$GW/api/applications/$MR_APP_ID/review" @{ decision="APPROVE"; reviewerNotes="Identity documents seen in branch" } $STAFF_TOKEN
         Assert "A reviewer's approval becomes an offer" ($mrApproved -and $mrApproved.status -eq "OFFERED") "status=$($mrApproved.status)"
@@ -795,7 +812,6 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
         Assert "The reviewed application reaches PROVISIONED with a real product id" ($mrDone.status -eq "PROVISIONED" -and $mrDone.productId -gt 0) "status=$($mrDone.status)"
     }
 
-    $rjApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=3000.00; termMonths=12; currency="USD"; purpose="Rejection journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
     Assert "A second referral for rejection" ($rjApp -and $rjApp.status -eq "MANUAL_REVIEW") "status=$($rjApp.status)"
     if ($rjApp.id) {
         $rejected = Put "$GW/api/applications/$($rjApp.id)/review" @{ decision="REJECT"; reviewerNotes="Could not verify identity" } $STAFF_TOKEN

@@ -27,7 +27,10 @@ public class KycController {
             @PathVariable Long userId,
             @Valid @RequestBody KycDocumentRequest request,
             CallerIdentity caller) {
-        AccessGuard.requireOwnerOrStaff(caller, userId);
+        // The customer submits their own evidence. Owner-or-staff let a member
+        // of staff upload a document for a customer and then approve it, one
+        // person doing both halves of the check.
+        AccessGuard.requireSelf(caller, userId);
         return ResponseEntity.status(201).body(kycService.submitDocument(userId, request));
     }
 

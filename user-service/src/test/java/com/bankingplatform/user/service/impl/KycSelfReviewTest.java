@@ -40,4 +40,53 @@ class KycSelfReviewTest {
                 .isInstanceOf(AccessDeniedException.class);
         verify(documents, never()).save(any());
     }
+
+    private static KycServiceImpl serviceWith(KycDocumentRepository documents,
+                                              com.bankingplatform.user.repository.UserRepository users) {
+        return new KycServiceImpl(documents, users,
+                Mockito.mock(com.bankingplatform.user.mapper.UserMapper.class),
+                Mockito.mock(com.bankingplatform.user.kafka.producer.UserEventProducer.class));
+    }
+
+    @Test
+    @DisplayName("an identity cannot be approved with no approved document")
+    void identityApprovalNeedsEvidence() {
+        // APPROVED used to be accepted for a customer who had submitted nothing.
+        KycDocumentRepository documents = Mockito.mock(KycDocumentRepository.class);
+        com.bankingplatform.user.repository.UserRepository users =
+                Mockito.mock(com.bankingplatform.user.repository.UserRepository.class);
+        com.bankingplatform.user.model.User user = new com.bankingplatform.user.model.User();
+        user.setId(42L);
+        when(users.findById(42L)).thenReturn(Optional.of(user));
+        KycDocument submitted = new KycDocument();
+        submitted.setUserId(42L);
+        submitted.setStatus(DocumentStatus.SUBMITTED);
+        when(documents.findByUserId(42L)).thenReturn(java.util.List.of(submitted));
+
+        assertThatThrownBy(() -> serviceWith(documents, users)
+                        .updateKycStatus(42L, com.bankingplatform.user.model.KycStatus.APPROVED))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(users, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("an identity can be approved once a document is")
+    void identityApprovalWithEvidence() {
+        KycDocumentRepository documents = Mockito.mock(KycDocumentRepository.class);
+        com.bankingplatform.user.repository.UserRepository users =
+                Mockito.mock(com.bankingplatform.user.repository.UserRepository.class);
+        com.bankingplatform.user.model.User user = new com.bankingplatform.user.model.User();
+        user.setId(42L);
+        when(users.findById(42L)).thenReturn(Optional.of(user));
+        when(users.save(any())).thenAnswer(i -> i.getArgument(0));
+        KycDocument approved = new KycDocument();
+        approved.setUserId(42L);
+        approved.setStatus(DocumentStatus.APPROVED);
+        when(documents.findByUserId(42L)).thenReturn(java.util.List.of(approved));
+
+        serviceWith(documents, users).updateKycStatus(42L, com.bankingplatform.user.model.KycStatus.APPROVED);
+
+        org.assertj.core.api.Assertions.assertThat(user.getKycStatus())
+                .isEqualTo(com.bankingplatform.user.model.KycStatus.APPROVED);
+    }
 }

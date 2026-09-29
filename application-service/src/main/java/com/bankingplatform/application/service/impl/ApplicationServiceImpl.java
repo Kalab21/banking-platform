@@ -180,6 +180,18 @@ public class ApplicationServiceImpl implements ApplicationService {
         // policy's is. Without this the audit trail would explain every
         // automatic outcome and none of the human ones, which is the wrong way
         // round: a person's judgement is the part worth being able to review.
+        // A person may lend where the policy would not, but not to someone
+        // whose identity is unverified. Policy refers those applications, and
+        // a reviewer's approval used to go straight through, priced with no
+        // identity check at all.
+        String kycAtReview = null;
+        if (request.getDecision() == ReviewDecision.APPROVE && isCredit(application.getApplicationType())) {
+            kycAtReview = userClient.getUserById(application.getUserId()).getKycStatus();
+            if (!"APPROVED".equals(kycAtReview)) {
+                throw new ApplicationException("The customer's identity is not verified (KYC " + kycAtReview
+                        + "). Approve their identity before approving credit.");
+            }
+        }
         BigDecimal reviewerApproved = request.getDecision() == ReviewDecision.APPROVE
                 ? approvedAmount(application, request) : null;
         // A reviewer's approval is priced by the same policy as an automatic
@@ -195,7 +207,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                         List.of(ReasonCode.MANUAL_REVIEW_REQUIRED),
                         reviewerApproved, null, null, underwriting.policyVersion(), reviewerTerms),
                 DecisionSnapshot.DecidedBy.REVIEWER, CallerContext.userId().orElse(null),
-                application.getCreditScoreAtApply(), null);
+                application.getCreditScoreAtApply(), kycAtReview);
 
         switch (request.getDecision()) {
             case REFER -> {
@@ -417,5 +429,10 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .actorType(CallerContext.actor())
                 .details(details)
                 .build());
+    }
+
+    private static boolean isCredit(ApplicationType type) {
+        return type == ApplicationType.CREDIT_CARD || type == ApplicationType.PERSONAL_LOAN
+                || type == ApplicationType.AUTO_LOAN || type == ApplicationType.MORTGAGE;
     }
 }

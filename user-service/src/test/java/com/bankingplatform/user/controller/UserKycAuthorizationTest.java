@@ -191,6 +191,18 @@ class UserKycAuthorizationTest {
         }
 
         @Test
+        @DisplayName("staff cannot submit a document on a customer's behalf")
+        void staffCannotSubmitForACustomer() throws Exception {
+            // Otherwise one person could upload the evidence and approve it.
+            kyc.perform(as(post("/api/users/{userId}/kyc/documents", CUSTOMER_A), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"documentType\":\"PASSPORT\",\"documentRef\":\"X\"}"))
+                    .andExpect(status().isForbidden());
+
+            verify(kycService, never()).submitDocument(anyLong(), any());
+        }
+
+        @Test
         @DisplayName("a customer cannot read another customer's KYC status")
         void foreignStatusDenied() throws Exception {
             kyc.perform(as(get("/api/users/{userId}/kyc", CUSTOMER_B), CUSTOMER_A, "CUSTOMER"))

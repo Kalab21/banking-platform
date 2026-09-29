@@ -18,12 +18,18 @@ export function ReviewDecisionForm({
   requestedAmount,
   currency,
   open,
+  identityApproved,
 }: {
   applicationId: number;
   requestedAmount: number | null;
   currency: string;
   /** Whether the application is still waiting on a reviewer. */
   open: boolean;
+  /**
+   * Whether the customer's identity check is approved. The backend refuses to
+   * approve credit without it, so the button says so instead of failing.
+   */
+  identityApproved: boolean;
 }) {
   const [state, action, pending] = useActionState(reviewApplicationAction, INITIAL);
   const [decision, setDecision] = useState<"APPROVE" | "REJECT" | null>(null);
@@ -77,7 +83,7 @@ export function ReviewDecisionForm({
         </div>
       ) : (
         <div key="choose" className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => setDecision("APPROVE")}>
+          <Button type="button" onClick={() => setDecision("APPROVE")} disabled={!identityApproved}>
             Approve
           </Button>
           <Button type="button" variant="secondary" onClick={() => setDecision("REJECT")}>
@@ -85,6 +91,11 @@ export function ReviewDecisionForm({
           </Button>
         </div>
       )}
+      {!identityApproved ? (
+        <p className="text-sm text-ink-muted">
+          Approve the customer&apos;s identity before approving credit. You can still reject.
+        </p>
+      ) : null}
       <p className="text-xs text-ink-subtle">
         Approval makes an offer priced by the lending policy. It does not create a card or a loan:
         the customer reviews the terms and decides.

@@ -210,6 +210,7 @@ export default async function AdminApplicationPage({ params }: { params: Promise
             requestedAmount={application.requestedAmount}
             currency={c}
             open={application.status === "MANUAL_REVIEW"}
+            identityApproved={applicant.kycStatus === "APPROVED"}
           />
         </CardBody>
       </Card>
