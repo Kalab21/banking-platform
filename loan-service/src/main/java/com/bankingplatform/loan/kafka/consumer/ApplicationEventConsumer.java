@@ -103,6 +103,17 @@ public class ApplicationEventConsumer {
                 ? approved.offeredTermMonths()
                 : resolveTermMonths(approved.productType()));
 
+        // Checked first. Relying on the unique index alone did not work: the
+        // violation is raised inside the service's own transaction, which
+        // marks the listener's transaction rollback-only, so the catch below
+        // returned and the commit then failed. A second approval for the same
+        // application was retried and dead-lettered instead of being ignored.
+        // The catch stays for the race between two deliveries.
+        if (loanService.existsForApplication(approved.applicationId())) {
+            log.info("A loan already exists for application {}; treating event {} as already handled",
+                    approved.applicationId(), approved.eventId());
+            return;
+        }
         try {
             loanService.createLoan(request);
         } catch (DataIntegrityViolationException alreadyIssued) {

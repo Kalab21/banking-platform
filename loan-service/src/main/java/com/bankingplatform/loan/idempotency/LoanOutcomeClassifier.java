@@ -28,7 +28,11 @@ public class LoanOutcomeClassifier implements OutcomeClassifier {
         if (failure instanceof ResourceNotFoundException
                 || failure instanceof LoanNotActiveException
                 || failure instanceof IllegalStateException
-                || failure instanceof IllegalArgumentException) {
+                || failure instanceof IllegalArgumentException
+                // The funding account belongs to someone else: refused by the
+                // ownership check before any account was touched. It used to
+                // settle the key as UNKNOWN, so every retry answered 504.
+                || failure instanceof com.bankingplatform.common.security.AccessDeniedException) {
             return true;
         }
 

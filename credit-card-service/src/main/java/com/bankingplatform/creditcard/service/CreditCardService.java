@@ -24,4 +24,7 @@ public interface CreditCardService {
     List<CreditCardStatementResponse> getStatements(Long cardId);
 
     void chargeInterest();
+
+    /** Whether a card has already been issued for this application. */
+    boolean existsForApplication(Long applicationId);
 }

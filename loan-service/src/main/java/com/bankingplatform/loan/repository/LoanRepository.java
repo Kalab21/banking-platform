@@ -13,6 +13,7 @@ import java.util.Optional;
 
 public interface LoanRepository extends JpaRepository<Loan, Long> {
     List<Loan> findByUserId(Long userId);
+    boolean existsByApplicationId(Long applicationId);
     List<Loan> findByStatus(LoanStatus status);
     List<Loan> findByUserIdAndStatus(Long userId, LoanStatus status);
 

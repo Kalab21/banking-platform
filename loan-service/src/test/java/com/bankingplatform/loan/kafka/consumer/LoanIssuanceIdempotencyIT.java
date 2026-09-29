@@ -170,6 +170,20 @@ class LoanIssuanceIdempotencyIT {
     }
 
     @Test
+    @DisplayName("a re-approval for an application that already has a loan never reaches createLoan")
+    void reApprovalIsCheckedBeforeInsert() {
+        // Relying on the index alone failed in production: the violation is
+        // raised inside the service's transaction, which marks the listener's
+        // rollback-only, so the "already issued" catch returned and the commit
+        // then threw. The consumer now asks first.
+        Mockito.when(loanService.existsForApplication(7003L)).thenReturn(true);
+
+        deliver(approval(7003L));
+
+        verify(loanService, Mockito.never()).createLoan(any(CreateLoanRequest.class));
+    }
+
+    @Test
     @DisplayName("concurrent duplicate deliveries issue one loan")
     void concurrentDuplicatesIssueOneLoan() throws Exception {
         ApplicationApproved approved = approval(7003L);

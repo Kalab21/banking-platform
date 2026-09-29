@@ -99,7 +99,11 @@ public class CreditCardController {
         // caller may put it in. A cardholder may freeze and unfreeze their own
         // card and nothing else — a block or a default is the bank's, and
         // staff act under a different table of moves.
-        return ResponseEntity.ok(creditCardService.updateStatus(cardId, request, caller.isStaff()));
+        // For their own card, staff are the cardholder: an employee whose card
+        // the bank blocked could otherwise lift the block themselves.
+        boolean actingAsBank = caller.isStaff()
+                && !caller.isSelf(creditCardService.getCard(cardId).getUserId());
+        return ResponseEntity.ok(creditCardService.updateStatus(cardId, request, actingAsBank));
     }
 
     @PostMapping("/{cardId}/purchase")

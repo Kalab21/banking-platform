@@ -171,6 +171,31 @@ class CreditCardAuthorizationTest {
     @DisplayName("acting on a card")
     class Writing {
 
+        @Test
+        @DisplayName("a member of staff acts as a cardholder, not the bank, on their own card")
+        void staffAreCardholdersForTheirOwnCard() throws Exception {
+            // An employee whose card the bank blocked could otherwise lift the block.
+            cardBelongsTo(STAFF);
+            mvc.perform(as(put("/api/credit-cards/{id}/status", CARD_OF_A), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"ACTIVE\"}"))
+                    .andExpect(status().isOk());
+            verify(creditCardService).updateStatus(org.mockito.ArgumentMatchers.eq(CARD_OF_A), any(),
+                    org.mockito.ArgumentMatchers.eq(false));
+        }
+
+        @Test
+        @DisplayName("a member of staff acts as the bank on a customer's card")
+        void staffAreTheBankForACustomersCard() throws Exception {
+            cardBelongsTo(CUSTOMER_A);
+            mvc.perform(as(put("/api/credit-cards/{id}/status", CARD_OF_A), STAFF, "EMPLOYEE")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"SYSTEM_BLOCKED\"}"))
+                    .andExpect(status().isOk());
+            verify(creditCardService).updateStatus(org.mockito.ArgumentMatchers.eq(CARD_OF_A), any(),
+                    org.mockito.ArgumentMatchers.eq(true));
+        }
+
         @org.junit.jupiter.params.ParameterizedTest(name = "staff cannot make a {0} on a customer's card")
         @org.junit.jupiter.params.provider.ValueSource(strings = {"payment", "cash-advance"})
         void staffCannotMoveTheCardholdersMoney(String action) throws Exception {
