@@ -52,9 +52,9 @@ public class PaymentController {
         // *from* one is not, so only the payer account is checked -- and only
         // its owner may pay from it, staff included.
         AccountResponse payer = ownership.requireCanPayFrom(caller, request.getPayerAccountId());
-        // A payment is in the paying account's currency; nothing converts. One
-        // naming no currency used to be stored as USD whatever the account
-        // held, and one naming another was stored under that name.
+        // A payment is in the paying account's currency; nothing converts. A
+        // stated currency must match it, and a missing one takes the account's,
+        // so the record never names a currency the money did not move in.
         String held = payer.getCurrency();
         if (request.getCurrency() != null && !request.getCurrency().isBlank() && held != null
                 && !held.equalsIgnoreCase(request.getCurrency().trim())) {
@@ -63,14 +63,13 @@ public class PaymentController {
         if (held != null) {
             request.setCurrency(held);
         }
-        // The payee must be one of the payer's own saved payees. The id used to
-        // be stored unchecked, so a payment could name another customer's.
+        // The payee must be one of the payer's own saved payees, never another
+        // customer's.
         if (request.getBeneficiaryId() != null) {
             AccessGuard.requireSelf(caller, beneficiaryService.getById(request.getBeneficiaryId()).getUserId());
         }
-        // A payment that executes immediately moves money in this request, and
-        // each request used to mint a new reference: a retry after a lost
-        // response paid twice. One key, one payment.
+        // A payment that executes immediately moves money in this request, so a
+        // retry after a lost response must not pay again. One key, one payment.
         return idempotency.execute(idempotencyKey, "PAYMENT", caller, request,
                 PaymentResponse.class, PaymentResponse::getPaymentRef,
                 () -> paymentService.createPayment(request));

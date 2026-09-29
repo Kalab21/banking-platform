@@ -441,31 +441,3 @@ against the running stack with a seeded synthetic customer.
 | `33-application-detail.png` | An application's own page, its history built only from stored timestamps |
 | `34-loan-payment.png` | Paying what is left of a part-paid instalment, or paying the loan off |
 | `35-card-payment.png` | Paying a card: the amounts it owes, or another amount |
-
-## Interview Talking Points
-
-- Ran a final audit against the code rather than the tests, and found money
-  being created: a loan payoff of 0.01 with no funding account closed the whole
-  loan, and a deposit into an overdrawn account was counted twice. Both were
-  pinned in place by tests asserting the wrong behaviour; the fix replaced them
-  with a conservation invariant (net position moves by exactly the amount).
-- Found that scheduled payments had never executed: the timer had no caller
-  identity, so every transfer was refused and marked failed. Fixed by running
-  the transfer as the stored payer, proved live by waiting for the scheduler.
-
-- Found and fixed two rounds of broken object-level authorization, the second in
-  services that had no authorization code at all; confirmed live with a second
-  customer before writing the fix, and covered it with HTTP-boundary tests that
-  assert the service is never reached.
-- Made an idempotency contract actually hold by fixing the client: the key is
-  minted per logical operation, not per attempt.
-- Handled the third outcome — a money request whose result is unknown — with
-  wording and UI that will not cause a second payment.
-- Stopped raw account numbers reaching the browser through the RSC payload, a
-  leak that is invisible on screen and obvious in view-source.
-- Used a pessimistic row lock for concurrent balance changes, and proved it with
-  concurrent writes against a real PostgreSQL.
-- Reduced a Social Security number to four digits at the boundary and argued
-  against storing a hash of the rest.
-- Corrected a test suite that had been printing failures and exiting zero, and
-  replaced fixed sleeps for Kafka with bounded polling.
