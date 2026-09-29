@@ -237,9 +237,9 @@ export function repayLoan(
 }
 
 /**
- * Settles the whole loan. The backend works out the amount itself at the moment
- * of payoff and ignores `amount` beyond validating it, so the quote on screen is
- * what is sent, and the receipt reports what was actually taken.
+ * Settles the whole loan at the quoted figure. `amount` is the figure the
+ * customer confirmed; the backend takes exactly that, or refuses with 422 and
+ * the new figure if the balance moved since the quote.
  */
 export function payOffLoan(
   loanId: number,

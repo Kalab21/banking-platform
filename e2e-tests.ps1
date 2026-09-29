@@ -574,6 +574,13 @@ if ($loans -and $loans.Count -gt 0) {
     $quote = Get "$GW/api/loans/$LOAN_ID/payoff-quote" $TOKEN
     Assert "Payoff quote returned" ($quote -ne $null)
     Write-Host "  Payoff amount=$($quote.totalPayoffAmount)"
+    # A payoff takes only the figure the customer confirmed: one cent off
+    # today's figure is refused before any debit, and the loan stays open.
+    $stale = [decimal]$quote.totalPayoffAmount + [decimal]0.01
+    Assert-Refused "A payoff at a figure other than today's is refused" "POST" `
+        "$GW/api/loans/$LOAN_ID/payoff" $TOKEN 422 @{ amount=$stale; sourceAccountId=$ACCOUNT_ID }
+    $stillOpen = Get "$GW/api/loans/$LOAN_ID" $TOKEN
+    Assert "The loan is still active after the refused payoff" ($stillOpen -and $stillOpen.status -eq "ACTIVE") "status=$($stillOpen.status)"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

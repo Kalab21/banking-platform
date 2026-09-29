@@ -253,6 +253,16 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal accruedInterest = principalPaid.multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
         BigDecimal payoffAmount = principalPaid.add(accruedInterest);
 
+        // The customer confirmed a figure; that is the only figure taken. If
+        // the balance moved since the quote (a repayment from another tab, a
+        // scheduled instalment), the payoff is refused before any debit rather
+        // than taking an amount nobody agreed to. A stated amount below the
+        // figure is refused the same way, so it cannot close the loan cheaply.
+        if (request.getAmount().compareTo(payoffAmount) != 0) {
+            throw new IllegalStateException("The payoff figure is now " + payoffAmount
+                    + ". Review the new figure and confirm again.");
+        }
+
         String payoffRef = generateRef();
 
         accountClient.debit(request.getSourceAccountId(), "loan-" + payoffRef,
