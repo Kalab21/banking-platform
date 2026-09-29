@@ -760,6 +760,9 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
     $mrApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="CREDIT_CARD"; currency="USD"; purpose="Manual review journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
     Assert "An unverified customer's credit application is referred" ($mrApp -and $mrApp.status -eq "MANUAL_REVIEW") "status=$($mrApp.status)"
     $MR_APP_ID = $mrApp.id
+    # A second referral, made now while the customer is still unverified; the
+    # flow below approves their identity, after which policy would decide it.
+    $rjApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=3000.00; termMonths=12; currency="USD"; purpose="Rejection journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
 
     if ($MR_APP_ID) {
         Assert-Refused "The applicant cannot resolve their own referral" "PUT" `
@@ -809,7 +812,6 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
         Assert "The reviewed application reaches PROVISIONED with a real product id" ($mrDone.status -eq "PROVISIONED" -and $mrDone.productId -gt 0) "status=$($mrDone.status)"
     }
 
-    $rjApp = Post "$GW/api/applications" @{ userId=$OTHER_ID; applicationType="PERSONAL_LOAN"; requestedAmount=3000.00; termMonths=12; currency="USD"; purpose="Rejection journey"; annualIncome=90000.00; monthlyDebtObligations=450.00 } $OTHER_TOKEN
     Assert "A second referral for rejection" ($rjApp -and $rjApp.status -eq "MANUAL_REVIEW") "status=$($rjApp.status)"
     if ($rjApp.id) {
         $rejected = Put "$GW/api/applications/$($rjApp.id)/review" @{ decision="REJECT"; reviewerNotes="Could not verify identity" } $STAFF_TOKEN
