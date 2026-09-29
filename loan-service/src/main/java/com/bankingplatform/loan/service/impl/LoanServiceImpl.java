@@ -102,7 +102,7 @@ public class LoanServiceImpl implements LoanService {
         // Checked before the state rules, so a refusal never depends on the
         // state of the attacker's own loan.
         accountOwnership.requireOwnedBy(request.getDisbursementAccountId(), loan.getUserId(),
-                "disbursement");
+                "disbursement", loan.getCurrency());
 
         if (loan.getStatus() != LoanStatus.PENDING) {
             throw new LoanNotActiveException("Loan not in PENDING state: " + loan.getStatus());
@@ -149,7 +149,8 @@ public class LoanServiceImpl implements LoanService {
 
         // Authorization before business rules, so a refusal never depends on
         // the state of the attacker's own loan.
-        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source",
+                loan.getCurrency());
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -239,7 +240,8 @@ public class LoanServiceImpl implements LoanService {
 
         // Authorization before business rules, so a refusal never depends on
         // the state of the attacker's own loan.
-        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source",
+                loan.getCurrency());
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }

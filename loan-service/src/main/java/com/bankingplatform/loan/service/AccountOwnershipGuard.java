@@ -2,6 +2,7 @@ package com.bankingplatform.loan.service;
 
 import com.bankingplatform.loan.client.AccountClient;
 import com.bankingplatform.loan.client.AccountOwnerView;
+import com.bankingplatform.loan.exception.AccountCurrencyMismatchException;
 import lombok.RequiredArgsConstructor;
 import com.bankingplatform.common.security.AccessDeniedException;
 import org.springframework.stereotype.Component;
@@ -33,7 +34,7 @@ public class AccountOwnershipGuard {
      * of somebody else's account is not something this path should allow
      * anyone to do.
      */
-    public void requireOwnedBy(Long accountId, Long ownerUserId, String what) {
+    public AccountOwnerView requireOwnedBy(Long accountId, Long ownerUserId, String what) {
         if (accountId == null) {
             // Fail closed. Every money path through here needs an account, and
             // a missing one used to skip both this check and the debit.
@@ -45,6 +46,22 @@ public class AccountOwnershipGuard {
             // Deliberately says nothing about whether the account exists.
             throw new AccessDeniedException(
                     "The " + what + " account does not belong to this customer");
+        }
+        return account;
+    }
+
+    /**
+     * As {@link #requireOwnedBy(Long, Long, String)}, and the account must hold
+     * the loan's currency. Nothing converts: without this, a EUR account
+     * paid a USD loan one for one, and the ledger on each side named a
+     * different currency for the same money.
+     */
+    public void requireOwnedBy(Long accountId, Long ownerUserId, String what, String currency) {
+        AccountOwnerView account = requireOwnedBy(accountId, ownerUserId, what);
+        if (currency != null && account.getCurrency() != null
+                && !account.getCurrency().equalsIgnoreCase(currency)) {
+            throw new AccountCurrencyMismatchException("The " + what + " account holds "
+                    + account.getCurrency() + "; this loan is in " + currency);
         }
     }
 }

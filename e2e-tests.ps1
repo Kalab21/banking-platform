@@ -563,6 +563,18 @@ if ($loans -and $loans.Count -gt 0) {
     # Make a regular repayment
     $repay = Post "$GW/api/loans/$LOAN_ID/repay" @{ amount=$loan.monthlyPayment; sourceAccountId=$ACCOUNT_ID } $TOKEN
     Assert "Loan repayment made" ($repay -ne $null)
+    # Nothing converts: a USD loan cannot be repaid from a EUR account one for
+    # one. Refused before any debit, and the EUR account keeps its balance.
+    $eurApp = Post "$GW/api/applications" @{ userId=$USER_ID; applicationType="SAVINGS_ACCOUNT"; currency="EUR" } $TOKEN
+    $EUR_ACCOUNT_ID = $eurApp.productId
+    Assert "A EUR account opens for the currency check" ($EUR_ACCOUNT_ID -and $EUR_ACCOUNT_ID -gt 0)
+    if ($EUR_ACCOUNT_ID) {
+        $null = Post "$GW/api/transactions/deposit" @{ accountId=$EUR_ACCOUNT_ID; amount=50.00; description="EUR funds" } $TOKEN
+        Assert-Refused "A USD loan cannot be repaid from a EUR account" "POST" `
+            "$GW/api/loans/$LOAN_ID/repay" $TOKEN 422 @{ amount=10.00; sourceAccountId=$EUR_ACCOUNT_ID }
+        $eurAfter = Get "$GW/api/accounts/$EUR_ACCOUNT_ID" $TOKEN
+        Assert "The EUR account was not debited" ($eurAfter -and [decimal]$eurAfter.balance -eq 50.00) "balance=$($eurAfter.balance)"
+    }
     # A payment below the instalment used to leave it PARTIAL for good, and the
     # loan closed once none was PENDING -- with the principal still owed.
     $beforeTiny = Get "$GW/api/loans/$LOAN_ID" $TOKEN

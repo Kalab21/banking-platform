@@ -669,6 +669,28 @@ class LoanServiceImplTest {
         }
     }
 
+    // ------------------------------------------------------------ funding currency
+
+    /**
+     * Regression test: the funding account was checked for its owner only, so
+     * a repayment or payoff could be taken from an account in another
+     * currency. Each call now names the loan's currency to the guard.
+     */
+    @Test
+    @DisplayName("a repayment and a payoff each require an account in the loan's currency")
+    void fundingAccountMustHoldTheLoansCurrency() {
+        when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+        org.mockito.Mockito.doThrow(new com.bankingplatform.loan.exception.AccountCurrencyMismatchException("EUR"))
+                .when(accountOwnership).requireOwnedBy(ACCOUNT_ID, USER_ID, "source", "USD");
+
+        assertThatThrownBy(() -> loanService.makeRepayment(LOAN_ID, repaymentRequest("100.00", ACCOUNT_ID)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> loanService.earlyPayoff(LOAN_ID, repaymentRequest("9235.29", ACCOUNT_ID)))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
+    }
+
     // ------------------------------------------------------------ payoff quote
 
     @Nested

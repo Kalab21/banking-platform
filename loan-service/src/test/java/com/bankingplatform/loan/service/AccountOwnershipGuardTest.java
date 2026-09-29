@@ -99,4 +99,40 @@ class AccountOwnershipGuardTest {
                 .isInstanceOf(AccessDeniedException.class);
         Mockito.verifyNoInteractions(accountClient);
     }
+
+    /**
+     * Regression tests: nothing converts, and the funding account's currency
+     * was never compared with the product's, so a EUR account paid a USD
+     * product one for one.
+     */
+    @Test
+    @DisplayName("an account in another currency is refused")
+    void accountInAnotherCurrencyRefused() {
+        when(accountClient.getAccount(ACCOUNT)).thenAnswer(i -> {
+            AccountOwnerView view = new AccountOwnerView();
+            view.setId(ACCOUNT);
+            view.setUserId(BORROWER);
+            view.setCurrency("EUR");
+            return view;
+        });
+
+        assertThatThrownBy(() -> guard.requireOwnedBy(ACCOUNT, BORROWER, "source", "USD"))
+                .isInstanceOf(com.bankingplatform.loan.exception.AccountCurrencyMismatchException.class)
+                .hasMessageContaining("EUR");
+    }
+
+    @Test
+    @DisplayName("an own account in the product's currency is allowed")
+    void accountInTheSameCurrencyAllowed() {
+        when(accountClient.getAccount(ACCOUNT)).thenAnswer(i -> {
+            AccountOwnerView view = new AccountOwnerView();
+            view.setId(ACCOUNT);
+            view.setUserId(BORROWER);
+            view.setCurrency("USD");
+            return view;
+        });
+
+        assertThatCode(() -> guard.requireOwnedBy(ACCOUNT, BORROWER, "source", "usd"))
+                .doesNotThrowAnyException();
+    }
 }

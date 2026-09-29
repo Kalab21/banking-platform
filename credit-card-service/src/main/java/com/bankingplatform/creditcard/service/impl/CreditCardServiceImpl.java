@@ -152,7 +152,8 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         // Authorization before business rules, so a refusal never depends on
         // the state of the attacker's own card.
-        accountOwnership.requireOwnedBy(request.getTargetAccountId(), card.getUserId(), "target");
+        accountOwnership.requireOwnedBy(request.getTargetAccountId(), card.getUserId(), "target",
+                card.getCurrency());
         requireActive(card);
 
         BigDecimal fee = request.getAmount().multiply(CASH_ADVANCE_FEE_RATE).setScale(2, RoundingMode.HALF_UP);
@@ -191,7 +192,8 @@ public class CreditCardServiceImpl implements CreditCardService {
         // would depend on the state of the attacker's own card: a card with
         // nothing owing answered "no balance to pay" and never reached the
         // ownership check at all.
-        accountOwnership.requireOwnedBy(request.getSourceAccountId(), card.getUserId(), "source");
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), card.getUserId(), "source",
+                card.getCurrency());
 
         BigDecimal payAmount = request.getAmount().min(card.getCurrentBalance());
         if (payAmount.compareTo(BigDecimal.ZERO) <= 0) {
