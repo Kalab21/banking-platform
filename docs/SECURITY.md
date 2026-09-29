@@ -272,6 +272,7 @@ then applies the same ownership check it would to the customer's own request.
 | Static analysis | CodeQL on Java and TypeScript; Trivy over dependencies, Dockerfiles and the base image |
 | Signing key | `JWT_SECRET` is required from the environment at runtime. No signing key is committed or used as a fallback: both services refuse to start without it, and reject a key shorter than 256 bits |
 | Repeated money movement | Deposits, withdrawals, transfers, payments, loan repayments and payoffs, and card payments require an `Idempotency-Key`, recorded under a unique constraint with a fingerprint of the caller and the request. A repeat returns the original result; a concurrent duplicate executes once |
+| Amount and currency as confirmed | A loan payoff takes only the figure the customer confirmed and is refused with the new figure if the balance moved since the quote. Every money request is in the account's own currency: one naming another is refused before any balance call, and a loan or card can only be funded from an account in its currency. Nothing converts |
 | Concurrent balance changes | The account row is read `SELECT ... FOR UPDATE` on every path that changes it, so two debits serialise and the second is checked against what the first left |
 
 ### Data minimization at the Server/Client boundary

@@ -71,13 +71,15 @@ async function assertNothingSensitive(page: Page) {
 
 test.describe("authenticated product screenshots", () => {
   test("dashboard — desktop", async ({ page, request }) => {
-    await page.setViewportSize(DESKTOP);
+    // A tall viewport rather than a full-page capture: the sidebar is sticky to
+    // the viewport, so a full-page image shows it ending part-way down.
+    await page.setViewportSize({ width: DESKTOP.width, height: 1500 });
     await signIn(page, request);
     await page.goto("/dashboard");
     await settle(page);
 
     await assertNothingSensitive(page);
-    await page.screenshot({ path: `${OUT}/13-dashboard-desktop.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/13-dashboard-desktop.png`, fullPage: false });
   });
 
   test("dashboard — mobile", async ({ page, request }) => {

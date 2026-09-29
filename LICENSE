@@ -1,0 +1,62 @@
+Northbank Banking Platform
+Copyright © 2026–present Kalabe Kebede. All Rights Reserved.
+
+PROPRIETARY PORTFOLIO SOFTWARE — NOT OPEN SOURCE
+
+1. Ownership
+
+This repository, including its source code, documentation, designs, diagrams,
+screenshots and other original material (the "Work"), is the proprietary work
+of Kalabe Kebede. It is not licensed under any open-source licence, and no
+open-source licence applies to the Work unless a file states otherwise.
+
+2. Purpose of publication
+
+The Work is made publicly visible solely so that it can be viewed for
+recruitment, portfolio review, technical evaluation and demonstration. Viewing
+the Work, and running it locally for the purpose of evaluating it, is
+permitted.
+
+3. What is not permitted
+
+Except as stated in section 2, or with the prior written permission of the
+copyright holder, no permission is granted to:
+
+  a. reproduce, copy or republish the Work or any substantial part of it;
+  b. modify, adapt, translate or create derivative works from it;
+  c. distribute, sublicense, sell or otherwise make it available to others;
+  d. incorporate the Work or any substantial part of it into another product,
+     project, service or portfolio;
+  e. use the Work for any commercial purpose;
+  f. present the Work, or any part of it, as the work of anyone other than
+     the copyright holder; or
+  g. remove or alter this notice or any other notice of authorship.
+
+4. Rights that are not affected
+
+Nothing in this notice limits:
+
+  a. the rights GitHub, Inc. and other users receive under the GitHub Terms of
+     Service for content published on GitHub, including the ability to view
+     and fork this repository on GitHub as the platform provides;
+  b. any use permitted by applicable law, such as fair use or fair dealing; or
+  c. the licences of third-party software.
+
+5. Third-party software
+
+The Work depends on third-party frameworks, libraries and tools, including
+Spring Boot, Spring Cloud, Next.js, React and others listed in the project's
+build files. Those components remain the property of their respective owners
+and are used under their own licences. No claim is made to them, and this
+notice does not change their terms.
+
+6. No warranty
+
+The Work is a portfolio demonstration that uses synthetic data. It is provided
+"as is", without warranty of any kind. It is not a banking product, holds no
+real money, and makes no production, regulatory or compliance claim.
+
+7. Permissions
+
+For permission to use the Work beyond section 2, contact the copyright holder
+through https://github.com/Kalab21.

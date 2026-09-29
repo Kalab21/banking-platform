@@ -23,10 +23,15 @@ updates:
       # is a migration with its own design work, not a dependency update, and
       # Dependabot proposing one every week is noise that trains you to ignore
       # the PRs that do matter.
+      # Boot and Cloud minors move together as a release train (Boot 3.5 needs
+      # Cloud 2025.0), so a Boot minor on its own is also a migration; see
+      # "Deferred: platform modernization" in docs/SECURITY.md. Patch updates
+      # still flow; an advisory that needs a Boot or Cloud minor is assessed in
+      # SECURITY.md's advisory table rather than bumped here.
       - dependency-name: "org.springframework.boot:spring-boot-starter-parent"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springframework.cloud:spring-cloud-dependencies"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springdoc:*"
         update-types: ["version-update:semver-major"]
     commit-message:

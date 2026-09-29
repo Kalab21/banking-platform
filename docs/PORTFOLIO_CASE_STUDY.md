@@ -11,7 +11,7 @@ boundaries.
 It uses synthetic data and makes no production or regulatory claim.
 
 **At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
-services), 1447 automated tests in CI, 46 live-stack scenarios on demand, and a
+services), 1476 automated tests in CI, 46 live-stack scenarios on demand, and a
 customer console that never holds a bearer token or a full account number.
 
 ## Problem / Context
@@ -47,7 +47,7 @@ plus a Next.js console:
   Actions mutate. The browser never holds a bearer token.
 - **Observability** — Micrometer to Prometheus, Grafana dashboards, Brave
   tracing to Zipkin, a correlation id minted at the edge and carried through
-  synchronous and asynchronous hops.
+  every synchronous hop (the Kafka hops are not verified).
 
 Business services publish no host ports. Application traffic has to pass the
 gateway, which is what makes the `/internal` endpoints internal.
@@ -248,17 +248,17 @@ something false about their money.
 
 ## Verification
 
-1447 automated tests run in CI:
+1476 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
-| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 840 |
-| Backend integration against real PostgreSQL, Redis and an embedded Kafka broker | 154 |
-| Frontend unit and component (Vitest, React Testing Library) | 384 |
+| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 864 |
+| Backend integration against real PostgreSQL, Redis and an embedded Kafka broker | 158 |
+| Frontend unit and component (Vitest, React Testing Library) | 385 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
 On demand, against the full running stack: 46 live Playwright scenarios and a
-185-assertion PowerShell suite that drives registration, money movement, the
+197-assertion PowerShell suite that drives registration, money movement, the
 credit lifecycle (including manual review, decline and customer-only offer
 response), scheduled payments and card controls through to TOTP enrollment.
 
@@ -359,6 +359,43 @@ These are recorded rather than solved, and each is a deliberate stopping point.
     29th, 30th or 31st settles on the 28th after February. Loan instalments are
     dated from the loan's start and do not drift; doing the same for payments
     needs the series' first date stored, which is a schema change.
+13. **A remote debit is not compensated if the local commit fails.** A loan
+    repayment, a card payment and an immediate payment debit the account in
+    `account-service`, then commit their own record. If that local commit
+    fails, the money has moved and the product has not recorded it; the
+    idempotency key settles unknown, so a retry cannot debit twice, and
+    repairing the record is left to a person.
+14. **An unconfirmed scheduled payment stays failed.** When the executor cannot
+    tell whether a scheduled payment's debit happened, the payment is marked
+    failed with "Outcome unconfirmed; check the account before paying again",
+    and a recurring series does not advance. A payment the bank declined does
+    advance it.
+15. **External rails have no idempotency key or balance check.** A wire, ACH
+    or SWIFT request is a record only (item 7), so a retried request is
+    recorded twice and no balance is checked, because nothing is settled.
+16. **Some lifecycle edges are displayed, not stored.** An offer that expires
+    leaves its application `OFFERED`; the console shows it as lapsed and
+    acceptance is refused. Cancelling an offered application leaves the offer
+    row `OFFERED`, and acceptance is refused by the application's own
+    transitions. A KYC document decision can be revised by another reviewer;
+    there is no separate document state machine.
+17. **Single-currency accounts, and no card funding link.** Every account
+    holds one currency and nothing converts; a request in another currency is
+    refused. A card has no linked funding account (`linkedAccountId` is empty),
+    so each card payment names the account it is paid from.
+18. **Staff can act as the bank's desk.** An employee can deposit to a
+    customer's account, add a payee, submit an application on a customer's
+    behalf and record a simulated card purchase. These are assisted-service
+    and simulation actions. Staff still cannot move a customer's money out,
+    accept an offer for them, or decide about themselves.
+19. **An account's history shows its own transactions only.** Deposits,
+    withdrawals, transfers and payments are recorded by `transaction-service`
+    and appear in the account's history and balance chart. A loan
+    disbursement, a loan repayment and a card payment change the balance
+    through `account-service` directly and are recorded on the loan or card,
+    so the account's history omits them and its chart can differ from the
+    current balance, which is always correct. A single cross-product ledger
+    view is future work.
 
 ## Technology
 
