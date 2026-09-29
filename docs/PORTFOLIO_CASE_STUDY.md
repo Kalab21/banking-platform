@@ -354,6 +354,11 @@ These are recorded rather than solved, and each is a deliberate stopping point.
 11. **Second factor is opt-in, including for staff.** Requiring it for
     employees needs a first-enrolment flow that does not exist yet, because
     enrolment itself requires a signed-in caller.
+12. **A monthly recurring payment can drift to the 28th.** Each occurrence is
+    dated from the previous one's due date, so a series that starts on the
+    29th, 30th or 31st settles on the 28th after February. Loan instalments are
+    dated from the loan's start and do not drift; doing the same for payments
+    needs the series' first date stored, which is a schema change.
 
 ## Technology
 
