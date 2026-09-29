@@ -31,7 +31,7 @@ all running locally on Docker Compose.
   The browser never holds a bearer token.
 - **Delivery**: Docker Compose for the whole stack, CI with CodeQL and Trivy, and
   Terraform for an AWS layout (not deployed).
-- **Verification**: 1,476 automated tests in CI, plus live full-stack suites run
+- **Verification**: 1,482 automated tests in CI, plus live full-stack suites run
   against the real stack.
 
 ## Product experience
@@ -142,13 +142,13 @@ authorization table and the dependency advisories.
 
 | Suite | Where it runs | Count |
 |---|---|---:|
-| Backend unit and web-slice | CI | 864 |
+| Backend unit and web-slice | CI | 870 |
 | Backend integration (Testcontainers, PostgreSQL, Redis, embedded Kafka) | CI | 158 |
 | Frontend unit and component | CI | 385 |
 | Playwright against a production build, no backend | CI | 69 |
-| **Total in CI** | | **1,476** |
+| **Total in CI** | | **1,482** |
 | Playwright against the full running stack | on demand | 46 |
-| PowerShell full-stack suite (assertions) | on demand | 197 |
+| PowerShell full-stack suite (assertions) | on demand | 200 |
 
 The live suites need all 13 backend processes running, so they are run on demand
 rather than on every push. See [docs/TESTING.md](docs/TESTING.md).

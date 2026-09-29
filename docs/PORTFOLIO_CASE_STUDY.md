@@ -11,7 +11,7 @@ boundaries.
 It uses synthetic data and makes no production or regulatory claim.
 
 **At a glance:** 13 backend processes (Eureka, the API Gateway and 11 business
-services), 1476 automated tests in CI, 46 live-stack scenarios on demand, and a
+services), 1482 automated tests in CI, 46 live-stack scenarios on demand, and a
 customer console that never holds a bearer token or a full account number.
 
 ## Problem / Context
@@ -248,17 +248,17 @@ something false about their money.
 
 ## Verification
 
-1476 automated tests run in CI:
+1482 automated tests run in CI:
 
 | Suite | Count |
 |---|---|
-| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 864 |
+| Backend unit and web-slice (JUnit 5, Mockito, MockMvc) | 870 |
 | Backend integration against real PostgreSQL, Redis and an embedded Kafka broker | 158 |
 | Frontend unit and component (Vitest, React Testing Library) | 385 |
 | Offline end-to-end (Playwright, production build, no backend) | 69 |
 
 On demand, against the full running stack: 46 live Playwright scenarios and a
-197-assertion PowerShell suite that drives registration, money movement, the
+200-assertion PowerShell suite that drives registration, money movement, the
 credit lifecycle (including manual review, decline and customer-only offer
 response), scheduled payments and card controls through to TOTP enrollment.
 
