@@ -361,7 +361,7 @@ public class LoanServiceImpl implements LoanService {
     private void buildAmortizationSchedule(Loan loan, BigDecimal monthlyPayment, BigDecimal monthlyRate) {
         List<AmortizationSchedule> schedules = new ArrayList<>();
         BigDecimal balance = loan.getPrincipal();
-        LocalDate dueDate = LocalDate.now().plusMonths(1);
+        LocalDate start = LocalDate.now();
 
         for (int i = 1; i <= loan.getTermMonths(); i++) {
             BigDecimal interest = balance.multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
@@ -374,16 +374,26 @@ public class LoanServiceImpl implements LoanService {
             schedules.add(AmortizationSchedule.builder()
                     .loan(loan)
                     .paymentNumber(i)
-                    .dueDate(dueDate)
+                    .dueDate(dueDateOf(start, i))
                     .scheduledPayment(payment.setScale(2, RoundingMode.HALF_UP))
                     .principalPortion(principal.setScale(2, RoundingMode.HALF_UP))
                     .interestPortion(interest)
                     .remainingBalance(balance.setScale(2, RoundingMode.HALF_UP))
                     .status(ScheduleStatus.PENDING)
                     .build());
-            dueDate = dueDate.plusMonths(1);
         }
         scheduleRepository.saveAll(schedules);
+    }
+
+    /**
+     * Instalment {@code n} falls due {@code n} months after {@code start}.
+     *
+     * <p>Counted from the start every time. Chaining one month onto the last
+     * due date let a short month's clamp stick: a loan starting on the 31st fell
+     * due on the 28th after February and on the 28th for the rest of its term.
+     */
+    static LocalDate dueDateOf(LocalDate start, int n) {
+        return start.plusMonths(n);
     }
 
     private String generateRef() {
