@@ -6,6 +6,8 @@ import com.bankingplatform.common.security.CallerIdentity;
 import com.bankingplatform.payment.dto.CreatePaymentRequest;
 import com.bankingplatform.payment.dto.PaymentResponse;
 import com.bankingplatform.payment.security.PaymentOwnershipVerifier;
+import com.bankingplatform.common.security.AccessGuard;
+import com.bankingplatform.payment.service.BeneficiaryService;
 import com.bankingplatform.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +37,7 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final PaymentOwnershipVerifier ownership;
+    private final BeneficiaryService beneficiaryService;
     private final IdempotencyGuard idempotency;
 
     @PostMapping
@@ -47,6 +50,11 @@ public class PaymentController {
         // *from* one is not, so only the payer account is checked -- and only
         // its owner may pay from it, staff included.
         ownership.requireCanPayFrom(caller, request.getPayerAccountId());
+        // The payee must be one of the payer's own saved payees. The id used to
+        // be stored unchecked, so a payment could name another customer's.
+        if (request.getBeneficiaryId() != null) {
+            AccessGuard.requireSelf(caller, beneficiaryService.getById(request.getBeneficiaryId()).getUserId());
+        }
         // A payment that executes immediately moves money in this request, and
         // each request used to mint a new reference: a retry after a lost
         // response paid twice. One key, one payment.

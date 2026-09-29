@@ -244,4 +244,66 @@ class ScheduledPaymentExecutionIT {
         // Dated from when it was due, not from the late run.
         assertThat(next).isEqualTo(due.toLocalDate().plusMonths(1));
     }
+
+    private long recurringBill(String ref) {
+        jdbc.update("""
+                INSERT INTO payments
+                    (payment_ref, payer_account_id, payee_external_ref, payment_type, amount, currency,
+                     status, is_recurring, recurrence_pattern, scheduled_at, created_at, updated_at)
+                VALUES (?, 9, 'UTILITY-ACCT-1', 'BILL', 40.00, 'USD', 'PENDING', true, 'MONTHLY', ?, now(), now())
+                """, ref, Timestamp.valueOf(LocalDateTime.now().minusMinutes(1)));
+        Long id = jdbc.queryForObject("SELECT id FROM payments WHERE payment_ref = ?", Long.class, ref);
+        return id == null ? 0 : id;
+    }
+
+    @Test
+    @DisplayName("a declined month does not end a recurring series")
+    void declinedRecurringPaymentStillRecurs() {
+        // The next occurrence was only created on success, so one month of
+        // insufficient funds silently cancelled the series.
+        when(transactionClient.withdraw(anyString(), any()))
+                .thenThrow(new com.bankingplatform.payment.exception.PaymentException("Insufficient funds"));
+        long id = recurringBill("exec-rec-declined");
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        assertThat(status(id)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE status = 'PENDING'", Integer.class))
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a failure that may have moved money says so, and schedules nothing")
+    void unconfirmedOutcomeIsLabelled() {
+        when(transactionClient.withdraw(anyString(), any())).thenThrow(new IllegalStateException("Read timed out"));
+        long id = recurringBill("exec-rec-unknown");
+        inTransaction.execute(s -> service.claimScheduledPayments(10));
+
+        inTransaction.executeWithoutResult(s -> service.processClaimedPayment(id));
+
+        assertThat(status(id)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject("SELECT failure_reason FROM payments WHERE id = ?", String.class, id))
+                .startsWith("Outcome unconfirmed");
+        // Not rescheduled: whether this month's money moved is not known.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE status = 'PENDING'", Integer.class))
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("a payment outside Northbank must name a payee")
+    void externalPaymentNeedsAPayee() {
+        // A BILL naming no payee used to debit the payer and record nobody as
+        // receiving the money.
+        com.bankingplatform.payment.dto.CreatePaymentRequest request = new com.bankingplatform.payment.dto.CreatePaymentRequest();
+        request.setPayerAccountId(9L);
+        request.setPaymentType(com.bankingplatform.payment.model.PaymentType.BILL);
+        request.setAmount(new java.math.BigDecimal("40.00"));
+        request.setCurrency("USD");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> inTransaction.executeWithoutResult(s -> service.createPayment(request)))
+                .isInstanceOf(com.bankingplatform.payment.exception.PaymentException.class);
+        verify(transactionClient, never()).withdraw(anyString(), any());
+    }
 }
