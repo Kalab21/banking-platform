@@ -256,7 +256,11 @@ test.describe("the signed-in product, against real data", () => {
 
     if (profile.ssnLast4) {
       await expect(page.locator("main")).toContainText(`•••-••-${profile.ssnLast4}`);
-      await expect(page.locator("main")).toContainText("Submitted — verification pending");
+      await expect(page.locator("main")).toContainText("Identity details");
+      await expect(page.locator("main").getByText("On file", { exact: true })).toBeVisible();
+      // The seeded customer's identity was approved by a reviewer; nothing may
+      // still call it pending.
+      await expect(page.locator("main")).not.toContainText("verification pending");
     }
 
     // Four digits and no more, and never a claim of verification.

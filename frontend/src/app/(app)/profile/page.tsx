@@ -131,12 +131,15 @@ export default async function ProfilePage() {
                   {profile.ssnLast4 ? maskedSsn(profile.ssnLast4) : "Not on file"}
                 </span>
               </Detail>
-              <Detail label="Identity status">
-                {profile.identityStatus === "SUBMITTED"
-                  ? "Submitted — verification pending"
-                  : "Not submitted"}
+              {/*
+               * The details are on file or not; whether they are accepted is
+               * the KYC decision below, made by a member of staff. This used to
+               * say "verification pending" even after staff had approved.
+               */}
+              <Detail label="Identity details">
+                {profile.identityStatus === "SUBMITTED" ? "On file" : "Not on file"}
               </Detail>
-              <Detail label="Know-your-customer">
+              <Detail label="Identity check (KYC)">
                 <Badge tone={statusTone(profile.kycStatus)}>{humanise(profile.kycStatus)}</Badge>
               </Detail>
               <Detail label="Credit score">
