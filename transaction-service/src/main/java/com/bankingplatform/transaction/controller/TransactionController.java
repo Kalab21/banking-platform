@@ -59,7 +59,8 @@ public class TransactionController {
         // accepts third-party deposits, but nothing in this product needs one,
         // and an unrestricted credit endpoint is an obvious way to place funds
         // into an account the depositor does not control.
-        ownership.requireCanAccess(caller, request.getAccountId());
+        AccountResponse account = ownership.requireCanAccess(caller, request.getAccountId());
+        request.setCurrency(AccountOwnershipVerifier.requireAccountCurrency(account, request.getCurrency()));
         return idempotency.execute(idempotencyKey, DEPOSIT, caller, request,
                 TransactionResponse.class, TransactionResponse::getTransactionRef,
                 () -> transactionService.deposit(request));
@@ -72,7 +73,8 @@ public class TransactionController {
             @Parameter(description = KEY_DESCRIPTION)
             @RequestHeader(name = IdempotencyGuard.HEADER, required = false) String idempotencyKey,
             CallerIdentity caller) {
-        ownership.requireCanDebit(caller, request.getAccountId());
+        AccountResponse account = ownership.requireCanDebit(caller, request.getAccountId());
+        request.setCurrency(AccountOwnershipVerifier.requireAccountCurrency(account, request.getCurrency()));
         return idempotency.execute(idempotencyKey, WITHDRAWAL, caller, request,
                 TransactionResponse.class, TransactionResponse::getTransactionRef,
                 () -> transactionService.withdraw(request));
@@ -92,6 +94,7 @@ public class TransactionController {
         // Before the key is claimed and before any money moves, so a bad
         // destination is a refusal the customer can correct and retry.
         ownership.requireCanReceive(source, request.getToAccountId());
+        request.setCurrency(AccountOwnershipVerifier.requireAccountCurrency(source, request.getCurrency()));
         return idempotency.execute(idempotencyKey, TRANSFER, caller, request,
                 TransferResponse.class, result -> result.getDebit().getTransactionRef(),
                 () -> transactionService.transfer(request));

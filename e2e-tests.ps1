@@ -235,6 +235,10 @@ Assert "Balance after opening deposit = 500.00" ([decimal]$acctFunded.balance -e
 # database on write, so three deposits of 0.015 stored 0.06.
 Assert-Refused "A deposit of a fraction of a cent is refused" "POST" `
     "$GW/api/transactions/deposit" $TOKEN 400 @{ accountId=$ACCOUNT_ID; amount=0.015; description="Sub-cent" }
+# Nothing converts, so an amount stated in a currency the account does not hold
+# is refused rather than applied as the account's and recorded under the other.
+Assert-Refused "A deposit in a currency the account does not hold is refused" "POST" `
+    "$GW/api/transactions/deposit" $TOKEN 422 @{ accountId=$ACCOUNT_ID; amount=100.00; currency="EUR"; description="Wrong currency" }
 Write-Host "  Funded balance=$($acctFunded.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -559,6 +563,18 @@ if ($loans -and $loans.Count -gt 0) {
     # Make a regular repayment
     $repay = Post "$GW/api/loans/$LOAN_ID/repay" @{ amount=$loan.monthlyPayment; sourceAccountId=$ACCOUNT_ID } $TOKEN
     Assert "Loan repayment made" ($repay -ne $null)
+    # Nothing converts: a USD loan cannot be repaid from a EUR account one for
+    # one. Refused before any debit, and the EUR account keeps its balance.
+    $eurApp = Post "$GW/api/applications" @{ userId=$USER_ID; applicationType="SAVINGS_ACCOUNT"; currency="EUR" } $TOKEN
+    $EUR_ACCOUNT_ID = $eurApp.productId
+    Assert "A EUR account opens for the currency check" ($EUR_ACCOUNT_ID -and $EUR_ACCOUNT_ID -gt 0)
+    if ($EUR_ACCOUNT_ID) {
+        $null = Post "$GW/api/transactions/deposit" @{ accountId=$EUR_ACCOUNT_ID; amount=50.00; description="EUR funds" } $TOKEN
+        Assert-Refused "A USD loan cannot be repaid from a EUR account" "POST" `
+            "$GW/api/loans/$LOAN_ID/repay" $TOKEN 422 @{ amount=10.00; sourceAccountId=$EUR_ACCOUNT_ID }
+        $eurAfter = Get "$GW/api/accounts/$EUR_ACCOUNT_ID" $TOKEN
+        Assert "The EUR account was not debited" ($eurAfter -and [decimal]$eurAfter.balance -eq 50.00) "balance=$($eurAfter.balance)"
+    }
     # A payment below the instalment used to leave it PARTIAL for good, and the
     # loan closed once none was PENDING -- with the principal still owed.
     $beforeTiny = Get "$GW/api/loans/$LOAN_ID" $TOKEN
@@ -574,6 +590,13 @@ if ($loans -and $loans.Count -gt 0) {
     $quote = Get "$GW/api/loans/$LOAN_ID/payoff-quote" $TOKEN
     Assert "Payoff quote returned" ($quote -ne $null)
     Write-Host "  Payoff amount=$($quote.totalPayoffAmount)"
+    # A payoff takes only the figure the customer confirmed: one cent off
+    # today's figure is refused before any debit, and the loan stays open.
+    $stale = [decimal]$quote.totalPayoffAmount + [decimal]0.01
+    Assert-Refused "A payoff at a figure other than today's is refused" "POST" `
+        "$GW/api/loans/$LOAN_ID/payoff" $TOKEN 422 @{ amount=$stale; sourceAccountId=$ACCOUNT_ID }
+    $stillOpen = Get "$GW/api/loans/$LOAN_ID" $TOKEN
+    Assert "The loan is still active after the refused payoff" ($stillOpen -and $stillOpen.status -eq "ACTIVE") "status=$($stillOpen.status)"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

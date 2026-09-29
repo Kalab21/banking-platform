@@ -24,6 +24,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
@@ -547,7 +549,7 @@ class LoanServiceImplTest {
             when(scheduleRepository.findUnpaid(LOAN_ID)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
-            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
+            loanService.earlyPayoff(LOAN_ID, repaymentRequest("9235.29", ACCOUNT_ID));
 
             // 9,189.34 x (6.00 / 1200) = 45.95 accrued; payoff = 9,235.29
             verify(accountClient).debit(eq(ACCOUNT_ID), anyString(), eq(new BigDecimal("9235.29")), any());
@@ -565,7 +567,7 @@ class LoanServiceImplTest {
             when(scheduleRepository.findUnpaid(LOAN_ID)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
-            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
+            loanService.earlyPayoff(LOAN_ID, repaymentRequest("9235.29", ACCOUNT_ID));
 
             verify(loanRepository).save(savedLoan.capture());
             Loan result = savedLoan.getValue();
@@ -587,7 +589,7 @@ class LoanServiceImplTest {
                     .thenReturn(List.of(eleven, twelve));
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
-            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
+            loanService.earlyPayoff(LOAN_ID, repaymentRequest("9235.29", ACCOUNT_ID));
 
             assertThat(eleven.getStatus()).isEqualTo(ScheduleStatus.PAID);
             assertThat(twelve.getStatus()).isEqualTo(ScheduleStatus.PAID);
@@ -621,7 +623,7 @@ class LoanServiceImplTest {
             when(scheduleRepository.findUnpaid(LOAN_ID)).thenReturn(List.of());
             when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
-            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
+            loanService.earlyPayoff(LOAN_ID, repaymentRequest("9235.29", ACCOUNT_ID));
 
             verify(repaymentRepository).save(savedRepayment.capture());
             LoanRepayment repayment = savedRepayment.getValue();
@@ -646,24 +648,47 @@ class LoanServiceImplTest {
             verify(eventProducer).publishLoanPaidOff(LOAN_ID, USER_ID);
         }
 
-        @Test
-        @DisplayName("debits the full payoff amount whatever amount the request states")
-        void payoffDebitsTheFullAmount() {
+        /**
+         * Regression test: the stated amount used to be ignored, so a payoff
+         * confirmed at one figure debited whatever the figure had become. Both
+         * a stale figure and a token one are refused, and nothing is debited.
+         */
+        @ParameterizedTest(name = "stated {0}")
+        @ValueSource(strings = {"9235.30", "9235.28", "0.01"})
+        @DisplayName("refuses a payoff whose stated amount is not today's figure, and debits nothing")
+        void refusesAnAmountThatIsNotTheFigure(String stated) {
             when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
-            when(scheduleRepository.findUnpaid(LOAN_ID)).thenReturn(List.of());
-            when(repaymentRepository.save(any(LoanRepayment.class))).thenAnswer(i -> i.getArgument(0));
 
-            loanService.earlyPayoff(LOAN_ID, repaymentRequest("0.01", ACCOUNT_ID));
+            assertThatThrownBy(() -> loanService.earlyPayoff(LOAN_ID, repaymentRequest(stated, ACCOUNT_ID)))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("9235.29");
 
-            // The closing figure is computed, not taken from the request: a
-            // stated 0.01 still costs the whole principal plus accrued interest.
-            verify(accountClient).debit(eq(ACCOUNT_ID), anyString(),
-                    argThat(amount -> amount.compareTo(new BigDecimal("9235.29")) == 0), any());
-
-            verify(repaymentRepository).save(savedRepayment.capture());
-            assertThat(savedRepayment.getValue().getPrincipalPaid()).isEqualByComparingTo("9189.34");
-            assertThat(savedRepayment.getValue().getAmount()).isEqualByComparingTo("9235.29");
+            verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
+            verify(loanRepository, never()).save(any());
+            verify(repaymentRepository, never()).save(any());
         }
+    }
+
+    // ------------------------------------------------------------ funding currency
+
+    /**
+     * Regression test: the funding account was checked for its owner only, so
+     * a repayment or payoff could be taken from an account in another
+     * currency. Each call now names the loan's currency to the guard.
+     */
+    @Test
+    @DisplayName("a repayment and a payoff each require an account in the loan's currency")
+    void fundingAccountMustHoldTheLoansCurrency() {
+        when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan(LoanStatus.ACTIVE, "9189.34")));
+        org.mockito.Mockito.doThrow(new com.bankingplatform.loan.exception.AccountCurrencyMismatchException("EUR"))
+                .when(accountOwnership).requireOwnedBy(ACCOUNT_ID, USER_ID, "source", "USD");
+
+        assertThatThrownBy(() -> loanService.makeRepayment(LOAN_ID, repaymentRequest("100.00", ACCOUNT_ID)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> loanService.earlyPayoff(LOAN_ID, repaymentRequest("9235.29", ACCOUNT_ID)))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(accountClient, never()).debit(anyLong(), anyString(), any(), any());
     }
 
     // ------------------------------------------------------------ payoff quote

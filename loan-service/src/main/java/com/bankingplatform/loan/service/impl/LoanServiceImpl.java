@@ -102,7 +102,7 @@ public class LoanServiceImpl implements LoanService {
         // Checked before the state rules, so a refusal never depends on the
         // state of the attacker's own loan.
         accountOwnership.requireOwnedBy(request.getDisbursementAccountId(), loan.getUserId(),
-                "disbursement");
+                "disbursement", loan.getCurrency());
 
         if (loan.getStatus() != LoanStatus.PENDING) {
             throw new LoanNotActiveException("Loan not in PENDING state: " + loan.getStatus());
@@ -149,7 +149,8 @@ public class LoanServiceImpl implements LoanService {
 
         // Authorization before business rules, so a refusal never depends on
         // the state of the attacker's own loan.
-        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source",
+                loan.getCurrency());
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -239,7 +240,8 @@ public class LoanServiceImpl implements LoanService {
 
         // Authorization before business rules, so a refusal never depends on
         // the state of the attacker's own loan.
-        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source");
+        accountOwnership.requireOwnedBy(request.getSourceAccountId(), loan.getUserId(), "source",
+                loan.getCurrency());
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new LoanNotActiveException("Loan is not ACTIVE: " + loan.getStatus());
         }
@@ -252,6 +254,16 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal monthlyRate = loan.getInterestRate().divide(new BigDecimal("1200"), 10, RoundingMode.HALF_UP);
         BigDecimal accruedInterest = principalPaid.multiply(monthlyRate).setScale(2, RoundingMode.HALF_UP);
         BigDecimal payoffAmount = principalPaid.add(accruedInterest);
+
+        // The customer confirmed a figure; that is the only figure taken. If
+        // the balance moved since the quote (a repayment from another tab, a
+        // scheduled instalment), the payoff is refused before any debit rather
+        // than taking an amount nobody agreed to. A stated amount below the
+        // figure is refused the same way, so it cannot close the loan cheaply.
+        if (request.getAmount().compareTo(payoffAmount) != 0) {
+            throw new IllegalStateException("The payoff figure is now " + payoffAmount
+                    + ". Review the new figure and confirm again.");
+        }
 
         String payoffRef = generateRef();
 

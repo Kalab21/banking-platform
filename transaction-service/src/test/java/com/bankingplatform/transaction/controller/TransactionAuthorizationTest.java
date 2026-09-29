@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
@@ -214,6 +215,66 @@ class TransactionAuthorizationTest {
                     .andExpect(status().isUnprocessableEntity());
 
             verifyNoInteractions(transactionService);
+        }
+    }
+
+    /**
+     * Regression tests: a request naming a currency the account does not hold
+     * was applied in the account's currency and recorded under the name it
+     * gave, so 100 "EUR" credited 100 USD and was stored as a EUR deposit.
+     */
+    @Nested
+    @DisplayName("the currency of a request")
+    class RequestCurrency {
+
+        private void accountsIn(String currency) {
+            AccountResponse a = account(ACCOUNT_OF_A, CUSTOMER_A);
+            a.setCurrency(currency);
+            when(accountClient.getAccountById(ACCOUNT_OF_A)).thenReturn(a);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "a {0} naming another currency is refused")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"deposit", "withdraw"})
+        void depositOrWithdrawalInAnotherCurrencyRefused(String operation) throws Exception {
+            accountsIn("USD");
+            mvc.perform(as(post("/api/transactions/" + operation), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"accountId\":%d,\"amount\":100.00,\"currency\":\"EUR\"}".formatted(ACCOUNT_OF_A)))
+                    .andExpect(status().isUnprocessableEntity());
+
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
+        @DisplayName("a transfer naming another currency is refused")
+        void transferInAnotherCurrencyRefused() throws Exception {
+            accountsIn("USD");
+            mvc.perform(as(post("/api/transactions/transfer"), CUSTOMER_A, "CUSTOMER")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"fromAccountId\":%d,\"toAccountId\":%d,\"amount\":25.00,\"currency\":\"EUR\"}"
+                                    .formatted(ACCOUNT_OF_A, ACCOUNT_OF_B)))
+                    .andExpect(status().isUnprocessableEntity());
+
+            verifyNoInteractions(transactionService);
+        }
+
+        @Test
+        @DisplayName("a deposit naming no currency, or the account's in another case, is recorded in the account's")
+        void depositIsRecordedInTheAccountsCurrency() throws Exception {
+            accountsIn("USD");
+            for (String body : List.of(
+                    "{\"accountId\":%d,\"amount\":100.00}",
+                    "{\"accountId\":%d,\"amount\":100.00,\"currency\":\"usd\"}")) {
+                mvc.perform(as(post("/api/transactions/deposit"), CUSTOMER_A, "CUSTOMER")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body.formatted(ACCOUNT_OF_A)))
+                        .andExpect(status().is2xxSuccessful());
+            }
+
+            org.mockito.ArgumentCaptor<com.bankingplatform.transaction.dto.DepositRequest> sent =
+                    org.mockito.ArgumentCaptor.forClass(com.bankingplatform.transaction.dto.DepositRequest.class);
+            verify(transactionService, Mockito.times(2)).deposit(sent.capture());
+            assertThat(sent.getAllValues()).extracting("currency").containsOnly("USD");
         }
     }
 

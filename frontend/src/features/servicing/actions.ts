@@ -64,9 +64,9 @@ function refreshCard(cardId: number): void {
 }
 
 /**
- * The backend caps a payment at what is owed and works a payoff out itself, so
- * what it reports taking can differ from what was asked. The receipt shows the
- * backend's figure.
+ * The backend caps a repayment at what is owed, so what it reports taking can
+ * differ from what was asked; the receipt shows the backend's figure. A payoff
+ * takes exactly the figure confirmed, or is refused if that figure has changed.
  */
 type Pay = (
   target: number,

@@ -54,6 +54,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
     }
 
+    @ExceptionHandler(AccountCurrencyMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleCurrencyMismatch(AccountCurrencyMismatchException ex) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+    }
+
     @ExceptionHandler(CardNotActiveException.class)
     public ResponseEntity<Map<String, Object>> handleCardNotActive(CardNotActiveException ex) {
         return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());

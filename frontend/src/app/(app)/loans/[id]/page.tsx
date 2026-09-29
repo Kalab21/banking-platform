@@ -205,7 +205,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
           accounts={payFrom}
           choices={payoffChoices(quote, loan.currency)}
           confirmLabel="Pay off loan"
-          reviewNote="The amount is worked out when the payment is made; today it is the figure above. The loan closes and every remaining instalment is settled."
+          reviewNote="You pay exactly the figure above. If it changes before you confirm, nothing is taken and you are shown the new figure. The loan closes and every remaining instalment is settled."
           available={active && quote !== null}
         />
       </div>
