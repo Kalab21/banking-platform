@@ -50,7 +50,7 @@ async function referredApplication(request: APIRequestContext) {
   expect(applied.ok()).toBe(true);
   const application = await applied.json();
   expect(application.status).toBe("MANUAL_REVIEW");
-  return { id: application.id as number, customerHeaders: headers };
+  return { id: application.id as number, userId: userId as number, customerHeaders: headers };
 }
 
 async function openWorkbench(page: Page, token: string, id: number) {
@@ -68,6 +68,23 @@ test("a reviewer sees the evidence and approves a referral into an offer, not a 
   await expect(page.getByText("KYC_REVIEW_REQUIRED")).toBeVisible();
   await expect(page.getByText("$80,000.00")).toBeVisible();
 
+  // Credit waits for the identity: the reviewer cannot approve yet.
+  await expect(page.getByRole("button", { name: "Approve" })).toBeDisabled();
+
+  // The customer submits a document; the reviewer approves it, then the identity.
+  const doc = await (await request.post(`${GATEWAY}/api/users/${app.userId}/kyc/documents`, {
+    headers: app.customerHeaders,
+    data: { documentType: "PASSPORT", documentRef: `DEMO-PASSPORT-${app.id}` },
+  })).json();
+  expect((await request.put(`${GATEWAY}/api/kyc/documents/${doc.id}/review`, {
+    headers: staff.headers, data: { status: "APPROVED" },
+  })).ok()).toBe(true);
+  expect((await request.put(`${GATEWAY}/api/users/${app.userId}/kyc/status?status=APPROVED`, {
+    headers: staff.headers,
+  })).ok()).toBe(true);
+
+  await page.reload();
+  await page.getByRole("heading", { level: 1 }).waitFor({ timeout: 90_000 });
   await page.getByRole("button", { name: "Approve" }).click();
   await page.getByLabel("Amount to approve").fill("5000.00");
   await page.getByLabel("Reviewer notes").fill("Identity documents seen");

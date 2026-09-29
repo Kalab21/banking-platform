@@ -210,9 +210,9 @@ ok "Northwind Properties"
 # first.
 
 say "Submitting KYC documents"
-api POST "/api/users/${USER_ID}/kyc/documents"   '{"documentType":"PASSPORT","documentRef":"DEMO-PASSPORT-0001"}' "$TOKEN" > /dev/null
+PASSPORT_DOC=$(api POST "/api/users/${USER_ID}/kyc/documents"   '{"documentType":"PASSPORT","documentRef":"DEMO-PASSPORT-0001"}' "$TOKEN" | json id)
 ok "passport"
-api POST "/api/users/${USER_ID}/kyc/documents"   '{"documentType":"PROOF_OF_ADDRESS","documentRef":"DEMO-ADDRESS-0001"}' "$TOKEN" > /dev/null
+ADDRESS_DOC=$(api POST "/api/users/${USER_ID}/kyc/documents"   '{"documentType":"PROOF_OF_ADDRESS","documentRef":"DEMO-ADDRESS-0001"}' "$TOKEN" | json id)
 ok "proof of address"
 
 say "Completing the identity check as a reviewer"
@@ -222,6 +222,12 @@ if [[ -z "$STAFF_TOKEN" ]]; then
   echo "  NORTHBANK_DEMO_STAFF_ENABLED is true; see docker-compose.yml."
   exit 1
 fi
+# The documents first: an identity is approved on evidence, and user-service
+# refuses APPROVED for a customer with no approved document.
+for DOC in "$PASSPORT_DOC" "$ADDRESS_DOC"; do
+  api PUT "/api/kyc/documents/${DOC}/review" '{"status":"APPROVED"}' "$STAFF_TOKEN" > /dev/null
+done
+ok "documents approved by ${STAFF_USERNAME}"
 api PUT "/api/users/${USER_ID}/kyc/status?status=APPROVED" "" "$STAFF_TOKEN" > /dev/null
 ok "identity check approved by ${STAFF_USERNAME}"
 
@@ -376,7 +382,8 @@ Demo customer ready.
 Seeded: 2 accounts opened empty and then funded by deposit,
 14 transactions, 1 beneficiary, 1 loan with schedule and one
 repayment, 1 credit card with three purchases and a payment, and
-2 KYC documents pending review.
+2 KYC documents approved by the demo reviewer, and the identity
+check approved.
 
 Credit cards and notifications populate from Kafka events, so they
 may take a few seconds to appear.

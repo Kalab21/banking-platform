@@ -34,6 +34,8 @@ import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -199,6 +201,51 @@ class DecisionRecordingTest {
         assertThat(snapshot.getDecidedBy()).isEqualTo(DecisionSnapshot.DecidedBy.REVIEWER);
         assertThat(snapshot.getDecision()).isEqualTo(DecisionSnapshot.Decision.REJECT);
         assertThat(snapshot.getApprovedAmount()).isNull();
+    }
+
+    private Application referredLoan() {
+        return Application.builder()
+                .id(APPLICATION_ID)
+                .userId(USER_ID)
+                .applicationType(ApplicationType.PERSONAL_LOAN)
+                .requestedAmount(new BigDecimal("10000.00"))
+                .termMonths(48)
+                .currency("USD")
+                .creditScoreAtApply(700)
+                .annualIncome(new BigDecimal("90000.00"))
+                .monthlyDebtObligations(new BigDecimal("450.00"))
+                .status(ApplicationStatus.MANUAL_REVIEW)
+                .build();
+    }
+
+    @Test
+    @DisplayName("a reviewer cannot approve credit for a customer whose identity is unverified")
+    void reviewerApprovalNeedsAVerifiedIdentity() {
+        // Policy refers unverified customers; a reviewer's approval used to go
+        // straight through, and a loan was issued with no identity check.
+        customer(700, "IN_REVIEW");
+        when(applicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(referredLoan()));
+
+        ReviewRequest review = new ReviewRequest();
+        review.setDecision(ReviewDecision.APPROVE);
+
+        assertThatThrownBy(() -> applicationService.review(APPLICATION_ID, review))
+                .isInstanceOf(com.bankingplatform.application.exception.ApplicationException.class)
+                .hasMessageContaining("identity is not verified");
+        verify(decisionSnapshotRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a reviewer's approval records the identity status it was taken on")
+    void reviewerApprovalRecordsIdentity() {
+        customer(700, "APPROVED");
+        when(applicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(referredLoan()));
+
+        ReviewRequest review = new ReviewRequest();
+        review.setDecision(ReviewDecision.APPROVE);
+        applicationService.review(APPLICATION_ID, review);
+
+        assertThat(captureSnapshot().getKycStatusAtDecision()).isEqualTo("APPROVED");
     }
 
     @Test

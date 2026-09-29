@@ -86,6 +86,14 @@ public class KycServiceImpl implements KycService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
+        // An identity is approved on evidence. This accepted APPROVED for a
+        // customer who had submitted nothing.
+        if (status == KycStatus.APPROVED && kycDocumentRepository.findByUserId(userId).stream()
+                .noneMatch(d -> d.getStatus() == DocumentStatus.APPROVED)) {
+            throw new IllegalArgumentException(
+                    "Approve at least one of the customer's identity documents before approving their identity");
+        }
+
         user.setKycStatus(status);
         if (status == KycStatus.APPROVED || status == KycStatus.REJECTED) {
             user.setKycCompletedAt(LocalDateTime.now());

@@ -88,7 +88,7 @@ class ProvisioningFundingTest {
         UserResponse user = new UserResponse();
         user.setId(USER_ID);
         user.setEnabled(true);
-        user.setKycStatus("VERIFIED");
+        user.setKycStatus("APPROVED");
         // Above every product minimum, so an application is auto-approved and
         // reaches provisioning.
         user.setCreditScore(780);

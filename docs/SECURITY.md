@@ -328,7 +328,9 @@ otherwise would be the product making a claim about itself that is not true. Wha
 does exist is a person's decision: a member of staff reviews the submitted
 documents and sets the customer's KYC status to `APPROVED` or `REJECTED`. That is
 recorded under the reviewer, refused for their own identity, and it is what
-underwriting reads.
+underwriting reads. An identity can only be approved once at least one of the
+customer's documents has been, the documents are the customer's own to submit, and
+a reviewer cannot approve credit for a customer whose identity is not approved.
 
 ## A corrupted fraud counter is not evidence
 

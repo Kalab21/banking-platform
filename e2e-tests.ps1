@@ -769,6 +769,20 @@ if ($OTHER_TOKEN -and $STAFF_TOKEN) {
         $mrDecisions = @(Get "$GW/api/applications/$MR_APP_ID/decisions" $STAFF_TOKEN)
         Assert "A reviewer sees why it was referred" (($mrDecisions | ForEach-Object { $_.reasonCodes }) -contains "KYC_REVIEW_REQUIRED")
 
+        # A reviewer may lend where the policy would not, but not to someone
+        # whose identity is unverified: the approval waits for the identity.
+        Assert-Refused "A reviewer cannot approve credit for an unverified customer" "PUT" `
+            "$GW/api/applications/$MR_APP_ID/review" $STAFF_TOKEN 409 @{ decision="APPROVE"; reviewerNotes="Too early" }
+        # And the identity itself is approved on evidence, not on its own.
+        Assert-Refused "An identity cannot be approved with no approved document" "PUT" `
+            "$GW/api/users/$OTHER_ID/kyc/status?status=APPROVED" $STAFF_TOKEN 400
+        $otherDoc = Post "$GW/api/users/$OTHER_ID/kyc/documents" @{ documentType="PASSPORT"; documentRef="s3://kyc-docs/passport-mr-$ts.jpg" } $OTHER_TOKEN
+        Assert-Refused "Staff cannot submit a document on a customer's behalf" "POST" `
+            "$GW/api/users/$OTHER_ID/kyc/documents" $STAFF_TOKEN 403 @{ documentType="PASSPORT"; documentRef="s3://kyc-docs/staff-upload-$ts.jpg" }
+        $null = Put "$GW/api/kyc/documents/$($otherDoc.id)/review" @{ status="APPROVED" } $STAFF_TOKEN
+        $otherKyc = Put "$GW/api/users/$OTHER_ID/kyc/status?status=APPROVED" $null $STAFF_TOKEN
+        Assert "The customer's identity is approved on an approved document" ($otherKyc -and $otherKyc.kycStatus -eq "APPROVED") "kyc=$($otherKyc.kycStatus)"
+
         $mrApproved = Put "$GW/api/applications/$MR_APP_ID/review" @{ decision="APPROVE"; reviewerNotes="Identity documents seen in branch" } $STAFF_TOKEN
         Assert "A reviewer's approval becomes an offer" ($mrApproved -and $mrApproved.status -eq "OFFERED") "status=$($mrApproved.status)"
         Assert "A reviewer's approval creates no product" ($null -eq $mrApproved.productId)
