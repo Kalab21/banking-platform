@@ -37,8 +37,9 @@ public class PaymentOwnershipVerifier {
      * Staff may see and cancel a customer's payments, but not make one from
      * the customer's account.
      */
-    public void requireCanPayFrom(CallerIdentity caller, Long accountId) {
+    public AccountResponse requireCanPayFrom(CallerIdentity caller, Long accountId) {
         AccountResponse account = accountClient.getAccountById(accountId);
         AccessGuard.requireSelf(caller, account.getUserId());
+        return account;
     }
 }

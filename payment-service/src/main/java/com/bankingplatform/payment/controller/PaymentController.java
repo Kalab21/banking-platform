@@ -3,8 +3,10 @@ package com.bankingplatform.payment.controller;
 import com.bankingplatform.common.idempotency.IdempotencyGuard;
 
 import com.bankingplatform.common.security.CallerIdentity;
+import com.bankingplatform.payment.dto.AccountResponse;
 import com.bankingplatform.payment.dto.CreatePaymentRequest;
 import com.bankingplatform.payment.dto.PaymentResponse;
+import com.bankingplatform.payment.exception.PaymentException;
 import com.bankingplatform.payment.security.PaymentOwnershipVerifier;
 import com.bankingplatform.common.security.AccessGuard;
 import com.bankingplatform.payment.service.BeneficiaryService;
@@ -49,7 +51,18 @@ public class PaymentController {
         // Paying *to* another customer's account is ordinary banking; paying
         // *from* one is not, so only the payer account is checked -- and only
         // its owner may pay from it, staff included.
-        ownership.requireCanPayFrom(caller, request.getPayerAccountId());
+        AccountResponse payer = ownership.requireCanPayFrom(caller, request.getPayerAccountId());
+        // A payment is in the paying account's currency; nothing converts. One
+        // naming no currency used to be stored as USD whatever the account
+        // held, and one naming another was stored under that name.
+        String held = payer.getCurrency();
+        if (request.getCurrency() != null && !request.getCurrency().isBlank() && held != null
+                && !held.equalsIgnoreCase(request.getCurrency().trim())) {
+            throw new PaymentException("This account holds " + held + "; the payment has to be in " + held);
+        }
+        if (held != null) {
+            request.setCurrency(held);
+        }
         // The payee must be one of the payer's own saved payees. The id used to
         // be stored unchecked, so a payment could name another customer's.
         if (request.getBeneficiaryId() != null) {

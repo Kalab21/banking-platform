@@ -57,6 +57,27 @@ public class AccountOwnershipVerifier {
     }
 
     /**
+     * The currency a request on {@code account} is in: the account's own.
+     *
+     * <p>Every account holds one currency and nothing on this path converts,
+     * so a request naming another was applied as if it were the account's
+     * currency and recorded under the name it gave: 100 "EUR" credited 100 USD
+     * and was stored as a EUR deposit. It is refused instead, before any
+     * balance call, and a request naming none is recorded in the account's.
+     */
+    public static String requireAccountCurrency(AccountResponse account, String requested) {
+        String held = account.getCurrency();
+        if (requested == null || requested.isBlank()) {
+            return held;
+        }
+        if (held != null && !held.equalsIgnoreCase(requested.trim())) {
+            throw new TransactionException("This account holds " + held
+                    + "; the amount has to be in " + held);
+        }
+        return held != null ? held : requested.trim();
+    }
+
+    /**
      * Confirms a transfer's destination can take the money, before anything
      * is debited.
      *

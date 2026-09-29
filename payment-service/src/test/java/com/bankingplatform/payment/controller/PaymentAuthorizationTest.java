@@ -266,6 +266,48 @@ class PaymentAuthorizationTest {
             verify(paymentService, never()).createPayment(any());
         }
 
+        /**
+         * Regression tests: a payment naming no currency was stored as USD
+         * whatever the paying account held, and one naming another currency
+         * was stored under that name while the account paid in its own.
+         */
+        @Test
+        @DisplayName("a payment in a currency the paying account does not hold is refused")
+        void paymentInAnotherCurrencyRefused() throws Exception {
+            AccountResponse eur = account(ACCOUNT_OF_A, CUSTOMER_A);
+            eur.setCurrency("EUR");
+            when(accountClient.getAccountById(ACCOUNT_OF_A)).thenReturn(eur);
+
+            mvc.perform(as(post("/api/payments"), CUSTOMER_A, "CUSTOMER")
+                            .header("Idempotency-Key", "currency-1")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"payerAccountId\":%d,\"payeeAccountId\":%d,\"amount\":50.00,\"currency\":\"USD\",\"paymentType\":\"INTERNAL\"}"
+                                    .formatted(ACCOUNT_OF_A, ACCOUNT_OF_B)))
+                    .andExpect(status().isUnprocessableEntity());
+            verify(paymentService, never()).createPayment(any());
+        }
+
+        @Test
+        @DisplayName("a payment naming no currency is made in the paying account's, not USD")
+        void paymentTakesTheAccountsCurrency() throws Exception {
+            AccountResponse eur = account(ACCOUNT_OF_A, CUSTOMER_A);
+            eur.setCurrency("EUR");
+            when(accountClient.getAccountById(ACCOUNT_OF_A)).thenReturn(eur);
+            when(paymentService.createPayment(any())).thenReturn(paymentFrom(ACCOUNT_OF_A));
+
+            mvc.perform(as(post("/api/payments"), CUSTOMER_A, "CUSTOMER")
+                            .header("Idempotency-Key", "currency-2")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"payerAccountId\":%d,\"payeeAccountId\":%d,\"amount\":50.00,\"paymentType\":\"INTERNAL\"}"
+                                    .formatted(ACCOUNT_OF_A, ACCOUNT_OF_B)))
+                    .andExpect(status().is2xxSuccessful());
+
+            org.mockito.ArgumentCaptor<com.bankingplatform.payment.dto.CreatePaymentRequest> sent =
+                    org.mockito.ArgumentCaptor.forClass(com.bankingplatform.payment.dto.CreatePaymentRequest.class);
+            verify(paymentService).createPayment(sent.capture());
+            org.assertj.core.api.Assertions.assertThat(sent.getValue().getCurrency()).isEqualTo("EUR");
+        }
+
         @Test
         @DisplayName("a customer cannot cancel another customer's payment")
         void foreignCancelDenied() throws Exception {

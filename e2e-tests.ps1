@@ -235,6 +235,10 @@ Assert "Balance after opening deposit = 500.00" ([decimal]$acctFunded.balance -e
 # database on write, so three deposits of 0.015 stored 0.06.
 Assert-Refused "A deposit of a fraction of a cent is refused" "POST" `
     "$GW/api/transactions/deposit" $TOKEN 400 @{ accountId=$ACCOUNT_ID; amount=0.015; description="Sub-cent" }
+# Nothing converts, so an amount stated in a currency the account does not hold
+# is refused rather than applied as the account's and recorded under the other.
+Assert-Refused "A deposit in a currency the account does not hold is refused" "POST" `
+    "$GW/api/transactions/deposit" $TOKEN 422 @{ accountId=$ACCOUNT_ID; amount=100.00; currency="EUR"; description="Wrong currency" }
 Write-Host "  Funded balance=$($acctFunded.balance)"
 
 # ─────────────────────────────────────────────────────────────────────────────
