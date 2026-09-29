@@ -101,7 +101,7 @@ test.describe("onboarding, end to end", () => {
     await expect(details).toContainText(who.stateName);
     await expect(details).toContainText(who.postalCode);
     await expect(details).toContainText(`•••-••-${who.ssnLast4}`);
-    await expect(details).toContainText("Submitted — verification pending");
+    await expect(details).toContainText("On file");
 
     // Nothing anywhere on the profile page carries the full number.
     const body = (await page.locator("body").textContent()) ?? "";

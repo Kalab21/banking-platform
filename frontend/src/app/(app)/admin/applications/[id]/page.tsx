@@ -37,7 +37,7 @@ const ratio = (value: number | null) => (value === null ? "—" : formatPercent(
  * shown; a reviewer's approval does not overwrite the policy's referral.
  */
 export default async function AdminApplicationPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireStaffSession();
+  const session = await requireStaffSession();
   const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();
 
@@ -205,6 +205,11 @@ export default async function AdminApplicationPage({ params }: { params: Promise
       <Card className="mt-4">
         <CardHeader title="Your decision" />
         <CardBody>
+          {/* A reviewer's own application is decided by someone else; the
+              backend refuses it, so the console does not offer it. */}
+          {application.userId === session.userId ? (
+            <p className="text-sm text-ink-muted">This is your own application. Another reviewer decides it.</p>
+          ) : (
           <ReviewDecisionForm
             applicationId={application.id}
             requestedAmount={application.requestedAmount}
@@ -212,6 +217,7 @@ export default async function AdminApplicationPage({ params }: { params: Promise
             open={application.status === "MANUAL_REVIEW"}
             identityApproved={applicant.kycStatus === "APPROVED"}
           />
+          )}
         </CardBody>
       </Card>
     </>

@@ -406,7 +406,9 @@ export default async function DashboardPage() {
         {/*
          * Security is a panel, not a headline. Identity and KYC state matter,
          * but a customer opening their bank wants their balance first — and
-         * "SUBMITTED" is not "verified", so the wording says what is true.
+         * "SUBMITTED" is not "verified", so the wording says what is true:
+         * identity details are on file, and the decision on them is the KYC
+         * row, which only a member of staff can set.
          */}
         <Card>
           <CardHeader
@@ -419,9 +421,9 @@ export default async function DashboardPage() {
           />
           <CardBody className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-ink-muted">Identity</span>
-              <Badge tone={profile.identityStatus === "SUBMITTED" ? "caution" : "neutral"}>
-                {profile.identityStatus === "SUBMITTED" ? "Submitted" : "Not submitted"}
+              <span className="text-sm text-ink-muted">Identity details</span>
+              <Badge tone="neutral">
+                {profile.identityStatus === "SUBMITTED" ? "On file" : "Not on file"}
               </Badge>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -431,7 +433,7 @@ export default async function DashboardPage() {
               </Badge>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-ink-muted">Know-your-customer</span>
+              <span className="text-sm text-ink-muted">Identity check (KYC)</span>
               <Badge tone={statusTone(profile.kycStatus)}>{humanise(profile.kycStatus)}</Badge>
             </div>
             <div className="flex items-center justify-between gap-3">

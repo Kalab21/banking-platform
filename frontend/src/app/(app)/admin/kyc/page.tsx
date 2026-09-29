@@ -111,7 +111,7 @@ export default async function AdminKycPage({
               description="This customer has not sent anything for verification yet."
             />
           ) : (
-            <KycReviewList documents={documents} />
+            <KycReviewList documents={documents} isSelf={profile.id === session.userId} />
           )}
         </Card>
       ) : null}
