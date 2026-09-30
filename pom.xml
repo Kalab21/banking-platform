@@ -46,7 +46,7 @@
         <springdoc.version>2.9.1</springdoc.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <maven-failsafe.version>3.6.0</maven-failsafe.version>
-        <!-- Ahead of the version Boot 3.3.6 manages (42.7.4). Originally for
+        <!-- Ahead of the version Boot 3.3.13 manages (42.7.7). Originally for
              CVE-2025-49146, where the driver silently fell back to plaintext
              authentication when channel binding was requested but unsupported;
              now also for CVE-2026-42198 and CVE-2026-54291. A JDBC driver that

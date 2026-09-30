@@ -90,7 +90,7 @@ eureka:
     service-url:
       defaultZone: http://localhost:8761/eureka/
 
-# The gateway serves no API docs. springdoc 2.6 grows a per-locale cache on
+# The gateway serves no API docs. springdoc before 2.9.1 grows a per-locale cache on
 # /v3/api-docs without bound (GHSA-rhhx-6j8h-8cvw), and this endpoint is served
 # by the gateway itself, outside every route and so outside the JWT filter:
 # enabled, it would be public. See docs/SECURITY.md.
