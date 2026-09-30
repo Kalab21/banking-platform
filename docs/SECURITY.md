@@ -488,10 +488,27 @@ Northbank does not use Artemis. It is not on the dependency tree, there is no
 The finding is attributed to `spring-boot-autoconfigure`, which is present for
 every other reason a Spring Boot application needs it.
 
+### CVE-2026-22733 — spring-boot-actuator — high — NOT REACHABLE, FEATURE NOT USED
+
+Authentication can be bypassed on the actuator's Cloud Foundry endpoints
+(`/cloudfoundryapplication/**`). Fixed in Spring Boot 3.5.12 and 4.0.4; the
+platform resolves 3.3.13, so the package is still the affected version.
+
+Those endpoints exist only on Cloud Foundry. Their servlet and reactive
+auto-configurations are conditional on `CloudPlatform.CLOUD_FOUNDRY`, which
+Spring Boot detects from the `VCAP_APPLICATION` or `VCAP_SERVICES` environment
+variables. Northbank runs on Docker Compose, its Terraform targets ECS, and
+nothing sets those variables or `spring.main.cloud-platform`. On the running
+gateway, `/cloudfoundryapplication` and `/cloudfoundryapplication/health`
+answer 404 while `/actuator/health` answers 200.
+
+**Residual risk.** Deploying to Cloud Foundry would activate the endpoints. The
+fix is in the release-train upgrade below.
+
 ### Deferred: platform modernization
 
 The fixes for the advisories above are in `spring-kafka` 3.3.16 / 4.0.6 and
-Spring Boot 3.5.15 / 4.0.7. This platform runs Spring Boot 3.3.13 with Spring
+Spring Boot 3.5.15 / 4.0.7 (3.5.12 / 4.0.4 for CVE-2026-22733). This platform runs Spring Boot 3.3.13 with Spring
 Cloud 2023.0.6, which resolve `spring-kafka` 3.2.10 — still in the affected
 range, since the patch-level upgrade in #97 does not reach the fixed lines. Those
 Kafka versions target a later Spring Framework
