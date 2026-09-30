@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Regression test for GHSA-rhhx-6j8h-8cvw, across every service.
  *
- * <p>Each business service carries springdoc 2.6, whose {@code /v3/api-docs}
+ * <p>Each business service carries springdoc; before 2.9.1 its {@code /v3/api-docs}
  * grows a per-locale cache without bound. The docs are off unless
  * {@code SPRINGDOC_ENABLED=true}, which only {@code docker-compose.dev-ports.yml}
  * sets. Read from the sibling modules' sources, so a service added later, or

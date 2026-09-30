@@ -190,7 +190,7 @@ if (-not $USER_ID) {
 Write-Host "  UserId=$USER_ID"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The gateway publishes no API docs. springdoc 2.6 grows a per-locale cache on
+# The gateway publishes no API docs. springdoc before 2.9.1 grows a per-locale cache on
 # /v3/api-docs without bound (GHSA-rhhx-6j8h-8cvw), and the gateway used to
 # serve that endpoint to anyone, so each new Accept-Language cost it heap.
 foreach ($docsPath in @("/v3/api-docs", "/swagger-ui.html", "/swagger-ui/index.html")) {

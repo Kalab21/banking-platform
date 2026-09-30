@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Regression test for GHSA-rhhx-6j8h-8cvw.
  *
- * <p>springdoc 2.6 caches a rendered OpenAPI document per {@code Accept-Language}
+ * <p>springdoc before 2.9.1 caches a rendered OpenAPI document per {@code Accept-Language}
  * without bound, so an unauthenticated caller could exhaust the heap by asking
  * for {@code /v3/api-docs} in endless locales. The JWT filter listed
  * {@code /v3/api-docs} and {@code /swagger-ui} as public paths. The docs are

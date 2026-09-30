@@ -9,8 +9,8 @@
 #
 # Use it when you genuinely need to attach a debugger, hit one service's Swagger
 # UI, or read an actuator endpoint directly. It is also the only thing that turns
-# the API docs on (SPRINGDOC_ENABLED); they are off in the normal stack, because
-# springdoc 2.6 is exposed to GHSA-rhhx-6j8h-8cvw on /v3/api-docs:
+# the API docs on (SPRINGDOC_ENABLED); they are off in the normal stack (see
+# GHSA-rhhx-6j8h-8cvw in docs/SECURITY.md):
 #
 #   docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
 #

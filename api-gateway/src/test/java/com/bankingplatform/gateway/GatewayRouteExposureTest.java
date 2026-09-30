@@ -152,7 +152,7 @@ class GatewayRouteExposureTest {
      * Regression test for GHSA-rhhx-6j8h-8cvw. The gateway's own
      * {@code /v3/api-docs} is served outside every route, so the JWT filter
      * never sees it: enabled, it is public whatever the filter says. springdoc
-     * 2.6 grows a per-locale cache there without bound. The docs stay off.
+     * before 2.9.1 grows a per-locale cache there without bound. The docs stay off.
      */
     @Test
     @DisplayName("the gateway serves no API docs or Swagger UI")

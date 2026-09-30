@@ -365,27 +365,30 @@ A package containing vulnerable code is not the same as an exploitable path
 through this codebase, and neither fact excuses the other, so each is audited
 for reachability and recorded with the evidence.
 
-None of the entries below are claimed to be patched. The affected versions are
-still what this platform runs, and the fixes are in release trains that need a
-coordinated Spring Boot, Spring Framework and Spring Cloud upgrade — recorded
-at the end as deferred platform maintenance.
+The springdoc advisory is patched: the platform now resolves springdoc-openapi
+2.9.1. The Kafka and Boot entries are not patched. The platform still resolves
+the affected `spring-kafka` 3.2.10 and Spring Boot 3.3.13, and their fixes are
+in release trains that need a coordinated Spring Boot, Spring Framework and
+Spring Cloud upgrade — recorded at the end as deferred platform maintenance.
 
-### GHSA-rhhx-6j8h-8cvw — springdoc-openapi — MITIGATED BY NOT EXPOSING THE FEATURE
+### GHSA-rhhx-6j8h-8cvw — springdoc-openapi — PATCHED AND NOT EXPOSED IN NORMAL RUNTIME
 
 **What it is.** springdoc-openapi 2.0.0 up to (not including) 2.9.1 caches the
 rendered OpenAPI document per `Accept-Language` value without bound. Every
 request to `/v3/api-docs` in a new locale adds an entry, so a caller can grow
 the cache until the heap is exhausted.
 
-**Reachability.** Reachable before this change. The gateway carries
+**Reachability.** Reachable before #98. The gateway carried
 `springdoc-openapi-starter-webflux-ui` 2.6.0, and its own `/v3/api-docs` and
 Swagger UI were enabled. They are served by the gateway itself, outside every
 route, so the JWT filter never sees them. The filter also listed `/v3/api-docs`
 and `/swagger-ui` as public paths. An unauthenticated caller on port 8080 could
-therefore drive the cache. Each business service carries the webmvc starter at
+therefore drive the cache. Each business service carried the webmvc starter at
 the same version, reachable only through `docker-compose.dev-ports.yml`.
 
-**Control.** The dependency is still 2.6.0; the feature is switched off.
+**Control.** Two layers. #97 moved springdoc-openapi to 2.9.1, which is
+outside the affected range. Before that, #98 switched the feature off, and it
+stays off as defence in depth:
 - The gateway sets `springdoc.api-docs.enabled` and
   `springdoc.swagger-ui.enabled` to `false`.
 - Every business service defaults both to `${SPRINGDOC_ENABLED:false}`.
@@ -409,11 +412,11 @@ the same version, reachable only through `docker-compose.dev-ports.yml`.
 - The PowerShell suite requests the three document paths from the running
   gateway, each with a fresh `Accept-Language`, and requires 401 or 404.
 
-**Residual risk.** The vulnerable version remains on the dependency tree.
-Starting the stack with the development override turns the endpoint on for
-local ports. The patched 2.9.1 arrives with dependency PR #97, which also
-moves Spring Boot, Spring Cloud, JJWT and MapStruct and needs its own release
-gate before merging.
+**Residual risk.** None known for this advisory: the resolved version is
+patched and the endpoint is not served in the normal runtime. The development
+override still turns the docs on for local ports only. After the upgrade, the
+running gateway still answers 404 on every docs path, and the exposure tests
+still pass.
 
 ### CVE-2026-41731 — spring-kafka — high — MITIGATED IN CONFIGURATION
 
@@ -485,11 +488,30 @@ Northbank does not use Artemis. It is not on the dependency tree, there is no
 The finding is attributed to `spring-boot-autoconfigure`, which is present for
 every other reason a Spring Boot application needs it.
 
+### CVE-2026-22733 — spring-boot-actuator — high — NOT REACHABLE, FEATURE NOT USED
+
+Authentication can be bypassed on the actuator's Cloud Foundry endpoints
+(`/cloudfoundryapplication/**`). Fixed in Spring Boot 3.5.12 and 4.0.4; the
+platform resolves 3.3.13, so the package is still the affected version.
+
+Those endpoints exist only on Cloud Foundry. Their servlet and reactive
+auto-configurations are conditional on `CloudPlatform.CLOUD_FOUNDRY`, which
+Spring Boot detects from the `VCAP_APPLICATION` or `VCAP_SERVICES` environment
+variables. Northbank runs on Docker Compose, its Terraform targets ECS, and
+nothing sets those variables or `spring.main.cloud-platform`. On the running
+gateway, `/cloudfoundryapplication` and `/cloudfoundryapplication/health`
+answer 404 while `/actuator/health` answers 200.
+
+**Residual risk.** Deploying to Cloud Foundry would activate the endpoints. The
+fix is in the release-train upgrade below.
+
 ### Deferred: platform modernization
 
 The fixes for the advisories above are in `spring-kafka` 3.3.16 / 4.0.6 and
-Spring Boot 3.5.15 / 4.0.7. This platform runs Spring Boot 3.3.6 with Spring
-Cloud 2023.0.3, and those Kafka versions target a later Spring Framework
+Spring Boot 3.5.15 / 4.0.7 (3.5.12 / 4.0.4 for CVE-2026-22733). This platform runs Spring Boot 3.3.13 with Spring
+Cloud 2023.0.6, which resolve `spring-kafka` 3.2.10 — still in the affected
+range, since the patch-level upgrade in #97 does not reach the fixed lines. Those
+Kafka versions target a later Spring Framework
 generation — so this is a coordinated release-train upgrade across Boot,
 Framework, Cloud and Data, not a single dependency bump. Overriding one
 component into an unsupported combination to quiet a scanner would be a worse
