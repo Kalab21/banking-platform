@@ -77,11 +77,13 @@ These **overwrite** anything the client sent. A request arriving with
 This is the property the rest of the model depends on, and it is covered by
 `GatewayIdentitySpoofingTest`, including under varied header casing.
 
-Public routes — `/api/auth/register`, `/api/auth/login`, actuator and the API docs
+Public gateway routes — `/api/auth/register`, `/api/auth/login` and `/actuator`
 — establish no identity. The filter still runs on them to remove any `X-User-*`
-headers the client wrote; they used to pass through unchanged, and a service behind
-a public path that trusted them would have taken them as real. Protected routes in
-the services reject identity-less requests, so a public path is not a way in.
+headers the client wrote, so a service behind a public path never takes them as
+real. Protected routes in the services reject identity-less requests, so a public
+path is not a way in. API docs and Swagger UI are disabled in the normal runtime;
+service docs are available only through the local `docker-compose.dev-ports.yml`
+configuration (see GHSA-rhhx-6j8h-8cvw under Dependency advisories).
 
 Because `/actuator` is one of those public paths, and because the gateway is the
 only service whose actuator sits on the public port, whatever the gateway

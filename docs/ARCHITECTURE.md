@@ -99,9 +99,13 @@ The event contracts, delivery guarantees and retry behaviour are in
 
 ## Authority boundaries
 
-- **Identity** comes only from the gateway, which derives it from the JWT.
-  Services read it from `X-User-*` headers they can trust because nothing
-  reaches them except through the gateway.
+- **External request identity** is established by the gateway from the
+  validated JWT. The gateway overwrites client-supplied `X-User-Id`,
+  `X-Username` and `X-User-Role` headers before forwarding the request.
+  Background work, such as a scheduled payment, establishes caller context from
+  authoritative stored state (`CallerContext.runAs`), and service-to-service
+  calls carry that identity on the Compose network. Those internal calls rely
+  on network isolation rather than workload credentials or mTLS.
 - **Ownership** is checked in each service against the owner stored with the
   resource (account, payment, loan, card, application), never against an id
   in the request.
