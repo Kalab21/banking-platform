@@ -81,31 +81,11 @@ order. Fraud alerts were published with no key at all.
 | `integration-events` | `EXTERNAL_TRANSFER_INITIATED` | fromAccountId | integration | *none* | — |
 | `fraud-alert-events` | `FRAUD_ALERT_CREATED` | accountId | fraud | *none* | — |
 
-## What was broken
-
-Every one of these was live, and none of it failed visibly. A consumer read a
-field that was not there, got `null`, took its "nothing to do" branch and
-committed the offset.
-
-| Break | Effect |
-|---|---|
-| `transaction-events` carried no `userId` | The large-transaction notification, the per-user statistic and the fraud evaluation were all dead |
-| `TRANSFER_COMPLETED` published `debitRef`, consumers read `transactionRef` | Same three consumers, on transfers |
-| `OVERDRAFT_TRIGGERED` published to `account-events` as `overdraftAmount`, consumed from `transaction-events` as `amount` | The overdraft notice had never been sent |
-| Producer emitted `CREDIT_CARD_STATEMENT_GENERATED`, consumer matched `STATEMENT_GENERATED` | The statement notice had never been sent |
-| Card events carried no `userId` | No card payment had ever raised a credit score |
-| Loan repayment carried no `userId` | No on-time repayment had ever raised a credit score |
-| Payment events carried no `userId`; the failure carried no `payerAccountId` | No payment receipt or failure notice had ever been sent, and repeated failed payments — the signal the fraud rule exists for — were never counted |
-| `APPLICATION_REJECTED` carried no `productType` | Every rejection said "your product application" |
-| `publishApplicationSubmitted` existed and was never called | The submitted-applications statistic had always read zero |
-| `CREDIT_CARD_CREATED` carried no card identifier, and the notification called `substring(length - 4)` on the empty default | Every issuance notification threw, and the consumer's catch block swallowed it |
-| `user-events` had four consumers and no producer | KYC and two-factor notifications had never been sent once |
-
 ## Data minimisation
 
-`ACCOUNT_CREATED` used to carry the full bank account number. No consumer read
-it. An account number in an event is a copy of it in every consumer's logs and
-in the broker's on-disk segments, retained for as long as the topic is.
+An account number in an event would be a copy of it in every consumer's logs
+and in the broker's on-disk segments, retained for as long as the topic is, so
+`ACCOUNT_CREATED` carries the account's identifier and nothing more.
 
 The rule applied throughout: an event carries an identifier and, where a
 message needs to name something to a customer, a masked form. Never a full
@@ -124,36 +104,12 @@ Two deliberate omissions:
 
 ## Events with no consumer
 
-Kept, and listed here rather than deleted or given an invented consumer.
+These are published as facts even though no current service consumes them.
 
-- **`BALANCE_UPDATED`** — the natural record of a balance change, cheap to
-  publish.
-- **`EXTERNAL_TRANSFER_INITIATED`** — a genuine record of an outward
-  instruction, and the obvious attachment point for a future notification or
-  settlement-tracking consumer.
-- **`FRAUD_ALERT_CREATED`** — an alert is a fact worth emitting; case
-  management or staff notification is the obvious future subscriber.
-
-## Behaviour that was removed
-
-Consumers existed for events that nothing produces. They were handlers that
-could never run, which read as working features.
-
-- **`LOAN_PAYMENT_DUE` and `LOAN_PAYMENT_MISSED`.** No job anywhere looks for
-  an instalment coming due or going unpaid. The notification handlers and the
-  −20 credit-score penalty are gone; keeping them implied this platform detects
-  delinquency. The notification copy is still in `NotificationService` for
-  whenever the scheduler is written.
-- **The fraud listener on `credit-card-events`.** It read an `accountId` that a
-  card transaction does not have. The honest fix is not to add one: its
-  `evaluateCreditCardPurchase` path ends in `freezeAccount(accountId)`, which
-  would freeze a customer's *deposit* account because of a card purchase, and
-  `FraudAlert.accountId` is `NOT NULL`, so an alert cannot be recorded against
-  a card at all. Card fraud needs a card subject in the fraud model and a
-  decision about what freezing a card means — a change to that model, not to an
-  event contract. `evaluateCreditCardPurchase` and its
-  `fraud.rules.cc-single-purchase-threshold` setting are removed with it, so a
-  rule that cannot run does not read as an active control.
+- **`BALANCE_UPDATED`** — the record of a balance change.
+- **`EXTERNAL_TRANSFER_INITIATED`** — the record of an outward wire, ACH or
+  SWIFT instruction.
+- **`FRAUD_ALERT_CREATED`** — the record of a raised fraud alert.
 
 ## Nulls on the wire
 
@@ -170,9 +126,9 @@ topic instead of being processed. A null
 account id would also collapse every such event onto one Redis velocity key,
 mixing unrelated customers into a single fraud counter.
 
-So consumers still check. The check is no longer the normal path — the field
-is populated now — but it is the difference between skipping one odd record
-and stalling a partition.
+So consumers still check. Producers populate the field, so the check is not
+the normal path, but it is the difference between skipping one odd record and
+stalling a partition.
 
 ## When processing fails
 
@@ -185,11 +141,11 @@ service, because seven services consume these topics and the answer to "how many
 times, how long, and then where" should not be able to differ between them.
 `kafka.recovery.*` makes the numbers configurable.
 
-Both halves of that were missing. Listeners used to catch their own exceptions
-and return normally, which tells the container the record succeeded. With that
-removed, the container's default applied instead: ten immediate attempts and
-then commit the offset anyway — a tight loop that cannot outlast the outage it
-is retrying, followed by silent loss.
+Listener failures propagate to this shared policy. A listener that caught its
+own exception and returned normally would tell the container the record
+succeeded, and the container's default without the policy is ten immediate
+attempts followed by committing the offset anyway — a tight loop that cannot
+outlast the outage it is retrying, followed by silent loss.
 
 ### The deserializer has to be wrapped
 
@@ -287,12 +243,11 @@ Dead letter topics are created on demand: the broker has
 `KAFKA_AUTO_CREATE_TOPICS_ENABLE=true`. A deployment that turned that off would
 need them declared.
 
-### What this does not give you
+### Dead-letter topics
 
-Nothing consumes the dead letter topics. A record there is retained and
-inspectable, not automatically replayed; deciding what to do with it is an
-operator's job. Consumers claim each event id before acting on it, so a
-replayed record that was in fact processed is skipped rather than applied twice.
+A dead-lettered record is retained and inspectable, and replaying it is an
+operator's decision. Consumers claim each event id before acting on it, so a
+replayed record that was already processed is skipped rather than applied twice.
 
 ## Surviving redelivery
 
@@ -332,7 +287,7 @@ Two consumers create a financial product from `APPLICATION_APPROVED`, so a
 redelivery there means a second loan or a second card. Those also carry a
 partial unique index on `application_id`, so the state cannot exist even if a
 duplicate arrives by a route that misses the guard — a manual replay from a
-dead letter topic, or a future consumer that forgets it. Partial because
+dead letter topic, or a consumer that omits the guard. Partial because
 `application_id` is nullable for products created by other routes.
 
 `LoanIssuanceIdempotencyIT` proves both against real PostgreSQL, including
@@ -440,9 +395,7 @@ waits for cluster metadata and throws on the calling thread when
 `max.block.ms` expires, which this platform sets to one second. That is caught
 and turned into a failed send like any other. Uncaught it would escape the
 tick, roll back the rows already marked sent for every other key, and record
-no attempt against the row that caused it — which is exactly what it did the
-first time the relay ran against the live stack, while every test passed,
-because a mocked template only ever returned a failed future.
+no attempt against the row that caused it.
 
 A send that succeeds but whose row is not marked — the relay dies in between —
 is sent again next tick. The outbox is at-least-once; consumers claim the
@@ -455,16 +408,14 @@ What is stored is what goes on the wire. Serialising in the relay would mean a
 change to an event class between the write and the send silently altered an
 already-committed publication.
 
-It is serialised with **spring-kafka's** mapper, not the application's. The
-`JsonSerializer` these events used to go through builds its own through
-`JacksonUtils.enhancedObjectMapper()`, so that mapper — not Boot's — is the
-definition of the current wire format, down to how an `Instant` is written.
-Boot's is configured by the application's Jackson properties and whatever
-modules are on the classpath, and the two agree only by coincidence. Using it
-would have re-encoded every event the moment publishing moved to the outbox: a
-wire-format change for every consumer, from a refactor meant to change only
-where the event is written. `OutboxIT` pins the stored bytes to exactly what
-the serializer would have sent.
+It is serialised with **spring-kafka's** mapper, not the application's.
+spring-kafka's `JsonSerializer` builds its own through
+`JacksonUtils.enhancedObjectMapper()`, so that mapper — not Boot's — defines the
+wire format, down to how an `Instant` is written. Boot's is configured by the
+application's Jackson properties and whatever modules are on the classpath, and
+the two agree only by coincidence; serialising with it would change the wire
+format for every consumer. `OutboxIT` pins the stored bytes to exactly what the
+serializer sends.
 
 ### Retention, and services that have no outbox
 
@@ -530,28 +481,22 @@ schedule. What the pruning refuses to touch matters more than what it removes:
 - a processed-event claim is kept well beyond the broker's own retention, or
   pruning it would reopen the duplicate window it exists to close
 
-## What this does not solve
+## What the guarantees cover
 
-Publishing is reliable. Every producer on the platform writes its event to a
-transactional outbox in the same transaction as the change — see "Publishing
-what actually happened" below.
+Publishing is reliable: every producer writes its event to a transactional
+outbox in the same transaction as the change (see "Publishing what actually
+happened"). Consumers are idempotent: every handler with a durable effect claims
+the event id in the same transaction as its work (see "Surviving redelivery"),
+and listener failures go to bounded retry and a dead-letter topic (see "When
+processing fails").
 
-What remains unsolved is compensation *across* services: a transfer that
-debits one service and fails in another is still surfaced as unknown and
-reconciled rather than rolled back. The outbox makes the event reliable, not
-the transfer atomic.
+The outbox makes the event reliable; it does not make a cross-service transfer
+atomic. A transfer that debits in one service and fails in another is surfaced
+as unknown and reconciled rather than rolled back.
 
-Consumers are idempotent. Every handler with a durable effect claims the event
-id in the same transaction as its work — see "Surviving redelivery" above.
-
-Listeners no longer swallow exceptions, and bounded retry with a dead-letter
-topic now stands behind them — see "When processing fails" above.
-
-What the guard does not cover is any effect outside the database transaction it
-lives in. A Redis counter, an outbound HTTP call or a published event is not
-rolled back with the claim, so a handler with one of those has to make it
-idempotent itself — `fraud-detection-service` claims its velocity counter per
-event for exactly this reason. Nor does the guard make a *business* fact
-unique: it keys on the publication, so two genuine publications of one approval
-are two events. The unique index on `application_id` is what stops a second
-product existing.
+The processed-event guard covers effects inside its own database transaction. A
+Redis counter, an outbound HTTP call or a published event is not rolled back
+with the claim, so a handler with one of those makes that effect idempotent
+itself; `fraud-detection-service` claims its velocity counter per event for this
+reason. The guard keys on the publication rather than the business fact, so the
+unique index on `application_id` is what stops a second product existing.

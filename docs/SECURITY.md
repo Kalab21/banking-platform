@@ -1,6 +1,6 @@
 # Security model
 
-How a request is authenticated, how it is authorised, and what is not covered.
+How a request is authenticated, how it is authorised, and how the controls are enforced.
 
 This is a portfolio project. It handles no real money and holds no real customer
 data, and it makes no regulatory or certification claims.
@@ -83,17 +83,16 @@ headers the client wrote, so a service behind a public path never takes them as
 real. Protected routes in the services reject identity-less requests, so a public
 path is not a way in. API docs and Swagger UI are disabled in the normal runtime;
 service docs are available only through the local `docker-compose.dev-ports.yml`
-configuration (see GHSA-rhhx-6j8h-8cvw under Dependency advisories).
+configuration (see Dependency and security scanning).
 
 Because `/actuator` is one of those public paths, and because the gateway is the
 only service whose actuator sits on the public port, whatever the gateway
 publishes there it publishes to unauthenticated callers. It exposes `health`,
-`info` and `prometheus` and nothing else. The `gateway` endpoint used to be
-exposed alongside them: `/actuator/gateway/routes` answered anyone with every
-route id, predicate and `lb://` target in the platform — a map of the internal
-topology, and a surface whose `POST` sub-paths can refresh routes. It is gone,
-and `GatewayRouteExposureTest` fails the build if it returns or if `health` and
-`prometheus` stop being published, since the Compose readiness probe and the
+`info` and `prometheus` and nothing else. The `gateway` actuator endpoint is not
+exposed: `/actuator/gateway/routes` would answer anyone with every route id,
+predicate and `lb://` target in the platform — a map of the internal topology —
+and its `POST` sub-paths can refresh routes. `GatewayRouteExposureTest` fails
+the build if it is exposed or if `health` and `prometheus` stop being published, since the Compose readiness probe and the
 Prometheus scrape depend on them.
 
 ## Authorization
@@ -143,72 +142,34 @@ boolean fails open.
 An id in a path or a `userId` in a request body is caller input. It is checked
 against the identity the gateway established, never trusted as proof of ownership.
 
-That rule was applied unevenly at first, and it took three passes to finish.
+Every service resolves the owner from stored state and authorises against it,
+and each has a regression suite that fails if the guard is removed.
 
-The first pass covered `fraud-detection-service`, `payment-service`,
-`notification-service` and `application-service`. Each read the `userId` from
-the path, body or query string and acted on it directly, so any authenticated
-customer could reach another customer's payees, notifications and applications,
-and could list, read and resolve fraud alerts across the whole platform.
+Money leaving an account is the account holder's alone. Withdrawals, transfers
+out, payments, loan repayments and payoffs, cash advances and card payments all
+require the account's owner; staff can read and deposit, but cannot send a
+customer's money anywhere or repay a customer's debt from the customer's
+account.
 
-The second pass covered `loan-service` and `credit-card-service`, which were
-worse: neither had `common-security` on its classpath at all, so no handler in
-either service ever saw a `CallerIdentity` and nothing was checked. Confirmed
-against the running stack rather than inferred — a freshly registered second
-customer could read another customer's loan, interest rate and full
-amortization schedule, and that customer's card balance, credit limit, APR,
-rewards and transaction history, by asking for an id it did not own. The write
-paths were open the same way: repayment, early payoff, disbursement, purchase,
-cash advance, card payment and freeze.
+External transfers use different rules for sending and reading. Reading a
+transfer is owner-or-staff, matching transaction history. Initiating one is
+owner-only, including for employees and admins: an external transfer is the
+single action that moves money out of the bank along a rail with no in-product
+reversal, and nothing in this project establishes that staff may start one for
+a customer. Ownership is checked against `account-service` before the transfer
+is persisted, so a refused request writes no row and publishes no event.
 
-Running the full stack is what surfaced both rounds; the unit suites at the time
-asserted nothing about those services. All six now resolve the owner from stored
-state and authorise against it, the same way the account and transaction
-services do, and each has a regression suite that fails if the guard is removed.
+The two-factor endpoints (enrol, confirm, remove) are `requireSelf`. They manage
+a credential: an employee may review a customer's KYC documents because a
+workflow needs it, but no role needs to manage someone else's second factor, and
+a staff account that could remove one could take it off before signing in as
+that customer.
 
-A third pass covered `integration-service`, the last service without
-`common-security` on its classpath, and the two-factor endpoints in
-`user-service`.
-
-`integration-service` exposes the outward rails. Nothing checked that the
-`fromAccountId` on a wire, ACH or SWIFT request belonged to the caller, so any
-signed-in customer could send money out of an account that was not theirs by
-changing one number in a request body; and nothing checked who read a transfer
-back, so a guessed reference returned another customer's beneficiary name,
-IBAN, routing number and amount. It now resolves the owning user from
-`account-service` and authorises against it before the transfer is persisted,
-so a refused request writes no row and publishes no event.
-
-Sending and reading use **different** rules there, which was the first place this
-platform deliberately departed from `requireOwnerOrStaff` for an account
-operation. Reading a transfer is owner-or-staff, matching transaction history.
-Initiating one is owner-only, including for employees and admins: an external
-transfer is the single action that moves money out of the bank along a rail
-with no in-product reversal, and nothing in this project establishes that staff
-may start one for a customer. Where the policy was silent about an irreversible
-outward payment, the narrow reading was taken rather than inherited by accident
-from a shared helper. Widening it is a product decision, and would want a
-staff-initiated-transfer audit trail first.
-
-The two-factor endpoints — enrol, confirm, remove — took a `userId` request
-parameter and used it unchecked, so any customer could enrol an authenticator
-against another account or strip one off. These manage a credential, so the
-rule is `requireSelf` rather than `requireOwnerOrStaff`: an employee may review
-a customer's KYC documents because a workflow needs it, but no role needs to
-manage someone else's second factor, and a staff account that could remove one
-could take it off before signing in as that customer.
-
-A fourth pass, an audit of every controller, took the same reading for all money
-leaving an account. Withdrawals, transfers out and payments had been
-owner-or-staff on the source account, so an employee could send a customer's
-money to an account of their choosing; loan repayments and payoffs, cash
-advances and card payments were owner-or-staff too, so an employee could repay a
-customer's debt from the customer's own account. All of these are now the
-account holder's alone. The same audit found staff able to decide about
-themselves — approve their own credit application, set their own identity
-status or credit score, change their own account's status or overdraft limit —
-and those are refused by `requireStaffActingForAnother`. A member of staff who is
-also a customer is a customer for their own records.
+Staff never decide about themselves. Approving their own credit application,
+setting their own identity status or credit score, and changing their own
+account's status or overdraft limit are refused by
+`requireStaffActingForAnother`. A member of staff who is also a customer is a
+customer for their own records.
 
 Fraud alerts are staff-only in every direction. An alert is a control applied to
 a customer, so the customer it names is not among the principals who may read or
@@ -265,7 +226,7 @@ then applies the same ownership check it would to the customer's own request.
 | Username lookup | A customer is refused before the lookup for any name but their own, so a 404 cannot reveal which usernames exist |
 | Second-factor management | Enrolling, confirming and removing an authenticator are self-only — `AccessGuard.requireSelf`, not owner-or-staff. No role can take another account's second factor off |
 | Outward transfer rails | A wire, ACH or SWIFT transfer may only be initiated from an account the caller owns, resolved from `account-service` rather than read from the request. Staff are not exempt |
-| What travels on Kafka | Events carry identifiers and, where a message names something to a customer, a masked form. Never a full account number, PAN, SSN, password, token or TOTP secret. `ACCOUNT_CREATED` used to carry the full account number for no consumer; a contract test now asserts no event declares such a field |
+| What travels on Kafka | Events carry identifiers and, where a message names something to a customer, a masked form. Never a full account number, PAN, SSN, password, token or TOTP secret. A contract test asserts that no event declares such a field |
 | Kafka headers | Mapped as raw bytes by `SimpleKafkaHeaderMapper`, so no Java type named by a producer is ever constructed. Header mapping is a separate trust boundary from payload deserialization, and the framework default reconstructs types from a `spring_json_header_types` header the producer controls |
 | Kafka deserialization | Type headers are off, and every service's trusted-package list is `com.bankingplatform.common.events` — the contract package alone. It was `*` in four services and `com.bankingplatform.*` in four more. A record names its type in an `eventType` field rather than a Java class the consumer would instantiate |
 | Management endpoints | `health`, `info` and `prometheus` only, on every service including the gateway, whose actuator is the one reachable without a token |
@@ -299,12 +260,11 @@ no beneficiary data at all; the account number is typed, submitted, and the
 fields are cleared, and what comes back to confirm the save is already masked.
 
 The same question applies to text the backend writes and the customer reads
-later. A transfer stores a description on each leg, and that description used to
-name the other side by its internal account id — `Monthly saving → account 71`.
-A primary key is not a customer-facing identifier, and on the credit leg it is a
-primary key belonging to whichever account sent the money. Both legs now carry
-the last four digits, the same way every screen in the console names an account,
-and a unit test asserts that neither the internal id nor the full number can
+later. A transfer stores a description on each leg, and each leg names the other
+side by the last four digits of its account number, the same way every screen in
+the console names an account. It never uses the internal account id: a primary
+key is not a customer-facing identifier, and on the credit leg it would belong to
+whichever account sent the money. A unit test asserts that neither the internal id nor the full number can
 reach the description.
 
 Three tests guard it, against the three surfaces a browser actually sees: the
@@ -358,201 +318,19 @@ carries its window's TTL, so its absence is the window having closed, and
 reading it as the first of a new window is what the increment path would have
 produced anyway.
 
-## Dependency advisories
+## Dependency and security scanning
 
-The scanner reports advisories against the packages this platform depends on.
-A package containing vulnerable code is not the same as an exploitable path
-through this codebase, and neither fact excuses the other, so each is audited
-for reachability and recorded with the evidence.
+CI runs CodeQL over the Java and TypeScript code, and Trivy over the dependencies,
+Dockerfiles, the runtime base image and the Terraform. Each finding is assessed
+against the versions the build actually resolves, the runtime configuration and
+the features the application exposes; a package that contains vulnerable code is
+not the same as a reachable path through this codebase.
 
-The springdoc advisory is patched: the platform now resolves springdoc-openapi
-2.9.1. The Kafka and Boot entries are not patched. The platform still resolves
-the affected `spring-kafka` 3.2.10 and Spring Boot 3.3.13, and their fixes are
-in release trains that need a coordinated Spring Boot, Spring Framework and
-Spring Cloud upgrade — recorded at the end as deferred platform maintenance.
-
-### GHSA-rhhx-6j8h-8cvw — springdoc-openapi — PATCHED AND NOT EXPOSED IN NORMAL RUNTIME
-
-**What it is.** springdoc-openapi 2.0.0 up to (not including) 2.9.1 caches the
-rendered OpenAPI document per `Accept-Language` value without bound. Every
-request to `/v3/api-docs` in a new locale adds an entry, so a caller can grow
-the cache until the heap is exhausted.
-
-**Reachability.** Reachable before #98. The gateway carried
-`springdoc-openapi-starter-webflux-ui` 2.6.0, and its own `/v3/api-docs` and
-Swagger UI were enabled. They are served by the gateway itself, outside every
-route, so the JWT filter never sees them. The filter also listed `/v3/api-docs`
-and `/swagger-ui` as public paths. An unauthenticated caller on port 8080 could
-therefore drive the cache. Each business service carried the webmvc starter at
-the same version, reachable only through `docker-compose.dev-ports.yml`.
-
-**Control.** Two layers. #97 moved springdoc-openapi to 2.9.1, which is
-outside the affected range. Before that, #98 switched the feature off, and it
-stays off as defence in depth:
-- The gateway sets `springdoc.api-docs.enabled` and
-  `springdoc.swagger-ui.enabled` to `false`.
-- Every business service defaults both to `${SPRINGDOC_ENABLED:false}`.
-- `/v3/api-docs` and `/swagger-ui` are no longer public paths in
-  `JwtAuthenticationFilter`.
-- Only the development override (`docker-compose.dev-ports.yml`, which
-  publishes the services on local ports and is documented as unfit for a
-  shared host) sets `SPRINGDOC_ENABLED=true`. Nothing in the running product
-  uses the documents.
-
-**Evidence.**
-- `GatewayRouteExposureTest.apiDocsAndSwaggerUiAreOff`: the gateway
-  configuration turns both off.
-- `ServiceApiDocsDefaultTest`: every service that configures springdoc
-  defaults it to off.
-- `ApiDocsExposureTest`: the filter refuses `/v3/api-docs`,
-  `/v3/api-docs/swagger-config`, `/swagger-ui/index.html` and
-  `/swagger-ui.html` without a token, with an attacker-style
-  `Accept-Language`.
-- All six fail against the previous code.
-- The PowerShell suite requests the three document paths from the running
-  gateway, each with a fresh `Accept-Language`, and requires 401 or 404.
-
-**Residual risk.** None known for this advisory: the resolved version is
-patched and the endpoint is not served in the normal runtime. The development
-override still turns the docs on for local ports only. After the upgrade, the
-running gateway still answers 404 on every docs path, and the exposure tests
-still pass.
-
-### CVE-2026-41731 — spring-kafka — high — MITIGATED IN CONFIGURATION
-
-**What it is.** Arbitrary code execution through insecure deserialization of
-crafted Kafka header values.
-
-**Reachability.** Reachable before this change. Spring maps Kafka headers
-separately from the payload, so the payload hardening — type headers off,
-routing on an `eventType` field, trusted packages narrowed to the contract
-package — constrained none of it. With no header mapper configured, the
-framework default reads a `spring_json_header_types` header naming a Java
-class and constructs it while building the message for the listener. A
-producer controls those bytes.
-
-**Control.** `SimpleKafkaHeaderMapper`, installed platform-wide through the
-`RecordMessageConverter` bean that Spring Boot hands to every listener
-container factory. Headers arrive as raw bytes; no type name is honoured and
-no object is constructed from a producer-supplied header. The capability is
-removed rather than policed — an allowlist would still perform reflective
-construction and would still depend on the framework parsing the header
-correctly, which is the thing the advisory says it does not.
-
-Northbank needs no typed header objects. The headers that matter are a
-correlation id, trace context, event identity and dead-letter metadata, all
-strings or bytes.
-
-**Evidence.** `KafkaHeaderSafetyIT` asserts the effective listener
-configuration: that the converter Boot hands the factory carries the raw
-mapper, that a record naming `java.net.URL`, `java.util.Date` or
-`java.math.BigDecimal` in `spring_json_header_types` produces no such object,
-that ordinary events and correlation headers still arrive, and that
-dead-lettering and payload-deserialization failure handling are unaffected.
-
-**Residual risk.** The package is still the affected version. A different
-reachable path through header handling in the same library would not be
-covered by this control.
-
-### CVE-2026-41726 — spring-kafka — medium — NOT REACHABLE, FEATURE NOT USED
-
-Denial of service through unbounded heap growth in `DelegatingDeserializer`.
-
-Northbank does not use it. No `DelegatingDeserializer`, no
-`spring.kafka.serialization.selector` configuration and no selector-header
-handling exists anywhere in the repository. Every consumer uses
-`ErrorHandlingDeserializer` delegating to `JsonDeserializer`, declared
-explicitly in each service's configuration.
-
-No code was written to work around a feature this platform does not use.
-
-### CVE-2026-41727 — spring-kafka — medium — NOT REACHABLE, FEATURE NOT USED
-
-Retry-sequence manipulation through improper validation of retry-topic header
-values.
-
-Northbank does not use retry topics. There is no `@RetryableTopic`, no
-`RetryTopicConfiguration` and no retry-topic infrastructure. Recovery is a
-`DefaultErrorHandler` with bounded backoff and a
-`DeadLetterPublishingRecoverer`, which is a deliberate design choice and not a
-workaround: it keeps in-order retry semantics rather than re-queueing through
-side topics.
-
-### CVE-2026-41001 — spring-boot — medium — NOT REACHABLE, FEATURE NOT USED
-
-A local attacker can manipulate an embedded Artemis data directory through a
-predictable path.
-
-Northbank does not use Artemis. It is not on the dependency tree, there is no
-`spring-boot-starter-artemis`, and no ActiveMQ or Artemis configuration exists.
-The finding is attributed to `spring-boot-autoconfigure`, which is present for
-every other reason a Spring Boot application needs it.
-
-### CVE-2026-22733 — spring-boot-actuator — high — NOT REACHABLE, FEATURE NOT USED
-
-Authentication can be bypassed on the actuator's Cloud Foundry endpoints
-(`/cloudfoundryapplication/**`). Fixed in Spring Boot 3.5.12 and 4.0.4; the
-platform resolves 3.3.13, so the package is still the affected version.
-
-Those endpoints exist only on Cloud Foundry. Their servlet and reactive
-auto-configurations are conditional on `CloudPlatform.CLOUD_FOUNDRY`, which
-Spring Boot detects from the `VCAP_APPLICATION` or `VCAP_SERVICES` environment
-variables. Northbank runs on Docker Compose, its Terraform targets ECS, and
-nothing sets those variables or `spring.main.cloud-platform`. On the running
-gateway, `/cloudfoundryapplication` and `/cloudfoundryapplication/health`
-answer 404 while `/actuator/health` answers 200.
-
-**Residual risk.** Deploying to Cloud Foundry would activate the endpoints. The
-fix is in the release-train upgrade below.
-
-### Deferred: platform modernization
-
-The fixes for the advisories above are in `spring-kafka` 3.3.16 / 4.0.6 and
-Spring Boot 3.5.15 / 4.0.7 (3.5.12 / 4.0.4 for CVE-2026-22733). This platform runs Spring Boot 3.3.13 with Spring
-Cloud 2023.0.6, which resolve `spring-kafka` 3.2.10 — still in the affected
-range, since the patch-level upgrade in #97 does not reach the fixed lines. Those
-Kafka versions target a later Spring Framework
-generation — so this is a coordinated release-train upgrade across Boot,
-Framework, Cloud and Data, not a single dependency bump. Overriding one
-component into an unsupported combination to quiet a scanner would be a worse
-outcome than the finding.
-
-It is tracked as its own piece of work, to be done against a full repository
-test gate rather than folded into a feature change.
-
-## Next hardening candidates
-
-Recorded rather than implemented. Each is a separate decision.
-
-### 1. No breached-password check — low
-
-**Current policy.** `RegisterRequest` requires at least 8 characters with an
-uppercase letter, a lowercase letter and a number (`@Size(min = 8, max = 100)`
-plus a `@Pattern`), and the console shows the same rule as a live checklist.
-Passwords are stored with BCrypt. Repeated failures against one account are
-throttled per account in Redis, as described in
-[Guessing one account's password](#guessing-one-accounts-password), on top of
-the gateway's per-IP rate limit.
-
-**What is still missing.** Nothing checks a new password against a corpus of
-known-breached passwords, so a password that meets the composition rule but is
-widely leaked is accepted.
-
-**Smallest safe fix.** A k-anonymity range lookup against a breached-password
-list at registration and password change.
-
-### 2. Two-factor is opt-in — low
-
-**Evidence.** `User.twoFactorEnabled` defaults to false; the gate at
-`UserServiceImpl` applies only when the flag is set.
-
-**Impact.** The TOTP implementation is correct and enforced once enabled, but no
-account has it on by default, so the protection is advisory.
-
-**Smallest safe fix.** Require 2FA for `EMPLOYEE` and `ADMIN` roles, where the
-blast radius of a compromised account is largest. Not done here because
-enrolment requires an authenticated caller and is self-only: demanding a second
-factor before any staff token is issued would leave a staff account that has
-never enrolled with no way to enrol. Solving it properly means a scoped
-enrolment token and a separate first-sign-in flow, which is an authentication
-design of its own rather than a check to add.
+A vulnerable capability that is part of the application surface is patched or
+switched off before release. springdoc-openapi is on the patched 2.9.1 line, and
+the API docs and Swagger UI stay disabled in the normal runtime, guarded by
+regression tests at the gateway and in every service. Some findings remain
+against framework packages on the Spring Boot 3.3 line; for each, the affected
+feature is either not used by Northbank or constrained in configuration. Kafka
+listeners, for example, map headers as raw bytes and never construct a type a
+producer names.
