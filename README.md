@@ -138,7 +138,7 @@ Architecture decisions and system trade-offs are documented in
   masked, and full account numbers never reach the browser.
 
 See [docs/SECURITY.md](docs/SECURITY.md) for the threat model, the full
-authorization table and the dependency advisories.
+authorization table and how dependency findings are assessed.
 
 ## Testing
 
@@ -155,16 +155,14 @@ authorization table and the dependency advisories.
 The live suites need all 13 backend processes running, so they are run on demand
 rather than on every push. See [docs/TESTING.md](docs/TESTING.md).
 
-## Known limitations
+## Project scope
 
-- A transfer between accounts is not globally atomic. Partial outcomes are
-  reconciled and reported, not repaired automatically.
-- Service-to-service calls rely on network isolation rather than mTLS.
-- The wire, ACH and SWIFT rails are simulated: they are recorded, not settled.
-- There is no credit bureau and no hosted production deployment.
-
-The full list is in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#known-limitations).
+- Northbank is a portfolio banking platform that runs on synthetic data. No real
+  money moves, and the wire, ACH and SWIFT rails are simulated.
+- It runs locally on Docker Compose. `infrastructure/aws/` holds Terraform for an
+  AWS deployment topology; no hosted instance is published.
+- It is not connected to real payment networks and makes no regulatory or
+  compliance certification claim.
 
 ## Run locally
 

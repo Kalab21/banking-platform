@@ -93,19 +93,15 @@ and the nested `account-service` calls for the debit and the credit.
 Sampling is set to 1.0 for local use. A production deployment would sample well
 below that.
 
-## Not covered
+## Local observability scope
 
-- Logs are plain text with correlation fields, written to stdout. There is no log
-  aggregator; `docker compose logs` is the query interface.
-- Traces are stored in memory and are lost when Zipkin restarts.
-- Kafka consumers inherit trace context from Spring Kafka instrumentation; the
-  asynchronous hops are not separately verified here.
-- There are no alerting rules, and no route for one to fire down. Prometheus
-  scrapes and Grafana draws; nothing pages anyone.
-- Idempotency records that settle `UNKNOWN` are logged at `ERROR` with the key
-  and the accounts involved, and counted by the `banking.idempotency.unknown`
-  gauge. For transfers, `TransferReconciler` asks `account-service` what each
-  leg did and records the answer; it does not move money. Anything it finds
-  half-applied, and unknown outcomes on other operations, are left to a person —
-  which is also what the console tells a customer to check when it cannot
-  confirm an outcome.
+The included stack is built for local engineering and demonstration: service
+health, metrics, latency and error dashboards, request correlation, and
+distributed tracing across synchronous request paths. Logs are plain text with
+correlation fields on stdout, read with `docker compose logs`.
+
+Money outcomes that cannot be confirmed are made visible rather than guessed.
+Idempotency records that settle `UNKNOWN` are logged at `ERROR` with the key and
+the accounts involved, and counted by the `banking.idempotency.unknown` gauge.
+For transfers, `TransferReconciler` asks `account-service` what each leg did and
+records the answer.
