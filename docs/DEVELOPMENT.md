@@ -115,10 +115,14 @@ docker compose down          # add -v to also drop the Postgres volume
 
 ## API documentation
 
-Every service exposes springdoc-openapi:
+The API docs are off in the normal stack (see GHSA-rhhx-6j8h-8cvw in
+[SECURITY.md](SECURITY.md#dependency-advisories)). Starting with
+`docker-compose.dev-ports.yml` turns them on for each service's local port:
 
 - Swagger UI — `http://localhost:<service-port>/swagger-ui.html`
 - OpenAPI JSON — `http://localhost:<service-port>/v3/api-docs`
+
+The gateway never serves them.
 
 Selected routes, all reached through the gateway on `:8080`:
 
@@ -159,17 +163,3 @@ That override bypasses gateway authentication, so use it only locally.
 
 The service inventory, data ownership, Kafka topics and the design decisions
 behind them are in [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Roadmap
-
-1. Extend the Testcontainers pattern to `notification`, `integration`, `fraud`
-   and `statistics`, which have unit, contract and authorization tests only.
-2. A compensation policy for transfers the reconciler finds half-applied, and a
-   replay tool for dead-letter topics.
-3. A pending-KYC-documents endpoint so staff review is a queue rather than a
-   per-customer lookup.
-4. Extend Resilience4j beyond the `transaction-service` → `account-service` hop,
-   and add bulkheads.
-5. JSON log output, a log aggregator, alerting rules and durable trace storage.
-6. Run the live Playwright and PowerShell suites against a Compose stack in CI,
-   and publish images to a registry.

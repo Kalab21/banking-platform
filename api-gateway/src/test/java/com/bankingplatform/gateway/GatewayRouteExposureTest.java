@@ -147,4 +147,22 @@ class GatewayRouteExposureTest {
         // docker-compose.yml or the Prometheus scrape of /actuator/prometheus.
         assertThat(exposedManagementEndpoints()).contains("health", "prometheus");
     }
+
+    /**
+     * Regression test for GHSA-rhhx-6j8h-8cvw. The gateway's own
+     * {@code /v3/api-docs} is served outside every route, so the JWT filter
+     * never sees it: enabled, it is public whatever the filter says. springdoc
+     * 2.6 grows a per-locale cache there without bound. The docs stay off.
+     */
+    @Test
+    @DisplayName("the gateway serves no API docs or Swagger UI")
+    @SuppressWarnings("unchecked")
+    void apiDocsAndSwaggerUiAreOff() throws Exception {
+        Map<String, Object> springdoc = (Map<String, Object>) config().get("springdoc");
+        assertThat(springdoc).as("springdoc settings in the gateway's application.yml").isNotNull();
+        Map<String, Object> apiDocs = (Map<String, Object>) springdoc.get("api-docs");
+        Map<String, Object> swaggerUi = (Map<String, Object>) springdoc.get("swagger-ui");
+        assertThat(apiDocs.get("enabled")).isEqualTo(false);
+        assertThat(swaggerUi.get("enabled")).isEqualTo(false);
+    }
 }

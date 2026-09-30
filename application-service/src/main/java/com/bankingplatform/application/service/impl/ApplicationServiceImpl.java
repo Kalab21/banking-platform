@@ -181,9 +181,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         // automatic outcome and none of the human ones, which is the wrong way
         // round: a person's judgement is the part worth being able to review.
         // A person may lend where the policy would not, but not to someone
-        // whose identity is unverified. Policy refers those applications, and
-        // a reviewer's approval used to go straight through, priced with no
-        // identity check at all.
+        // whose identity is unverified. Policy refers those applications, so a
+        // reviewer's approval of credit requires an approved identity check.
         String kycAtReview = null;
         if (request.getDecision() == ReviewDecision.APPROVE && isCredit(application.getApplicationType())) {
             kycAtReview = userClient.getUserById(application.getUserId()).getKycStatus();
@@ -374,13 +373,11 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         if (type == ApplicationType.CHECKING_ACCOUNT || type == ApplicationType.SAVINGS_ACCOUNT) {
             String accountType = type == ApplicationType.CHECKING_ACCOUNT ? "CHECKING" : "SAVINGS";
-            // An application is a request, not a funding source. Opening a
-            // deposit account used to pass the approved amount through as the
-            // opening balance, so applying for a 10,000.00 checking account
-            // created 10,000.00 out of nothing: no payer, no transaction row,
-            // no double entry anywhere. A new account opens empty and is
-            // funded afterwards through the money-movement path, which records
-            // what moved and from where.
+            // An application is a request, not a funding source. Carrying an
+            // amount into the opening balance would create money with no payer,
+            // no transaction row and no double entry. A new account opens empty
+            // and is funded afterwards through the money-movement path, which
+            // records what moved and from where.
             AccountResponse account = accountClient.createAccount(CreateAccountRequest.builder()
                     .userId(application.getUserId())
                     .accountType(accountType)
@@ -409,11 +406,10 @@ public class ApplicationServiceImpl implements ApplicationService {
     /**
      * Records who did this, not only what was done.
      *
-     * <p>The actor comes from the request rather than from an argument.
-     * Several call sites used to pass the <em>subject</em> of the change --
-     * the account holder, the applicant -- which reads correctly right up
-     * until a member of staff acts on a customer's behalf, and then the audit
-     * row names the customer as having done it themselves.
+     * <p>The actor comes from the request rather than from an argument. The
+     * <em>subject</em> of the change -- the account holder, the applicant --
+     * is not the actor when a member of staff acts on a customer's behalf,
+     * and an audit row naming the customer would say they did it themselves.
      *
      * <p>{@code actorType} is always set. A scheduled job or a Kafka listener
      * has no caller and is recorded as {@code SYSTEM}, so a null

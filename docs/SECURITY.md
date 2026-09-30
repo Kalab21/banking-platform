@@ -77,11 +77,13 @@ These **overwrite** anything the client sent. A request arriving with
 This is the property the rest of the model depends on, and it is covered by
 `GatewayIdentitySpoofingTest`, including under varied header casing.
 
-Public routes — `/api/auth/register`, `/api/auth/login`, actuator and the API docs
+Public gateway routes — `/api/auth/register`, `/api/auth/login` and `/actuator`
 — establish no identity. The filter still runs on them to remove any `X-User-*`
-headers the client wrote; they used to pass through unchanged, and a service behind
-a public path that trusted them would have taken them as real. Protected routes in
-the services reject identity-less requests, so a public path is not a way in.
+headers the client wrote, so a service behind a public path never takes them as
+real. Protected routes in the services reject identity-less requests, so a public
+path is not a way in. API docs and Swagger UI are disabled in the normal runtime;
+service docs are available only through the local `docker-compose.dev-ports.yml`
+configuration (see GHSA-rhhx-6j8h-8cvw under Dependency advisories).
 
 Because `/actuator` is one of those public paths, and because the gateway is the
 only service whose actuator sits on the public port, whatever the gateway
@@ -367,6 +369,51 @@ None of the entries below are claimed to be patched. The affected versions are
 still what this platform runs, and the fixes are in release trains that need a
 coordinated Spring Boot, Spring Framework and Spring Cloud upgrade — recorded
 at the end as deferred platform maintenance.
+
+### GHSA-rhhx-6j8h-8cvw — springdoc-openapi — MITIGATED BY NOT EXPOSING THE FEATURE
+
+**What it is.** springdoc-openapi 2.0.0 up to (not including) 2.9.1 caches the
+rendered OpenAPI document per `Accept-Language` value without bound. Every
+request to `/v3/api-docs` in a new locale adds an entry, so a caller can grow
+the cache until the heap is exhausted.
+
+**Reachability.** Reachable before this change. The gateway carries
+`springdoc-openapi-starter-webflux-ui` 2.6.0, and its own `/v3/api-docs` and
+Swagger UI were enabled. They are served by the gateway itself, outside every
+route, so the JWT filter never sees them. The filter also listed `/v3/api-docs`
+and `/swagger-ui` as public paths. An unauthenticated caller on port 8080 could
+therefore drive the cache. Each business service carries the webmvc starter at
+the same version, reachable only through `docker-compose.dev-ports.yml`.
+
+**Control.** The dependency is still 2.6.0; the feature is switched off.
+- The gateway sets `springdoc.api-docs.enabled` and
+  `springdoc.swagger-ui.enabled` to `false`.
+- Every business service defaults both to `${SPRINGDOC_ENABLED:false}`.
+- `/v3/api-docs` and `/swagger-ui` are no longer public paths in
+  `JwtAuthenticationFilter`.
+- Only the development override (`docker-compose.dev-ports.yml`, which
+  publishes the services on local ports and is documented as unfit for a
+  shared host) sets `SPRINGDOC_ENABLED=true`. Nothing in the running product
+  uses the documents.
+
+**Evidence.**
+- `GatewayRouteExposureTest.apiDocsAndSwaggerUiAreOff`: the gateway
+  configuration turns both off.
+- `ServiceApiDocsDefaultTest`: every service that configures springdoc
+  defaults it to off.
+- `ApiDocsExposureTest`: the filter refuses `/v3/api-docs`,
+  `/v3/api-docs/swagger-config`, `/swagger-ui/index.html` and
+  `/swagger-ui.html` without a token, with an attacker-style
+  `Accept-Language`.
+- All six fail against the previous code.
+- The PowerShell suite requests the three document paths from the running
+  gateway, each with a fresh `Accept-Language`, and requires 401 or 404.
+
+**Residual risk.** The vulnerable version remains on the dependency tree.
+Starting the stack with the development override turns the endpoint on for
+local ports. The patched 2.9.1 arrives with dependency PR #97, which also
+moves Spring Boot, Spring Cloud, JJWT and MapStruct and needs its own release
+gate before merging.
 
 ### CVE-2026-41731 — spring-kafka — high — MITIGATED IN CONFIGURATION
 

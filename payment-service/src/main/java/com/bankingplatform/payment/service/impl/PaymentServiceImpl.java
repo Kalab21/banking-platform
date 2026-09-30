@@ -82,9 +82,8 @@ public class PaymentServiceImpl implements PaymentService {
         if (request.getScheduledAt() == null || !request.getScheduledAt().isAfter(LocalDateTime.now())) {
             saved = executePayment(saved);
             saved = paymentRepository.save(saved);
-            // A recurring payment that runs now still recurs. Only the
-            // scheduler used to create the next occurrence, so a series whose
-            // first payment was immediate stopped after one.
+            // A recurring payment that runs now still recurs: the next
+            // occurrence is scheduled here as well as by the scheduler.
             scheduleNextOccurrence(saved);
         }
 
@@ -236,8 +235,8 @@ public class PaymentServiceImpl implements PaymentService {
             // the payment stuck in PROCESSING.
             payment.setFailureReason(reason.length() > 500 ? reason.substring(0, 500) : reason);
             if (declined) {
-                // One declined month is not the end of a recurring series. It
-                // used to be: the next occurrence was only created on success.
+                // One declined month is not the end of a recurring series, so
+                // the next occurrence is scheduled after a decline too.
                 scheduleNextOccurrence(payment);
             }
             log.error("Scheduled payment {} failed: {}", payment.getPaymentRef(), e.getMessage());
@@ -269,8 +268,8 @@ public class PaymentServiceImpl implements PaymentService {
         }
         if (payment.getPaymentType() != PaymentType.INTERNAL) {
             // Money leaving the bank. The rail is simulated, but the payer's
-            // balance is not: these used to be marked COMPLETED, and announced
-            // as paid, without the account being debited at all.
+            // balance is not: an external payment is COMPLETED only after the
+            // account has been debited.
             transactionClient.withdraw("payment-" + payment.getPaymentRef(), WithdrawRequest.builder()
                     .accountId(payment.getPayerAccountId())
                     .amount(payment.getAmount())
@@ -395,11 +394,10 @@ public class PaymentServiceImpl implements PaymentService {
     /**
      * Records who did this, not only what was done.
      *
-     * <p>The actor comes from the request rather than from an argument.
-     * Several call sites used to pass the <em>subject</em> of the change --
-     * the account holder, the applicant -- which reads correctly right up
-     * until a member of staff acts on a customer's behalf, and then the audit
-     * row names the customer as having done it themselves.
+     * <p>The actor comes from the request rather than from an argument. The
+     * <em>subject</em> of the change -- the account holder, the applicant --
+     * is not the actor when a member of staff acts on a customer's behalf,
+     * and an audit row naming the customer would say they did it themselves.
      *
      * <p>{@code actorType} is always set. A scheduled job or a Kafka listener
      * has no caller and is recorded as {@code SYSTEM}, so a null

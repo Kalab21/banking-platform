@@ -1,9 +1,9 @@
 # Testing
 
-1476 automated tests run in CI: 1022 backend (864 unit and web-slice, 158
+1482 automated tests run in CI: 1028 backend (870 unit and web-slice, 158
 integration against real PostgreSQL, Redis and an embedded Kafka broker), 385
 frontend unit/component and 69 offline end-to-end. A further 46 live-stack
-Playwright scenarios and a 197-assertion PowerShell full-stack suite run on
+Playwright scenarios and a 200-assertion PowerShell full-stack suite run on
 demand and are not counted in the CI total.
 
 Counts are per test case as the runners report them — JUnit `tests` in the
@@ -49,7 +49,7 @@ assertion counts, which are larger and less comparable.
 | Authorization | JUnit 5, MockMvc | `IntegrationAuthorization` — external transfers may only be sent from an owned account, staff included; reads are owner-or-staff | 17 |
 | Authorization | JUnit 5, MockMvc | `TwoFactorAuthorization` — second-factor setup, verify and disable are self-only, and staff cannot bypass it | 10 |
 | Authorization | JUnit 5, WebFlux mocks | `GatewayIdentitySpoofing` — forged identity headers are replaced | 11 |
-| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off, actuator publishes only health/info/prometheus | 6 |
+| Configuration | JUnit 5 | `GatewayRouteExposure` — no `/internal` route, discovery locator off, actuator publishes only health/info/prometheus | 7 |
 | Configuration | JUnit 5, SnakeYAML | `JwtSecretConfiguration` — no committed signing key, start-up fails without one | 7 |
 | Idempotency | JUnit 5, MockMvc | `TransactionIdempotency` — key contract, replay, failure semantics, authorization order | 18 |
 | Copy | JUnit 5, Mockito | `TransferDescription` — each leg names the other account masked, never by internal id | 4 |
@@ -94,13 +94,13 @@ assertion counts, which are larger and less comparable.
 | Component | Vitest, React Testing Library | `ApplicationsPage` — Accept/Decline only beside a loaded, open offer; failed reads never shown as empty; lapsed offers labelled (counted in the 385 above) | 21 |
 | Unit | Vitest | `customer-credit` — request bodies sent as one JSON object, bodyless accept/decline, strict reads (counted in the 385 above) | 16 |
 | End-to-end | Playwright (offline) | Route protection, session cookie, failure honesty, auth form validation, responsive layout down to 320px | 69, in CI |
-| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport, the credit journey (apply → stored terms → accept → the real loan; decline; card freeze) | 38, on demand |
-| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack: money movement and overdraft arithmetic, the credit lifecycle with manual review, decline and customer-only offer response, scheduled payments executed by the scheduler, card authority, staff-only and cross-customer refusals, the Kafka-driven credit-score update, staff authority limits, payment debits and recurrence, card and loan arithmetic, and payoff and currency refusals before any debit | 197, on demand |
+| End-to-end | Playwright (live) | Sign-in, real balances, money movement, RSC boundary, card masking, staff denial, sign-out, phone viewport, the credit journey (apply → stored terms → accept → the real loan; decline; card freeze) | 46, on demand |
+| End-to-end | PowerShell (`e2e-tests.ps1`) | Banking flows against the running stack: money movement and overdraft arithmetic, the credit lifecycle with manual review, decline and customer-only offer response, scheduled payments executed by the scheduler, card authority, staff-only and cross-customer refusals, the Kafka-driven credit-score update, staff authority limits, payment debits and recurrence, card and loan arithmetic, and payoff and currency refusals before any debit, and the gateway serving no API docs | 200, on demand |
 
 ## Commands
 
 ```bash
-mvn -B --no-transfer-progress clean verify   # backend: 864 unit + 158 integration = 1022
+mvn -B --no-transfer-progress clean verify   # backend: 870 unit + 158 integration = 1028
 cd frontend && npm run test                  # frontend: 385 unit/component
 cd frontend && npm run test:e2e              # frontend: 69 offline end-to-end
 ```
@@ -285,7 +285,7 @@ those values replaced with the ones derived from the token.
 `e2e-tests.ps1` drives the whole platform through the gateway: registration,
 account opening, money movement, a credit-card application through Kafka to an
 issued card, a loan through disbursement and repayment, KYC submission,
-notifications, external rails and TOTP enrolment. 197 assertions.
+notifications, external rails and TOTP enrolment. 200 assertions.
 
 It also proves an event-driven workflow end to end. The loan repayment in
 Flow 3 publishes `LOAN_REPAYMENT_MADE`, and `user-service` raises the credit

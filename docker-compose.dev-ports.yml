@@ -8,7 +8,9 @@
 # authorization the services apply to gateway traffic.
 #
 # Use it when you genuinely need to attach a debugger, hit one service's Swagger
-# UI, or read an actuator endpoint directly:
+# UI, or read an actuator endpoint directly. It is also the only thing that turns
+# the API docs on (SPRINGDOC_ENABLED); they are off in the normal stack, because
+# springdoc 2.6 is exposed to GHSA-rhhx-6j8h-8cvw on /v3/api-docs:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml up -d
 #
@@ -19,43 +21,65 @@ services:
   user-service:
     ports:
       - "8081:8081"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   application-service:
     ports:
       - "8082:8082"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   account-service:
     ports:
       - "8083:8083"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   transaction-service:
     ports:
       - "8084:8084"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   payment-service:
     ports:
       - "8085:8085"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   statistics-service:
     ports:
       - "8086:8086"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   notification-service:
     ports:
       - "8087:8087"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   fraud-detection-service:
     ports:
       - "8088:8088"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   credit-card-service:
     ports:
       - "8089:8089"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   loan-service:
     ports:
       - "8090:8090"
+    environment:
+      SPRINGDOC_ENABLED: "true"
 
   integration-service:
     ports:
       - "8091:8091"
+    environment:
+      SPRINGDOC_ENABLED: "true"
