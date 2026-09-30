@@ -70,17 +70,10 @@ Explore credit → Apply (3 steps) → Underwrite → Staff review if referred
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    Browser["Browser"] --> Console["Next.js console<br/>(backend-for-frontend)"]
-    Console --> Gateway["API Gateway<br/>JWT, rate limiting"]
-    Gateway --> Services["11 domain services<br/>accounts, transactions, payments,<br/>applications, loans, cards, users, …"]
-    Services --> Postgres[("PostgreSQL<br/>one database per service")]
-    Services --> Redis[("Redis")]
-    Services <--> Kafka[["Kafka<br/>outbox → topics → consumers"]]
-    Gateway -. discovery .- Eureka["Eureka"]
-    Services -. metrics, traces .-> Obs["Prometheus · Grafana · Zipkin"]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-architecture-dark.svg">
+  <img alt="Northbank architecture: browser, Next.js console, API gateway and Eureka; eleven Spring Boot services with their OpenFeign calls into account-service and user-service; Kafka topics; PostgreSQL, Redis, observability and delivery" src="docs/architecture/northbank-architecture.svg">
+</picture>
 
 - **Synchronous calls carry authoritative state.** A transfer must know whether its
   debit succeeded, so that is a Feign call.
