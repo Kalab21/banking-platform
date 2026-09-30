@@ -17,7 +17,7 @@ all running locally on Docker Compose.
 
 - **Event-driven microservices**: 11 business services, each owning its own
   PostgreSQL database, behind an API gateway, with Kafka for derived state.
-- **Correct money movement**: row locks on every balance change, idempotency keys
+- **Money-movement correctness**: row locks on every balance change, idempotency keys
   on every money-moving request, and outcomes reported as unknown when the platform
   cannot know them.
 - **A full lending lifecycle**: application, versioned underwriting, staff review,
@@ -61,9 +61,10 @@ Explore credit → Apply (3 steps) → Underwrite → Staff review if referred
   loan-to-value, amount and term, and identity check. Each decision is stored as an
   immutable record with its reason codes.
 - **An offer's terms are stored once.** The customer accepts exactly those terms.
-  Only the applicant can accept or decline; staff and admins are refused.
+  Only the applicant can accept or decline an offer; staff and admins cannot act
+  on the customer's behalf.
 - **Provisioning happens once.** The card or loan service creates the product from
-  the accepted terms and confirms its real id. A redelivered event creates nothing
+  the accepted terms and confirms its real ID. A redelivered event creates nothing
   new.
 - **Servicing is in the console**: receive a loan, pay an instalment or any amount,
   pay the loan off, and pay a card.
@@ -71,19 +72,21 @@ Explore credit → Apply (3 steps) → Underwrite → Staff review if referred
 ## Architecture
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-architecture-dark.svg">
-  <img alt="Northbank architecture: browser, Next.js console, API gateway and Eureka; eleven Spring Boot services with their OpenFeign calls into account-service and user-service; Kafka topics; PostgreSQL, Redis, observability and delivery" src="docs/architecture/northbank-architecture.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-overview-dark.svg">
+  <img alt="Northbank high-level architecture: the browser, the Next.js backend-for-frontend, the API gateway, eleven Spring Boot services grouped by domain, PostgreSQL, Redis, Kafka, observability and delivery tooling" src="docs/architecture/northbank-overview.svg">
 </picture>
 
-- **Synchronous calls carry authoritative state.** A transfer must know whether its
-  debit succeeded, so that is a Feign call.
-- **Kafka carries derived state:** statistics, notifications, fraud scoring, and
-  product issuance from accepted offers.
-- **The browser never holds a bearer token.** The console calls the gateway from the
-  server.
+- **Synchronous REST/OpenFeign calls carry authoritative operations** that need an
+  immediate result, such as money movement and ownership checks.
+- **Kafka carries asynchronous domain events** for statistics, notifications, fraud
+  evaluation and product provisioning, backed by a transactional outbox, bounded
+  retry, dead-letter topics and idempotent consumers.
+- **The browser never holds a bearer token.** The Next.js backend-for-frontend makes
+  every banking API call server-side, through the gateway.
 
-Service inventory, data ownership, event flows and design decisions are in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Detailed architecture → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: every
+service with its port and database, the OpenFeign calls between them, the Kafka
+topics, data ownership, event flows and design decisions.
 
 ## Technology
 
@@ -185,7 +188,7 @@ troubleshooting are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 | Document | What it covers |
 |---|---|
 | [Architecture](docs/ARCHITECTURE.md) | Topology, service boundaries, data ownership, design decisions |
-| [Security](docs/SECURITY.md) | Threats, authentication, authorization, sensitive data, advisories |
+| [Security](docs/SECURITY.md) | Threat model, authentication, authorization, sensitive data, dependency security |
 | [Testing](docs/TESTING.md) | Strategy, suites, counts, commands |
 | [Events](docs/EVENTS.md) | Kafka contracts, delivery, retry, dead-letter topics, idempotency |
 | [Observability](docs/OBSERVABILITY.md) | Metrics, tracing, dashboards |
