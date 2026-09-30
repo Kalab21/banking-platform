@@ -115,7 +115,7 @@ docker compose down          # add -v to also drop the Postgres volume
 
 ## API documentation
 
-The API docs are off in the normal stack (see GHSA-rhhx-6j8h-8cvw in
+The API docs are off in the normal stack (see
 [SECURITY.md](SECURITY.md#dependency-and-security-scanning)). Starting with
 `docker-compose.dev-ports.yml` turns them on for each service's local port:
 

@@ -112,7 +112,7 @@ topics, data ownership, event flows and design decisions.
 - **Append-only decision evidence** for underwriting and review, and **stored offer
   terms** that the customer accepts as made.
 - **Provisioning confirmation**: an application reads `PROVISIONED` only after the
-  product service confirms a real product id.
+  product service confirms a real product ID.
 - **Reconciliation**: a transfer that debited but failed to credit is recorded first,
   then reconciled leg by leg. Deciding who is made whole is left to a person.
 - **Request ids and traces** that follow a request across every synchronous hop.
