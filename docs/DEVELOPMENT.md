@@ -163,17 +163,3 @@ That override bypasses gateway authentication, so use it only locally.
 
 The service inventory, data ownership, Kafka topics and the design decisions
 behind them are in [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Roadmap
-
-1. Extend the Testcontainers pattern to `notification`, `integration`, `fraud`
-   and `statistics`, which have unit, contract and authorization tests only.
-2. A compensation policy for transfers the reconciler finds half-applied, and a
-   replay tool for dead-letter topics.
-3. A pending-KYC-documents endpoint so staff review is a queue rather than a
-   per-customer lookup.
-4. Extend Resilience4j beyond the `transaction-service` → `account-service` hop,
-   and add bulkheads.
-5. JSON log output, a log aggregator, alerting rules and durable trace storage.
-6. Run the live Playwright and PowerShell suites against a Compose stack in CI,
-   and publish images to a registry.

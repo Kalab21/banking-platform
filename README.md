@@ -121,8 +121,10 @@ Service inventory, data ownership, event flows and design decisions are in
   then reconciled leg by leg. Deciding who is made whole is left to a person.
 - **Request ids and traces** that follow a request across every synchronous hop.
 
-The reasoning behind each decision is in the
-[engineering case study](docs/PORTFOLIO_CASE_STUDY.md).
+Architecture decisions and system trade-offs are documented in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with security controls in
+[docs/SECURITY.md](docs/SECURITY.md) and verification in
+[docs/TESTING.md](docs/TESTING.md).
 
 ## Security
 
@@ -161,8 +163,8 @@ rather than on every push. See [docs/TESTING.md](docs/TESTING.md).
 - The wire, ACH and SWIFT rails are simulated: they are recorded, not settled.
 - There is no credit bureau and no hosted production deployment.
 
-The full list is in the
-[case study](docs/PORTFOLIO_CASE_STUDY.md#known-limitations).
+The full list is in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#known-limitations).
 
 ## Run locally
 
@@ -197,7 +199,6 @@ troubleshooting are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 | [Events](docs/EVENTS.md) | Kafka contracts, delivery, retry, dead-letter topics, idempotency |
 | [Observability](docs/OBSERVABILITY.md) | Metrics, tracing, dashboards |
 | [Development](docs/DEVELOPMENT.md) | Local setup, ports, commands, troubleshooting |
-| [Case study](docs/PORTFOLIO_CASE_STUDY.md) | Decisions, trade-offs, limitations |
 
 ## Copyright & Usage
 
