@@ -289,12 +289,10 @@ notifications, external rails and TOTP enrolment. 200 assertions.
 
 It also proves an event-driven workflow end to end. The loan repayment in
 Flow 3 publishes `LOAN_REPAYMENT_MADE`, and `user-service` raises the credit
-score when it consumes it — a reward that had never once been given, because
-the event carried no `userId` and the consumer returned on the null. The suite
-waits for the score to move and asserts it unconditionally, so a regression in
-the contract turns this red rather than quietly dropping an assertion from the
-total. It used to be written as `if (score > 700)`, which is why nobody
-noticed.
+score when it consumes it, which depends on the event carrying the `userId`.
+The suite waits for the score to move and asserts it unconditionally, so a
+regression in the contract turns this red rather than quietly dropping an
+assertion from the total.
 
 It also proves the ownership rules that only a real gateway can prove. A second
 customer is registered purely to be refused: they may not wire or ACH from the
@@ -303,17 +301,14 @@ reference, and may not start or remove that customer's second factor. Each is a
 403 through the live gateway, with a real JWT, so the check is exercised
 end-to-end rather than against a mocked caller identity.
 
-Three things about how it is written are worth stating, because each was wrong
-before.
+Three things about how it is written are worth stating.
 
 **A refusal is asserted as a refusal.** Platform statistics, the daily snapshot,
 application review and KYC review are staff-only, and the suite runs with a
-customer token. It used to call them and assert that data came back, so it
-finished with red lines every run — the authorization was right and the test was
-wrong. Those are now explicit `Assert-Refused` checks against the expected HTTP
-status, using a helper that reports the status rather than swallowing the
-exception and returning `$null`. Three places that quietly incremented the pass
-counter when a call came back empty are gone.
+customer token. Those calls are explicit `Assert-Refused` checks against the
+expected HTTP status, using a helper that reports the status rather than
+swallowing the exception and returning `$null`. No assertion counts an empty
+response as a pass.
 
 **Eventual consistency is waited for, not slept through.** The card and the loan
 are created by Kafka consumers. Fixed sleeps were a guess about consumer
@@ -321,9 +316,8 @@ scheduling; `Wait-For` polls until the fact holds, returns the moment it does
 and fails clearly at a deadline. The one remaining sleep is a TOTP window, which
 genuinely is a duration.
 
-**It fails the process.** The suite exits non-zero when any assertion failed. It
-previously printed `FAILED: n` and exited 0, so nothing could gate on it. It
-also no longer prints a one-time code.
+**It fails the process.** The suite exits non-zero whenever an assertion fails,
+so it can act as a release gate. It never prints a one-time code.
 
 ```powershell
 docker compose up -d

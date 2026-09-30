@@ -17,7 +17,7 @@ export { ApiError, NetworkError } from "@/lib/api/errors";
 
 export const SESSION_COOKIE = "bp_session";
 
-const BASE_URL = process.env.API_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.API_GATEWAY_URL ?? "http://localhost:8080";
 
 export async function getToken(): Promise<string | null> {
   const store = await cookies();

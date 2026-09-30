@@ -32,8 +32,8 @@ services:
     container_name: banking-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: bankingadmin
-      POSTGRES_PASSWORD: bankingpass
+      POSTGRES_USER: ${POSTGRES_USER:-bankingadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       POSTGRES_DB: postgres
     ports:
       - "5432:5432"
@@ -41,7 +41,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bankingadmin"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -172,8 +172,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — copy .env.example and generate a value}
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
@@ -193,8 +193,8 @@ services:
       # always been here — which is the convention for a repository meant to be
       # read and run locally, and not a pattern for anything deployed.
       NORTHBANK_DEMO_STAFF_ENABLED: "true"
-      NORTHBANK_DEMO_STAFF_USERNAME: northbank.reviewer
-      NORTHBANK_DEMO_STAFF_PASSWORD: ReviewerDemo2026!
+      NORTHBANK_DEMO_STAFF_USERNAME: ${NORTHBANK_DEMO_STAFF_USERNAME:-northbank.reviewer}
+      NORTHBANK_DEMO_STAFF_PASSWORD: "${NORTHBANK_DEMO_STAFF_PASSWORD:-ReviewerDemo2026!}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -221,8 +221,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/account_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -252,8 +252,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/application_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -283,8 +283,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/transaction_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -314,8 +314,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -345,8 +345,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/statistics_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -380,8 +380,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -411,8 +411,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fraud_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -446,8 +446,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/credit_card_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -477,8 +477,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loan_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -508,8 +508,8 @@ services:
     environment:
       ZIPKIN_ENDPOINT: http://banking-zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/integration_db
-      SPRING_DATASOURCE_USERNAME: bankingadmin
-      SPRING_DATASOURCE_PASSWORD: bankingpass
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bankingadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bankingpass}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -547,7 +547,6 @@ services:
       - "3000:3000"
     environment:
       API_GATEWAY_URL: http://api-gateway:8080
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
       NODE_ENV: production
     depends_on:
       api-gateway:

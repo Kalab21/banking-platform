@@ -130,9 +130,9 @@ published and not consumed by anything.
 Events are explicit versioned types in `common-events`, shared by producer and
 consumer, routed by an `eventType` field rather than a Java class name in a
 Kafka header. [EVENTS.md](EVENTS.md) holds the full matrix: every topic, who
-publishes it, who consumes it, which fields each consumer depends on, what is
-deliberately absent, and which behaviour was removed because nothing produced
-the event it waited for.
+publishes it, who consumes it, which fields each consumer depends on, how
+delivery and retry behave, and which events are intentionally published without
+a consumer.
 
 ## Design decisions
 
