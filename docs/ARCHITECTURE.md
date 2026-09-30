@@ -7,25 +7,10 @@ events move, and the design decisions behind it. Local setup is in
 
 ## Topology
 
-![Northbank system architecture](architecture/northbank-system-architecture.svg)
-
-```mermaid
-flowchart LR
-    Browser["Browser"] --> Console["Next.js console<br/>(backend-for-frontend)"]
-    Console --> Gateway["API Gateway<br/>JWT, identity headers,<br/>rate limiting"]
-    Gateway --> Domain
-    subgraph Domain["Domain services"]
-        direction TB
-        User["user"] ~~~ Account["account"] ~~~ Transaction["transaction"]
-        Payment["payment"] ~~~ Application["application"] ~~~ Loan["loan"]
-        Card["credit-card"] ~~~ Fraud["fraud-detection"] ~~~ Stats["statistics"]
-        Notify["notification"] ~~~ Integration["integration"]
-    end
-    Domain --> Postgres[("PostgreSQL<br/>one database each")]
-    Domain --> Redis[("Redis")]
-    Domain <--> Kafka[["Kafka"]]
-    Gateway -. discovery .- Eureka["Eureka"]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="architecture/northbank-architecture-dark.svg">
+  <img alt="Northbank architecture: browser, Next.js console, API gateway and Eureka; eleven Spring Boot services with their OpenFeign calls into account-service and user-service; Kafka topics; PostgreSQL, Redis, observability and delivery" src="architecture/northbank-architecture.svg">
+</picture>
 
 There are 13 backend processes: Eureka, the API gateway and 11 business
 services. The Next.js console runs as its own process.
