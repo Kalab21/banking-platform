@@ -315,6 +315,94 @@ no hosted instance is published. The services are on Spring Boot 3.3 and Spring 
 [SECURITY.md](SECURITY.md#deferred-platform-modernization) rather than a dependency
 bump.
 
+## Known limitations
+
+These are recorded rather than solved, and each is a deliberate stopping point.
+
+1. **A transfer is not atomic across services.** The debit and the credit are
+   two calls to `account-service`. If the credit fails after the debit is
+   applied, the idempotency record settles unknown so no retry can debit twice.
+   There is no saga and no compensating transaction.
+2. **Reconciliation reports; it does not repair.** Each transfer attempt is
+   recorded before its legs run. `TransferReconciliationJob` asks
+   `account-service` every five minutes what became of each keyed leg of a
+   stuck attempt and records the answer; an `/internal` endpoint, reachable
+   only inside the Compose network, runs the same pass on demand. Nothing then credits or
+   reverses money on its own: deciding which account is made whole is left to a
+   person. Unknown idempotency outcomes outside transfers are surfaced only as
+   the `banking.idempotency.unknown` gauge.
+3. **Dead-letter topics are written, not replayed.** Consumers retry with
+   bounded exponential backoff, then publish the record to `<topic>.DLT` with
+   its failure headers and move on; deserialization failures go straight
+   there. Nothing consumes the dead-letter topics, so replay is a manual step.
+4. **Service-to-service calls are not authenticated.** The `/internal`
+   endpoints rely on network isolation — no host ports, no gateway route —
+   rather than mTLS or a service credential.
+5. **Circuit-breaker coverage is partial.** Only the
+   `transaction-service` → `account-service` hop is protected.
+6. **Observability stops short of operations.** No log aggregator, traces held
+   in memory and lost on restart, no alerting rules and no route for one to
+   fire down.
+7. **External rails are simulated.** Wire, ACH and SWIFT requests are
+   validated, owner-checked and recorded, but not connected to anything, and
+   they debit no balance.
+8. **Test depth is uneven.** Account, transaction, payment, application,
+   credit-card, loan and user services and the shared Kafka and idempotency
+   modules have Testcontainers suites; `notification`, `integration`, `fraud`
+   and `statistics` are covered by authorization, contract and unit tests only.
+9. **The live suite runs on demand.** Starting thirteen backend processes on
+   every push is not a sensible trade, so only the offline suite is wired into
+   CI.
+10. **Audit coverage is partial.** Account, application, payment and transaction
+    services write an attributed audit row with each change; loan, credit-card
+    and user services do not yet, so repayments, card payments and KYC reviews
+    are traceable through their own records and events rather than the audit log.
+11. **Second factor is opt-in, including for staff.** Requiring it for
+    employees needs a first-enrolment flow that does not exist yet, because
+    enrolment itself requires a signed-in caller.
+12. **A monthly recurring payment can drift to the 28th.** Each occurrence is
+    dated from the previous one's due date, so a series that starts on the
+    29th, 30th or 31st settles on the 28th after February. Loan instalments are
+    dated from the loan's start and do not drift; doing the same for payments
+    needs the series' first date stored, which is a schema change.
+13. **A remote debit is not compensated if the local commit fails.** A loan
+    repayment, a card payment and an immediate payment debit the account in
+    `account-service`, then commit their own record. If that local commit
+    fails, the money has moved and the product has not recorded it; the
+    idempotency key settles unknown, so a retry cannot debit twice, and
+    repairing the record is left to a person.
+14. **An unconfirmed scheduled payment stays failed.** When the executor cannot
+    tell whether a scheduled payment's debit happened, the payment is marked
+    failed with "Outcome unconfirmed; check the account before paying again",
+    and a recurring series does not advance. A payment the bank declined does
+    advance it.
+15. **External rails have no idempotency key or balance check.** A wire, ACH
+    or SWIFT request is a record only (item 7), so a retried request is
+    recorded twice and no balance is checked, because nothing is settled.
+16. **Some lifecycle edges are displayed, not stored.** An offer that expires
+    leaves its application `OFFERED`; the console shows it as lapsed and
+    acceptance is refused. Cancelling an offered application leaves the offer
+    row `OFFERED`, and acceptance is refused by the application's own
+    transitions. A KYC document decision can be revised by another reviewer;
+    there is no separate document state machine.
+17. **Single-currency accounts, and no card funding link.** Every account
+    holds one currency and nothing converts; a request in another currency is
+    refused. A card has no linked funding account (`linkedAccountId` is empty),
+    so each card payment names the account it is paid from.
+18. **Staff can act as the bank's desk.** An employee can deposit to a
+    customer's account, add a payee, submit an application on a customer's
+    behalf and record a simulated card purchase. These are assisted-service
+    and simulation actions. Staff still cannot move a customer's money out,
+    accept an offer for them, or decide about themselves.
+19. **An account's history shows its own transactions only.** Deposits,
+    withdrawals, transfers and payments are recorded by `transaction-service`
+    and appear in the account's history and balance chart. A loan
+    disbursement, a loan repayment and a card payment change the balance
+    through `account-service` directly and are recorded on the loan or card,
+    so the account's history omits them and its chart can differ from the
+    current balance, which is always correct. A single cross-product ledger
+    view is future work.
+
 ## Repository structure
 
 ```
@@ -354,7 +442,7 @@ banking-platform/
 ├── fraud-detection-service/     # Rules engine, Redis velocity, freeze
 ├── integration-service/         # Wire/ACH/SWIFT stubs, FX
 │
-├── docs/                        # Architecture, security, testing and case-study documents
+├── docs/                        # Architecture, security, testing, events, observability, development
 ├── docker/postgres/init-db.sql  # Creates one database per service
 ├── .github/workflows/           # CI, CodeQL, security scan
 ├── scripts/seed-demo.sh         # Seeds a synthetic demo customer
