@@ -47,8 +47,7 @@ public class LoanEventConsumer {
         if (!processedEvents.claim("user-service:loan-score", event.eventId())) {
             return;
         }
-        // instanceof chains rather than a switch over patterns: this builds on
-        // Java 17, where switch patterns are still a preview feature.
+        // One branch per event type, each with its own null check on the user.
         if (event instanceof LoanPaidOff e && e.userId() != null) {
             creditScoreService.updateScore(e.userId(), +15, "Loan paid off in full");
         } else if (event instanceof LoanRepaymentMade e && e.userId() != null) {

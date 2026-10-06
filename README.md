@@ -1,6 +1,6 @@
 # Northbank Banking Platform
 
-A full-stack, event-driven retail banking platform: Java 17 and Spring Boot
+A full-stack, event-driven retail banking platform: Java 21 and Spring Boot
 microservices, a Next.js customer and staff console, Kafka, PostgreSQL and Redis,
 all running locally on Docker Compose.
 
@@ -92,7 +92,7 @@ topics, data ownership, event flows and design decisions.
 
 | | |
 |---|---|
-| **Backend** | Java 17, Spring Boot 3.3, Spring Cloud Gateway, Eureka, OpenFeign, Resilience4j |
+| **Backend** | Java 21, Spring Boot 3.3, Spring Cloud Gateway, Eureka, OpenFeign, Resilience4j |
 | **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
 | **Data and messaging** | PostgreSQL 16 with Flyway, Redis 7, Apache Kafka |
 | **Security** | JWT at the gateway, BCrypt, TOTP two-factor, per-resource ownership checks |
@@ -162,7 +162,7 @@ rather than on every push. See [docs/TESTING.md](docs/TESTING.md).
 
 ## Run locally
 
-Prerequisites: JDK 17+, Maven 3.8+, Docker Desktop.
+Prerequisites: JDK 21+, Maven 3.8+, Docker Desktop.
 
 ```bash
 git clone https://github.com/Kalab21/banking-platform.git
