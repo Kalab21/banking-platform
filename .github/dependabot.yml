@@ -19,7 +19,7 @@ updates:
         update-types: [minor, patch]
     ignore:
       # Framework majors are pinned deliberately, not neglected. This project
-      # targets Spring Boot 3.3 on Java 17; a Boot 4 or Spring Cloud 2025 bump
+      # targets Spring Boot 3.3 on Java 21; a Boot 4 or Spring Cloud 2025 bump
       # is a migration with its own design work, not a dependency update, and
       # Dependabot proposing one every week is noise that trains you to ignore
       # the PRs that do matter.
@@ -92,7 +92,7 @@ updates:
     open-pull-requests-limit: 2
     labels: [dependencies, docker]
     ignore:
-      # The services are built for Java 17. Moving the JRE major is a runtime
+      # The services are built for Java 21. Moving the JRE major is a runtime
       # decision that belongs with a toolchain change, not a weekly bump.
       - dependency-name: "eclipse-temurin"
         update-types: ["version-update:semver-major"]

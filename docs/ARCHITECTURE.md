@@ -297,7 +297,7 @@ repayments and card payments, which do debit it.
 The stack runs and is tested on Docker Compose. `infrastructure/aws/` holds Terraform
 definitions for an AWS layout (ECS Fargate, RDS, MSK, ElastiCache, ALB, WAF, CloudFront);
 no hosted instance is published. The services run Spring Boot 3.3 and Spring Cloud
-2023.0 on Java 17, and each release is verified through the repository's backend,
+2023.0 on Java 21, and each release is verified through the repository's backend,
 frontend, security and full-stack gates ([TESTING.md](TESTING.md)).
 
 ## Repository structure

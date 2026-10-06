@@ -3,7 +3,7 @@
 Setup options beyond the default Docker Compose run, the API reference, and
 troubleshooting.
 
-**Prerequisites:** JDK 17+, Maven 3.8+, Docker Desktop.
+**Prerequisites:** JDK 21+, Maven 3.8+, Docker Desktop.
 
 ## Infrastructure in Docker, services in your IDE
 
