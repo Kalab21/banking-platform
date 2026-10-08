@@ -8,8 +8,13 @@ output "cloudfront_domain" {
   value       = aws_cloudfront_distribution.main.domain_name
 }
 
+output "origin_hostname" {
+  description = "CloudFront's origin hostname (aliases the ALB). Direct access is refused: the ALB admits only CloudFront's origin-facing servers carrying the origin header."
+  value       = local.origin_hostname
+}
+
 output "alb_dns" {
-  description = "ALB DNS name (internal — traffic should go through CloudFront)"
+  description = "ALB origin DNS name. The ALB is internet-facing for CloudFront only; direct public access is refused and normal traffic goes through CloudFront."
   value       = aws_lb.main.dns_name
 }
 

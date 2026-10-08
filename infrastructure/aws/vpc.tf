@@ -42,7 +42,16 @@ resource "aws_subnet" "private" {
   tags = { Name = "banking-private-${var.availability_zones[count.index]}-${var.environment}" }
 }
 
-# ── NAT Gateway (one per public subnet for HA; use count.index 0 for cost-saving) ──
+# ── NAT Gateway ───────────────────────────────────────────────────────────────
+#
+# A single NAT gateway, in the first public subnet, for cost control. Every
+# private subnet routes general internet egress through it, so that egress has
+# a single-AZ dependency: if that AZ fails, tasks in the other AZs lose outbound
+# internet access. Most AWS API traffic does not use it, because ECR, S3,
+# CloudWatch Logs and Secrets Manager are reached through the VPC endpoints
+# below. What still uses NAT is the Fargate agent's path to the ECS control
+# plane (no ecs/ecs-agent/ecs-telemetry endpoints are modelled). AZ-independent
+# egress would need one NAT gateway and one private route table per AZ.
 
 resource "aws_eip" "nat" {
   domain     = "vpc"

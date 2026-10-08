@@ -79,3 +79,34 @@ jobs:
       # manually — see the README.
       - name: End-to-end tests (offline)
         run: npm run test:e2e
+
+  terraform:
+    name: Terraform (AWS model)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/aws
+
+    # Static checks only: no backend, no plan, no apply, no AWS credentials.
+    # The tests run against mocked providers (tests/architecture.tftest.hcl).
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+          terraform_wrapper: false
+
+      - name: Format
+        run: terraform fmt -check -recursive
+
+      - name: Init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Architecture invariants (mocked providers)
+        run: terraform test

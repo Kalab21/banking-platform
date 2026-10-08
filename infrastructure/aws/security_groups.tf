@@ -1,22 +1,28 @@
-# ── ALB — internet-facing ─────────────────────────────────────────────────────
+# ── ALB — internet-facing, reachable only from CloudFront ─────────────────────
+
+# AWS-managed list of the addresses CloudFront uses to reach origins.
+data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
 
 resource "aws_security_group" "alb" {
   name        = "banking-alb-sg-${var.environment}"
-  description = "ALB: allow HTTP/HTTPS from internet"
+  description = "ALB: HTTPS from CloudFront origin-facing servers only"
   vpc_id      = aws_vpc.main.id
 
+  # The ALB is internet-facing because CloudFront reaches it as a public custom
+  # origin, but only CloudFront may open a connection. With WAF attached to the
+  # distribution, admitting anyone else would let a caller bypass WAF. The
+  # listener additionally requires CloudFront's X-Origin-Verify header (alb.tf),
+  # so another CloudFront distribution cannot use this origin either.
+  #
+  # There is no port 80 rule: CloudFront redirects viewers to HTTPS and talks to
+  # this origin over HTTPS only, so nothing on the normal path uses HTTP here.
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
   }
 
   # The only thing this load balancer talks to is the API gateway task, on
@@ -148,13 +154,8 @@ resource "aws_security_group" "msk" {
   description = "MSK Kafka: inbound from ECS only"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    from_port       = 9092
-    to_port         = 9092
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
-  }
-
+  # 9094 is the TLS client port. The cluster is TLS-only (client_broker = "TLS"),
+  # so the plaintext client port 9092 is not served and is not opened here.
   ingress {
     from_port       = 9094
     to_port         = 9094

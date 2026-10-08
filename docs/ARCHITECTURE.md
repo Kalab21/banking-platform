@@ -124,7 +124,7 @@ console, all from one shared non-root JRE image plus the console's own image.
 `infrastructure/aws/` holds Terraform for an AWS layout (ECS Fargate, RDS, MSK,
 ElastiCache, ALB, WAF, CloudFront). It is not deployed; the README's end-to-end
 diagram shows it at a high level, and the TLS it does and does not configure and its
-known gaps are in [SECURITY.md](SECURITY.md#aws-reference-deployment).
+known gaps are in [SECURITY.md](SECURITY.md#aws-infrastructure-model).
 
 ## Kafka topics
 

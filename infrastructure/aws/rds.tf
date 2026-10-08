@@ -88,7 +88,10 @@ resource "aws_db_instance" "main" {
 }
 
 # ── Database Init ─────────────────────────────────────────────────────────────
-# Run once after RDS is up — creates all 13 service databases.
+# Run once after RDS is up — creates all 11 service-owned logical databases.
+# Each business service owns one logical database; all 11 are hosted on this one
+# RDS PostgreSQL deployment (Multi-AZ by default). Eureka and the API gateway
+# have no database.
 # Execute from a bastion or CI/CD agent within the VPC:
 #
 #   PGPASSWORD=<password> psql -h <rds_endpoint> -U bankingadmin -d postgres \

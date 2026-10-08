@@ -9,7 +9,12 @@ resource "aws_cloudfront_distribution" "main" {
   # ── Origin: ALB ────────────────────────────────────────────────────────────
 
   origin {
-    domain_name = aws_lb.main.dns_name
+    # A hostname the ALB's certificate covers (*.<domain>), aliased directly to
+    # the ALB. Not the ALB's own *.elb.amazonaws.com name, which the certificate
+    # does not cover, and not api.<domain>, which resolves to this distribution
+    # and would loop. CloudFront sends this name as SNI and Host, so the HTTPS
+    # origin certificate check succeeds.
+    domain_name = local.origin_hostname
     origin_id   = "banking-alb"
 
     custom_origin_config {

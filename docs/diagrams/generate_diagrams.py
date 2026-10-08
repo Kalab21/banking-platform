@@ -129,15 +129,17 @@ class Svg:
 END_TO_END_LABEL = (
     "Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and "
     "talks only to the Next.js backend-for-frontend, an application BFF outside the current AWS Terraform. The "
-    "BFF makes server-side API requests through the AWS API edge: Route 53, CloudFront with AWS WAF and an ACM "
-    "certificate, and an Application Load Balancer, which forwards to the Spring Cloud Gateway. The gateway "
+    "BFF resolves the API hostname through Route 53 (DNS) and sends server-side HTTPS requests to CloudFront, "
+    "with AWS WAF and an ACM certificate, which forwards to an Application Load Balancer that accepts only "
+    "CloudFront's origin traffic, which forwards to the Spring Cloud Gateway. The gateway "
     "validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. "
     "Eleven Spring Boot services are grouped by domain: identity (user-service); accounts and money movement "
     "(account-service, the only writer of balances, transaction-service, payment-service, integration-service); "
     "lending and cards (application-service, loan-service, credit-card-service); and risk and insight "
     "(fraud-detection, statistics-service, notification-service). REST and OpenFeign carry immediate "
     "authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns a logical "
-    "PostgreSQL 16 database; in the AWS model the 11 logical databases share one RDS PostgreSQL instance. Redis "
+    "PostgreSQL 16 database; in the AWS model the 11 logical databases share one RDS PostgreSQL deployment with "
+    "Multi-AZ enabled by default. Redis "
     "holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent "
     "consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate in "
     "private subnets, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling."
@@ -164,15 +166,18 @@ def end_to_end(t):
     s.arrow([(210, 102), (210, 152)])
     s.tag(210, 132, "session cookie", 13, rest)
 
-    s.zone(430, 126, 650, 140, "AWS API edge", color=t["muted"], size=12)
-    aws_box(450, 166, 112, "Route 53", "DNS")
-    aws_box(590, 166, 250, "CloudFront + WAF", "ACM certificate · HTTPS")
-    aws_box(868, 166, 192, "Load Balancer", "ALB · HTTPS")
-    s.arrow([(360, 202), (450, 202)])
-    s.text(394, 190, "server-side", 12, 600, rest)
-    s.text(394, 222, "API request", 12, 600, rest)
-    s.arrow([(562, 202), (590, 202)], color=t["muted"], width=2)
-    s.arrow([(840, 202), (868, 202)], color=t["muted"], width=2)
+    # Route 53 is DNS, not a hop: the BFF looks the API hostname up (dotted), then
+    # sends the request itself to CloudFront (solid).
+    s.zone(430, 14, 650, 252, "AWS API edge", color=t["muted"], size=12)
+    aws_box(600, 44, 230, "Route 53", "resolves the API hostname")
+    aws_box(470, 166, 300, "CloudFront + WAF", "ACM certificate · HTTPS")
+    aws_box(820, 166, 240, "Load Balancer", "ALB · CloudFront-only origin")
+    s.arrow([(360, 172), (400, 172), (400, 80), (600, 80)], color=t["muted"], dash=True, width=2)
+    s.text(470, 72, "DNS lookup", 12, 600, t["muted"])
+    s.arrow([(360, 214), (470, 214)])
+    s.text(398, 204, "server-side", 12, 600, rest)
+    s.text(398, 234, "HTTPS", 12, 600, rest)
+    s.arrow([(770, 202), (820, 202)], color=t["muted"], width=2)
 
     # ── Gateway and discovery ──
     s.zone(30, 288, 1060, 132, "Gateway & discovery")
@@ -180,7 +185,7 @@ def end_to_end(t):
                                              "trusted identity headers · rate limiting"],
           title_color=rest, fill=t["box2"], tsize=18, lsize=14)
     s.box(910, 322, 160, 76, "Eureka", ["service discovery"], fill=t["box2"], tsize=16, lsize=13.5, gap=20)
-    s.arrow([(964, 238), (964, 270), (690, 270), (690, 314)], color=rest)
+    s.arrow([(940, 238), (940, 270), (690, 270), (690, 314)], color=rest)
     s.arrow([(880, 360), (910, 360)], dash=True, color=t["muted"], width=2)
 
     # ── Business services ──
@@ -229,7 +234,7 @@ def end_to_end(t):
     s.zone(30, 738 + D, 1060, 178, "Data & messaging")
     dy, dh = 772 + D, 128
     s.box(50, dy, 300, dh, "PostgreSQL 16", ["logical database per service", "service-owned data",
-                                             "AWS: shared RDS instance"],
+                                             "AWS: one RDS deployment"],
           title_color=data, fill=t["data_fill"], stroke=data, tsize=17, lsize=14, gap=21)
     s.box(370, dy, 250, dh, "Redis 7", ["rate limiting · cache", "velocity state", "AWS: ElastiCache"],
           title_color=data, fill=t["data_fill"], stroke=data, tsize=17, lsize=14, gap=21)
@@ -250,7 +255,7 @@ def end_to_end(t):
     rx, rw = 1112, 300
     s.zone(1100, 14, 324, 1006, "AWS runtime & operations", color=t["muted"], size=12)
     rail = [("ECS Fargate", ["gateway · Eureka · 11 services", "private subnets"]),
-            ("RDS PostgreSQL", ["11 service-owned logical", "databases, one instance"]),
+            ("RDS PostgreSQL", ["11 service-owned logical DBs", "one deployment · Multi-AZ"]),
             ("ECR", ["container images"]),
             ("Secrets Manager", ["DB password · JWT secret"]),
             ("CloudWatch Logs", ["service · WAF · MSK logs"]),

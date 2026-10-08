@@ -202,23 +202,34 @@ developing rather than by default.
 Service-to-service calls rely on this network isolation; there is no mTLS or workload
 identity between services.
 
-### AWS reference deployment
+### AWS infrastructure model
 
-The Terraform in `infrastructure/aws/` is a reference topology and has not been
-applied. Transport security in it: CloudFront terminates viewer TLS (1.2+) and reaches
-the ALB over HTTPS only; the ALB redirects HTTP to HTTPS and forwards to the gateway
-over HTTP inside the VPC; MSK is configured for TLS between clients and brokers. TLS is
-not configured for the RDS or ElastiCache connections, which are protected by private
-subnets and security groups that admit traffic only from the ECS tasks.
+The Terraform in `infrastructure/aws/` models the AWS infrastructure and has not been
+applied. CI formats, validates and scans it, and `tests/architecture.tftest.hcl` checks
+the invariants below against mocked providers; none of this proves runtime behaviour in
+a real account.
 
-Before the reference could be rolled out, these would need closing:
+- **Edge.** The API hostname aliases CloudFront, which terminates viewer TLS (1.2+)
+  with AWS WAF attached. CloudFront reaches the ALB over HTTPS at a dedicated origin
+  hostname (`origin-api.<domain>`) that aliases the ALB and is covered by the
+  certificate's `*.<domain>` name, so the origin certificate check matches. The ALB
+  admits only CloudFront's origin-facing servers (the AWS-managed prefix list), on 443
+  only, and forwards to the gateway only when the request carries CloudFront's
+  `X-Origin-Verify` secret; anything else gets a fixed 403. The ALB forwards to the
+  gateway over HTTP inside the VPC.
+- **Kafka.** MSK is TLS-only between clients and brokers. Services get the TLS
+  bootstrap brokers and `spring.kafka.security.protocol=SSL`; only the TLS client port
+  is open to the tasks.
+- **Redis.** Every service that uses Redis, including `user-service`'s sign-in
+  throttle, is given the ElastiCache endpoint.
+- **Data stores.** TLS is not configured for the RDS or ElastiCache connections, which
+  are protected by private subnets and security groups that admit traffic only from the
+  ECS tasks.
+- **Region.** One ACM certificate serves CloudFront and the ALB, so the model is pinned
+  to us-east-1.
 
-- the Next.js console has no ECS task definition;
-- the ECS tasks are given MSK's plaintext bootstrap list although the brokers accept
-  TLS only;
-- `user-service` is not given the Redis endpoint its login throttle needs;
-- the ALB does not yet require the `X-Origin-Verify` header CloudFront adds, so it can
-  be reached directly.
+Still open: the Next.js console has no ECS task definition, and a single NAT gateway
+carries the tasks' non-endpoint egress (a cost choice with a single-AZ dependency).
 
 ### Work with no caller
 
