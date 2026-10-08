@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Captures the second-factor challenge against a running stack.
+ * Signing in to an account with TOTP enrolled stops at the second-factor
+ * challenge instead of issuing a session.
  *
  * The challenge only appears when the backend answers `twoFactorRequired`, so
  * it cannot be produced by the offline project, which has no gateway behind it.
  * Requires a demo account with TOTP already enrolled, named by E2E_2FA_USERNAME.
  */
-test("two-factor challenge", async ({ page }) => {
+test("an enrolled account is challenged for its second factor", async ({ page }) => {
   const username = process.env.E2E_2FA_USERNAME;
   test.skip(!username, "E2E_2FA_USERNAME not set");
 
@@ -21,6 +22,4 @@ test("two-factor challenge", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /verify it's you/i })).toBeVisible({
     timeout: 60_000,
   });
-
-  await page.screenshot({ path: "../docs/screenshots/06-two-factor.png" });
 });

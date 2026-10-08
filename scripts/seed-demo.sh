@@ -17,7 +17,7 @@
 # because `created_at` is a @CreationTimestamp and is deliberately not settable
 # through the API — a banking API should not let a caller choose when a
 # transaction happened. It exists so the dashboard balance chart has a real date
-# range in screenshots, it is off by default, and it needs the Compose stack.
+# range in a demo, it is off by default, and it needs the Compose stack.
 
 set -euo pipefail
 

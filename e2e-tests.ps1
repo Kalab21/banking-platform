@@ -1,4 +1,4 @@
-﻿# Banking Platform — E2E Test Suite (Days 17+)
+﻿# Banking Platform — E2E Test Suite
 # Prerequisites: docker compose up -d (all services healthy)
 # Run: .\e2e-tests.ps1
 
