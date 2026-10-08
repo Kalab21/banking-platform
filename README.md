@@ -4,7 +4,7 @@
 
 Northbank is a retail banking platform built from Java 21 / Spring Boot microservices
 behind a Spring Cloud Gateway and a Next.js backend-for-frontend, with Kafka for
-derived workflows, a PostgreSQL database per service and Redis, designed so that money
+derived workflows, a logical PostgreSQL database per service and Redis, designed so that money
 movement stays correct under retries, concurrency and partial failure.
 
 [![CI](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/ci.yml)
@@ -14,7 +14,7 @@ movement stays correct under retries, concurrency and partial failure.
 ## What Northbank demonstrates
 
 - **Microservices with clear ownership**: 11 business services behind an API gateway
-  with Eureka discovery, each owning its own PostgreSQL database and Flyway migrations.
+  with Eureka discovery, each owning its own logical PostgreSQL database and Flyway migrations.
 - **Money-movement correctness**: idempotency keys on every money-moving request,
   `SELECT … FOR UPDATE` on every balance change, and outcomes reported as unknown,
   then reconciled, when the platform cannot know them.
@@ -27,20 +27,20 @@ movement stays correct under retries, concurrency and partial failure.
   checks ownership against stored records.
 - **Verification and delivery**: 1,482 automated tests in CI (JUnit, Testcontainers,
   Vitest, Playwright), live full-stack suites, CodeQL and Trivy, Docker Compose for the
-  whole stack, and Terraform for an AWS reference deployment.
+  whole stack, and Terraform-backed AWS infrastructure.
 
 ## End-to-End Architecture
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-end-to-end-dark.svg">
-  <img src="docs/architecture/northbank-end-to-end.svg" width="1000" alt="Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and talks only to the Next.js backend-for-frontend, which keeps a server-side session and calls the API gateway over REST. In the AWS model, public API traffic arrives through Route 53, CloudFront with AWS WAF and an ACM certificate, and an Application Load Balancer. The Spring Cloud Gateway validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. Eleven Spring Boot services are grouped by domain: identity; accounts and money movement, where account-service is the only writer of balances; lending and cards; and risk and insight. REST and OpenFeign carry immediate authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns its PostgreSQL 16 database (RDS in the AWS model); Redis holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling.">
+  <img src="docs/architecture/northbank-end-to-end.svg" width="1000" alt="Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and talks only to the Next.js backend-for-frontend, an application BFF outside the current AWS Terraform. The BFF makes server-side API requests through the AWS API edge: Route 53, CloudFront with AWS WAF and an ACM certificate, and an Application Load Balancer, which forwards to the Spring Cloud Gateway. The gateway validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. Eleven Spring Boot services are grouped by domain: identity (user-service); accounts and money movement (account-service, the only writer of balances, transaction-service, payment-service, integration-service); lending and cards (application-service, loan-service, credit-card-service); and risk and insight (fraud-detection, statistics-service, notification-service). REST and OpenFeign carry immediate authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns a logical PostgreSQL 16 database; in the AWS model the 11 logical databases share one RDS PostgreSQL instance. Redis holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate in private subnets, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling.">
 </picture>
 
 The diagram combines Northbank's application topology with its AWS infrastructure model;
 service-level calls, event contracts and infrastructure details are documented separately.
-In the Terraform model the gateway, Eureka and the eleven services run as ECS Fargate
-tasks behind the edge; the Next.js console is its own Node service and is not part of
-that Terraform.
+Terraform models the AWS infrastructure across CloudFront/WAF, ALB, ECS Fargate, RDS
+PostgreSQL (11 service-owned logical databases on one shared instance), ElastiCache, MSK,
+ECR, Secrets Manager and CloudWatch.
 
 Requests enter through the Next.js backend-for-frontend, which makes every banking API
 call server-side. The API gateway is the only routed entry to the service network: it
@@ -61,7 +61,7 @@ in [`infrastructure/aws/`](infrastructure/aws/).
   product provisioning tolerate lag and consume events, so an outage there never blocks
   money movement. *Trade-off:* a transfer spans two services with no distributed
   transaction, so a partial outcome is recorded and reconciled rather than hidden.
-- **Database per service.** Each service owns its schema and migrates independently,
+- **Logical database per service.** Each service owns its schema and migrates independently,
   and only `account-service` writes a balance. *Trade-off:* no cross-service joins and
   no distributed ACID; read models such as statistics are built from events.
 - **A backend-for-frontend instead of a browser API client.** The JWT stays in an
@@ -103,8 +103,8 @@ More product workflows: **[docs/PRODUCT-EXPERIENCE.md](docs/PRODUCT-EXPERIENCE.m
 
 ## Security & Trust Boundaries
 
-The dashed zones in the diagram mark the trust boundaries: the AWS edge, the
-application edge (BFF and gateway), the private service network, and the data layer.
+The dashed zones in the diagram mark the trust boundaries: the AWS API edge, the
+gateway, the private service network, and the data layer; the browser reaches only the BFF.
 
 - **Identity is established once, at the gateway.** It validates the JWT and overwrites
   `X-User-Id`, `X-Username` and `X-User-Role` on every routed request, so a client
@@ -174,9 +174,9 @@ than on every push. See [docs/TESTING.md](docs/TESTING.md).
 
 ## Project scope
 
-Runs locally on Docker Compose with synthetic financial data and simulated wire, ACH
-and SWIFT rails; the AWS topology is a Terraform-defined reference and is not currently
-deployed. No production, regulatory or compliance claim is made.
+Runs on synthetic financial data with simulated wire, ACH and SWIFT rails. Local
+execution uses Docker Compose; the AWS infrastructure is modeled in Terraform and scanned
+for misconfiguration in CI. No production, regulatory or compliance claim is made.
 
 ## Run locally
 
@@ -212,7 +212,7 @@ in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 | [Observability](docs/OBSERVABILITY.md) | Metrics, tracing, dashboards |
 | [Development](docs/DEVELOPMENT.md) | Local setup, ports, commands, troubleshooting |
 | [Product experience](docs/PRODUCT-EXPERIENCE.md) | Money movement, credit application, offers and servicing, screen by screen |
-| [AWS infrastructure](infrastructure/aws/) | Terraform for the AWS reference model |
+| [AWS infrastructure](infrastructure/aws/) | Terraform model of the AWS infrastructure |
 
 ## Copyright & Usage
 
