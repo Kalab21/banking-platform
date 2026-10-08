@@ -7,9 +7,9 @@ Standard library only. Run from the repository root:
 Writes into docs/architecture/:
 
     northbank-end-to-end.svg / northbank-end-to-end-dark.svg
-        End-to-end architecture for the README: users, the AWS edge, the
-        application edge (BFF + gateway), domain-grouped services, data and
-        messaging, and a runtime and operations rail.
+        End-to-end architecture for the README: users, the Next.js BFF, the AWS
+        API edge, the gateway, domain-grouped services, data and messaging, and a
+        runtime and operations rail.
     northbank-architecture.svg / northbank-architecture-dark.svg
         Detailed service-level view for docs/ARCHITECTURE.md: every service
         with its port and database, the OpenFeign calls, the Kafka topics and
@@ -128,68 +128,73 @@ class Svg:
 
 END_TO_END_LABEL = (
     "Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and "
-    "talks only to the Next.js backend-for-frontend, which keeps a server-side session and calls the API "
-    "gateway over REST. In the AWS model, public API traffic arrives through Route 53, CloudFront with AWS WAF "
-    "and an ACM certificate, and an Application Load Balancer. The Spring Cloud Gateway validates the JWT, "
-    "forwards trusted identity headers, rate-limits and discovers services through Eureka. Eleven Spring Boot "
-    "services are grouped by domain: identity (user-service); accounts and money movement (account-service, "
-    "the only writer of balances, transaction-service, payment-service, integration-service); lending and cards "
-    "(application-service, loan-service, credit-card-service); and risk and insight (fraud-detection, "
-    "statistics-service, notification-service). REST and OpenFeign carry immediate authoritative operations; "
-    "Kafka events carry derived, asynchronous workflows. Each service owns its PostgreSQL 16 database (RDS in "
-    "the AWS model); Redis holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional "
-    "outbox, idempotent consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail "
-    "shows ECS Fargate in private subnets, ECR, Secrets Manager, CloudWatch Logs, and Prometheus, Grafana and "
-    "Zipkin."
+    "talks only to the Next.js backend-for-frontend, an application BFF outside the current AWS Terraform. The "
+    "BFF makes server-side API requests through the AWS API edge: Route 53, CloudFront with AWS WAF and an ACM "
+    "certificate, and an Application Load Balancer, which forwards to the Spring Cloud Gateway. The gateway "
+    "validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. "
+    "Eleven Spring Boot services are grouped by domain: identity (user-service); accounts and money movement "
+    "(account-service, the only writer of balances, transaction-service, payment-service, integration-service); "
+    "lending and cards (application-service, loan-service, credit-card-service); and risk and insight "
+    "(fraud-detection, statistics-service, notification-service). REST and OpenFeign carry immediate "
+    "authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns a logical "
+    "PostgreSQL 16 database; in the AWS model the 11 logical databases share one RDS PostgreSQL instance. Redis "
+    "holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent "
+    "consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate in "
+    "private subnets, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling."
 )
 
 
 def end_to_end(t):
-    W, H = 1440, 1000
+    W, H = 1440, 1100
     s = Svg(W, H, t, END_TO_END_LABEL)
     rest, kafka, data = t["accent"], t["amber"], t["data"]
     aws_fill, aws_stroke = t["aws_fill"], t["aws_stroke"]
 
-    # ── Users and AWS edge ──
-    s.box(60, 32, 360, 84, "Customers · Staff", ["web browser · holds no bearer token"], fill=t["box2"],
-          tsize=18, lsize=14.5)
-    s.zone(490, 14, 590, 124, "AWS edge · public API ingress", color=t["muted"], size=12)
-    s.box(508, 50, 116, 72, "Route 53", ["DNS"], fill=aws_fill, stroke=aws_stroke, tsize=15, lsize=13,
-          gap=19, sw=1.5)
-    s.box(652, 50, 246, 72, "CloudFront + WAF", ["ACM certificate · HTTPS"], fill=aws_fill, stroke=aws_stroke,
-          tsize=15, lsize=13, gap=19, sw=1.5)
-    s.box(926, 50, 136, 72, "Load Balancer", ["ALB · HTTPS"], fill=aws_fill, stroke=aws_stroke, tsize=15,
-          lsize=13, gap=19, sw=1.5)
-    s.arrow([(624, 86), (652, 86)], color=t["muted"], width=2)
-    s.arrow([(898, 86), (926, 86)], color=t["muted"], width=2)
+    def aws_box(x, y, w, title, detail):
+        s.box(x, y, w, 72, title, [detail], fill=aws_fill, stroke=aws_stroke, tsize=15, lsize=13, gap=19, sw=1.5)
 
-    # ── Application edge ──
-    s.zone(30, 156, 1060, 150, "Application edge")
-    s.box(60, 188, 360, 100, "Next.js BFF", ["server-side session", "browser holds no bearer token"],
-          title_color=rest, fill=t["box2"], tsize=18, lsize=14.5)
-    s.box(500, 188, 380, 100, "API Gateway", ["Spring Cloud Gateway · JWT validation",
+    # ── Users ──
+    s.box(60, 24, 300, 78, "Customers · Staff", ["web browser · holds no bearer token"], fill=t["box2"],
+          tsize=18, lsize=14)
+
+    # ── BFF and the AWS API edge: one request path ──
+    s.box(60, 152, 300, 96, "Next.js BFF", ["server-side session", "browser holds no bearer token"],
+          title_color=rest, fill=t["box2"], tsize=18, lsize=14)
+    s.text(210, 270, "application BFF — outside current AWS Terraform", 12.5, 400, t["muted"], italic=True)
+    s.arrow([(210, 102), (210, 152)])
+    s.tag(210, 132, "session cookie", 13, rest)
+
+    s.zone(430, 126, 650, 140, "AWS API edge", color=t["muted"], size=12)
+    aws_box(450, 166, 112, "Route 53", "DNS")
+    aws_box(590, 166, 250, "CloudFront + WAF", "ACM certificate · HTTPS")
+    aws_box(868, 166, 192, "Load Balancer", "ALB · HTTPS")
+    s.arrow([(360, 202), (450, 202)])
+    s.text(394, 190, "server-side", 12, 600, rest)
+    s.text(394, 222, "API request", 12, 600, rest)
+    s.arrow([(562, 202), (590, 202)], color=t["muted"], width=2)
+    s.arrow([(840, 202), (868, 202)], color=t["muted"], width=2)
+
+    # ── Gateway and discovery ──
+    s.zone(30, 288, 1060, 132, "Gateway & discovery")
+    s.box(500, 314, 380, 92, "API Gateway", ["Spring Cloud Gateway · JWT validation",
                                              "trusted identity headers · rate limiting"],
-          title_color=rest, fill=t["box2"], tsize=18, lsize=14.5)
-    s.box(910, 200, 160, 76, "Eureka", ["service discovery"], fill=t["box2"], tsize=16, lsize=13.5, gap=20)
-
-    s.arrow([(240, 116), (240, 188)])
-    s.tag(240, 141, "session cookie", 13, t["accent"])
-    s.arrow([(420, 238), (500, 238)], label="REST", lx=460, ly=228, lsize=13.5)
-    s.text(460, 256, "server-side", 12.5, 400, t["muted"])
-    s.arrow([(994, 122), (994, 146), (800, 146), (800, 188)], color=t["muted"], width=2)
-    s.arrow([(880, 238), (910, 238)], dash=True, color=t["muted"], width=2)
+          title_color=rest, fill=t["box2"], tsize=18, lsize=14)
+    s.box(910, 322, 160, 76, "Eureka", ["service discovery"], fill=t["box2"], tsize=16, lsize=13.5, gap=20)
+    s.arrow([(964, 238), (964, 270), (690, 270), (690, 314)], color=rest)
+    s.arrow([(880, 360), (910, 360)], dash=True, color=t["muted"], width=2)
 
     # ── Business services ──
-    s.zone(30, 326, 1060, 392, "Private service network · 11 Spring Boot services")
-    gy, gh = 388, 306
+    D = 104
+    s.zone(30, 326 + D, 1060, 392, "Private service network · 11 Spring Boot services")
+    gy, gh = 388 + D, 306
     cols = [(50, 200, "Identity"), (270, 290, "Accounts & Money Movement"),
             (580, 250, "Lending & Cards"), (850, 220, "Risk & Insight")]
-    bus = 366
-    s.line([(690, 288), (690, bus)], rest)
+    bus = 366 + D
+    s.line([(690, 406), (690, bus)], rest)
     s.line([(150, bus), (960, bus)], rest)
     for x, w, _ in cols:
         s.arrow([(x + w / 2, bus), (x + w / 2, gy)], color=rest)
-    s.text(704, 344, "routes /api/** · identity in headers", 13, 600, rest, "start")
+    s.text(704, 344 + D, "routes /api/** · identity in headers", 13, 600, rest, "start")
     for x, w, title in cols:
         s.rect(x, gy, w, gh, t["group"], t["group_stroke"], rx=14)
         s.text(x + w / 2, gy + 26, title, 15.5, 700, t["accent"])
@@ -221,9 +226,10 @@ def end_to_end(t):
     s.text(lx + cols[2][1] / 2, gy + 118, "offer accepted → provisioning", 12.5, 400, t["muted"], italic=True)
 
     # ── Data and messaging ──
-    s.zone(30, 738, 1060, 178, "Data & messaging")
-    dy, dh = 772, 128
-    s.box(50, dy, 300, dh, "PostgreSQL 16", ["database per service", "service-owned data", "AWS: RDS"],
+    s.zone(30, 738 + D, 1060, 178, "Data & messaging")
+    dy, dh = 772 + D, 128
+    s.box(50, dy, 300, dh, "PostgreSQL 16", ["logical database per service", "service-owned data",
+                                             "AWS: shared RDS instance"],
           title_color=data, fill=t["data_fill"], stroke=data, tsize=17, lsize=14, gap=21)
     s.box(370, dy, 250, dh, "Redis 7", ["rate limiting · cache", "velocity state", "AWS: ElastiCache"],
           title_color=data, fill=t["data_fill"], stroke=data, tsize=17, lsize=14, gap=21)
@@ -232,18 +238,19 @@ def end_to_end(t):
                                              "AWS: Amazon MSK"],
           title_color=kafka, fill=t["amber_fill"], stroke=kafka, tsize=17, lsize=14, gap=21)
     s.arrow([(210, gy + gh), (210, dy)], color=data)
-    s.text(222, 760, "JDBC · own database", 12.5, 600, data, "start")
+    s.text(222, 760 + D, "JDBC · own database", 12.5, 600, data, "start")
     s.arrow([(470, gy + gh), (470, dy)], color=data)
-    s.arrow([(530, gy + gh), (530, 728), (680, 728), (680, dy)], color=kafka, dash=True)
+    s.arrow([(530, gy + gh), (530, 728 + D), (680, 728 + D), (680, dy)], color=kafka, dash=True)
     s.arrow([(760, gy + gh), (760, dy)], color=kafka, dash=True, both=True)
-    s.tag(760, 758, "publish · consume", 12.5, kafka)
+    s.tag(760, 758 + D, "publish · consume", 12.5, kafka)
     s.arrow([(960, dy), (960, gy + gh)], color=kafka, dash=True)
-    s.tag(960, 758, "consume", 12.5, kafka)
+    s.tag(960, 758 + D, "consume", 12.5, kafka)
 
     # ── Runtime and operations rail ──
     rx, rw = 1112, 300
-    s.zone(1100, 14, 324, 902, "AWS runtime & operations", color=t["muted"], size=12)
+    s.zone(1100, 14, 324, 1006, "AWS runtime & operations", color=t["muted"], size=12)
     rail = [("ECS Fargate", ["gateway · Eureka · 11 services", "private subnets"]),
+            ("RDS PostgreSQL", ["11 service-owned logical", "databases, one instance"]),
             ("ECR", ["container images"]),
             ("Secrets Manager", ["DB password · JWT secret"]),
             ("CloudWatch Logs", ["service · WAF · MSK logs"]),
@@ -257,7 +264,7 @@ def end_to_end(t):
         y += h + 24
 
     # ── Legend ──
-    ly = 958
+    ly = 1062
     s.line([(50, ly), (100, ly)], rest)
     s.text(110, ly + 5, "REST / OpenFeign · immediate, authoritative", 14, 400, t["text"], "start")
     s.line([(450, ly), (500, ly)], kafka, dash=True)
@@ -308,7 +315,7 @@ def detailed(t):
 
     # Service container
     s.rect(30, 170, 1340, 470, t["group"], t["group_stroke"], dash=True, rx=14, sw=1.4)
-    s.text(1352, 196, "11 business services · Spring Boot 3.3 · Java 21 · one PostgreSQL database each", 13, 600,
+    s.text(1352, 196, "11 business services · Spring Boot 3.3 · Java 21 · one logical PostgreSQL database each", 13, 600,
            t["muted"], "end")
 
     top = [("transaction-service", ["Deposits, withdrawals,", "transfers · idempotent"], ":8084 · transaction_db"),
@@ -368,7 +375,7 @@ def detailed(t):
 
     s.rect(30, dy, 300, dh, t["data_fill"], data, rx=10, sw=1.6)
     s.text(46, dy + 30, "PostgreSQL 16", 16, 700, t["title"], "start")
-    for i, ln in enumerate(["One database per service", "Flyway migrations, schema validated",
+    for i, ln in enumerate(["One logical database per service", "Flyway migrations, schema validated",
                             "Row locks on balances"]):
         s.text(46, dy + 54 + i * 18, ln, 12.5, 400, t["text"], "start")
     s.text(46, dy + dh - 16, "11 databases", 11.5, 400, t["data"], "start", mono=True)
@@ -403,7 +410,7 @@ def detailed(t):
            "Resilience4j circuit breaker on transaction → account", tsize=15)
     s.card(710, oy, 660, 80, "Build and delivery",
            ["Docker Compose for the whole stack · GitHub Actions with CodeQL and Trivy"],
-           "Terraform AWS reference model (ECS Fargate, RDS, MSK, ElastiCache)", tsize=15)
+           "Terraform AWS infrastructure model (ECS Fargate, RDS, MSK, ElastiCache)", tsize=15)
 
     # Legend
     gy = 980
