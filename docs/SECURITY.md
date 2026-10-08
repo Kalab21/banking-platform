@@ -199,6 +199,27 @@ The boundary is the network:
 and `docker-compose.dev-ports.yml` exists to re-open those ports deliberately when
 developing rather than by default.
 
+Service-to-service calls rely on this network isolation; there is no mTLS or workload
+identity between services.
+
+### AWS reference deployment
+
+The Terraform in `infrastructure/aws/` is a reference topology and has not been
+applied. Transport security in it: CloudFront terminates viewer TLS (1.2+) and reaches
+the ALB over HTTPS only; the ALB redirects HTTP to HTTPS and forwards to the gateway
+over HTTP inside the VPC; MSK is configured for TLS between clients and brokers. TLS is
+not configured for the RDS or ElastiCache connections, which are protected by private
+subnets and security groups that admit traffic only from the ECS tasks.
+
+Before the reference could be rolled out, these would need closing:
+
+- the Next.js console has no ECS task definition;
+- the ECS tasks are given MSK's plaintext bootstrap list although the brokers accept
+  TLS only;
+- `user-service` is not given the Redis endpoint its login throttle needs;
+- the ALB does not yet require the `X-Origin-Verify` header CloudFront adds, so it can
+  be reached directly.
+
 ### Work with no caller
 
 A scheduled payment runs from a timer, so there is no request identity to forward.

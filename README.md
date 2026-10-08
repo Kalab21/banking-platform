@@ -11,9 +11,6 @@ movement stays correct under retries, concurrency and partial failure.
 [![CodeQL](https://github.com/Kalab21/banking-platform/actions/workflows/codeql.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/codeql.yml)
 [![Security Scan](https://github.com/Kalab21/banking-platform/actions/workflows/security-scan.yml/badge.svg)](https://github.com/Kalab21/banking-platform/actions/workflows/security-scan.yml)
 
-> Runs on synthetic data. It moves no real money, the wire, ACH and SWIFT rails are
-> simulated, and it makes no production, regulatory or compliance claim.
-
 ## What Northbank demonstrates
 
 - **Microservices with clear ownership**: 11 business services behind an API gateway
@@ -106,10 +103,10 @@ application edge (BFF and gateway), the private service network, and the data la
 - **Money integrity is enforced in the database.** Idempotency records under a unique
   constraint, row locks on balances, and outbox rows written in the same transaction as
   the change they announce.
-- **Business services are private.** In Docker Compose they publish no host ports, and
-  the gateway routes only explicit `/api/**` paths, so the `/internal/**`
-  service-to-service endpoints are unreachable from outside. Internal calls rely on that
-  network isolation, not on mTLS or workload identity.
+- **Business services are private.** They publish no host ports and stay on the
+  private service network, reachable only through explicit gateway `/api/**` routes or
+  internal service paths; the `/internal/**` service-to-service endpoints are never
+  routed from outside.
 - **Code and supply-chain scanning.** CodeQL over Java and TypeScript; Trivy over
   dependencies, Dockerfiles, the base image and the Terraform.
 
@@ -203,27 +200,24 @@ Terraform-defined reference architecture; not currently deployed.
 [`infrastructure/aws/`](infrastructure/aws/) describes how the platform would run on AWS:
 
 - **Edge**: Route 53 → CloudFront with an ACM certificate and AWS WAF → an
-  internet-facing ALB. Viewer and origin connections are HTTPS (TLS 1.2+); the ALB
-  redirects HTTP to HTTPS and forwards to the gateway task over HTTP inside the VPC.
+  internet-facing ALB. Viewer and origin connections are HTTPS (TLS 1.2+), and the ALB
+  redirects HTTP to HTTPS before forwarding to the gateway inside the VPC.
 - **Compute**: the gateway, Eureka (via Cloud Map private DNS) and the 11 services as
   ECS Fargate tasks in private subnets with no public IPs, images from ECR, secrets from
   Secrets Manager, logs to CloudWatch.
 - **Data**: RDS PostgreSQL 16 (Multi-AZ, encrypted storage), ElastiCache Redis 7, and
   Amazon MSK with TLS between clients and brokers and a customer-managed KMS key at
-  rest. Security groups admit database, cache and broker traffic only from the ECS
-  tasks. TLS is not configured for the RDS or ElastiCache connections.
+  rest. RDS, ElastiCache and MSK sit in private subnets, and security groups admit
+  database, cache and broker traffic only from the ECS tasks.
 
-Gaps a real rollout would close first: the Next.js console has no task definition here;
-the ECS tasks are given MSK's plaintext bootstrap list although the brokers accept TLS
-only; `user-service` is not given the Redis endpoint its login throttle needs; and the
-ALB does not yet require the `X-Origin-Verify` header CloudFront adds, so it can be
-reached directly.
+Terraform defines the core AWS reference topology and is scanned for misconfiguration
+in CI; it has not been deployed or validated end to end at runtime.
 
 ## Project scope
 
-Northbank runs locally on Docker Compose with synthetic data. It is not connected to
-real payment networks, no hosted instance is published, and it makes no regulatory or
-compliance certification claim.
+Runs locally on Docker Compose with synthetic financial data and simulated wire, ACH
+and SWIFT rails; the AWS topology is a Terraform-defined reference and is not currently
+deployed. No production, regulatory or compliance claim is made.
 
 ## Run locally
 
