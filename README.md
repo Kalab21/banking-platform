@@ -169,8 +169,6 @@ than on every push. See [docs/TESTING.md](docs/TESTING.md).
 |---|---|
 | ![A loan offering the rest of a part-paid instalment, another amount, or payoff at today's figure](docs/screenshots/34-loan-payment.png) | ![A referred application with the applicant, what they stated, the policy's reason code, and Approve or Reject](docs/screenshots/31-staff-review-workbench.png) |
 
-The full set is in [`docs/screenshots/`](docs/screenshots/).
-
 ### The credit journey
 
 ```text
@@ -252,7 +250,6 @@ in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 | [Events](docs/EVENTS.md) | Kafka contracts, delivery, retry, dead-letter topics, idempotency |
 | [Observability](docs/OBSERVABILITY.md) | Metrics, tracing, dashboards |
 | [Development](docs/DEVELOPMENT.md) | Local setup, ports, commands, troubleshooting |
-| [Diagrams](docs/diagrams/generate_diagrams.py) | Generator for the logical and AWS reference diagrams |
 
 ## Copyright & Usage
 
