@@ -2,8 +2,8 @@
 
 How a request is authenticated, how it is authorised, and how the controls are enforced.
 
-This is a portfolio project. It handles no real money and holds no real customer
-data, and it makes no regulatory or certification claims.
+Northbank runs on synthetic data. It handles no real money and holds no real
+customer data, and it makes no regulatory or certification claims.
 
 
 ## Guessing one account's password
