@@ -29,12 +29,18 @@ movement stays correct under retries, concurrency and partial failure.
   Vitest, Playwright), live full-stack suites, CodeQL and Trivy, Docker Compose for the
   whole stack, and Terraform for an AWS reference deployment.
 
-## Architecture
+## End-to-End Architecture
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-logical-dark.svg">
-  <img src="docs/architecture/northbank-logical.svg" width="1000" alt="Northbank logical architecture in five layers. Public: customers and staff in a web browser that holds no bearer token. Application edge: the Next.js backend-for-frontend keeps the JWT in an httpOnly cookie and calls the API gateway server-side over REST; the Spring Cloud Gateway validates the JWT, overwrites the X-User identity headers, rate-limits with Redis and discovers services through Eureka. Private service network: eleven Spring Boot services grouped by domain. Identity: user-service with sign-in, JWT issuing, TOTP, BCrypt, login throttling and KYC. Accounts and money movement: account-service, the only writer of balances, called by transaction-service through OpenFeign with a circuit breaker, plus payment-service and integration-service. Lending and cards: application-service, loan-service and credit-card-service, which call account-service over REST and exchange provisioning events over Kafka. Risk and insight: fraud-detection, statistics-service and notification-service, which consume Kafka events. Data and messaging: Redis for rate limits, login throttling, fraud velocity and the statistics cache; PostgreSQL 16 with one database per service; Apache Kafka with a transactional outbox, idempotent consumers, retry and dead-letter topics, carrying derived state only. Operations: Micrometer, Prometheus, Grafana, Zipkin and X-Request-Id; GitHub Actions, CodeQL, Trivy, Docker Compose and Terraform.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-end-to-end-dark.svg">
+  <img src="docs/architecture/northbank-end-to-end.svg" width="1000" alt="Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and talks only to the Next.js backend-for-frontend, which keeps a server-side session and calls the API gateway over REST. In the AWS model, public API traffic arrives through Route 53, CloudFront with AWS WAF and an ACM certificate, and an Application Load Balancer. The Spring Cloud Gateway validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. Eleven Spring Boot services are grouped by domain: identity; accounts and money movement, where account-service is the only writer of balances; lending and cards; and risk and insight. REST and OpenFeign carry immediate authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns its PostgreSQL 16 database (RDS in the AWS model); Redis holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling.">
 </picture>
+
+The diagram combines Northbank's application topology with its AWS infrastructure model;
+service-level calls, event contracts and infrastructure details are documented separately.
+In the Terraform model the gateway, Eureka and the eleven services run as ECS Fargate
+tasks behind the edge; the Next.js console is its own Node service and is not part of
+that Terraform.
 
 Requests enter through the Next.js backend-for-frontend, which makes every banking API
 call server-side. The API gateway is the only routed entry to the service network: it
@@ -42,7 +48,11 @@ authenticates the caller and forwards an identity it derived itself. Services ow
 data, call each other over REST when they need an answer now, and publish Kafka events
 for everything that can lag.
 
-**Key design decisions**
+The service-level diagram (every OpenFeign call, every topic, ports and databases) and
+data ownership are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**; the Terraform is
+in [`infrastructure/aws/`](infrastructure/aws/).
+
+## Key Design Decisions
 
 - **REST for authoritative operations, Kafka for derived workflows.** A transfer must
   know immediately whether the debit happened, so `transaction-service` calls
@@ -59,9 +69,18 @@ for everything that can lag.
   views rather than API records. *Trade-off:* the console needs a Node runtime rather
   than a static bundle.
 
-The service-level diagram (every OpenFeign call, every topic, ports and databases), data
-ownership and the full set of design decisions are in
-**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+## Product Experience
+
+| Customer dashboard | Staff review workbench |
+|---|---|
+| ![The customer dashboard: total balance, account cards, balance history and recent activity](docs/screenshots/13-dashboard-desktop.png) | ![A referred application with the applicant, what they stated, the policy's reason code, and Approve or Reject](docs/screenshots/31-staff-review-workbench.png) |
+| Balances, accounts and activity read from the account and transaction services. | Staff decide referred applications with the policy's reason code and an append-only history. |
+
+```text
+Explore / Apply → Underwrite → Review → Offer → Accept → Provision → Service
+```
+
+More product workflows: **[docs/PRODUCT-EXPERIENCE.md](docs/PRODUCT-EXPERIENCE.md)**
 
 ## Engineering highlights
 
@@ -84,7 +103,7 @@ ownership and the full set of design decisions are in
 
 ## Security & Trust Boundaries
 
-The dashed zones in the diagram are the trust boundaries: the public browser, the
+The dashed zones in the diagram mark the trust boundaries: the AWS edge, the
 application edge (BFF and gateway), the private service network, and the data layer.
 
 - **Identity is established once, at the gateway.** It validates the JWT and overwrites
@@ -153,64 +172,6 @@ than on every push. See [docs/TESTING.md](docs/TESTING.md).
 | **Observability** | Micrometer, Prometheus, Grafana, Zipkin, `X-Request-Id` correlation |
 | **Testing and delivery** | JUnit 5, Testcontainers, Vitest, Playwright, GitHub Actions, CodeQL, Trivy, Docker Compose, Terraform |
 
-## Product experience
-
-![The customer dashboard: total balance, account cards, balance history, recent activity and credit, loan and security summaries](docs/screenshots/13-dashboard-desktop.png)
-
-| Move money: review before confirming | Explore credit |
-|---|---|
-| ![The review step naming the amount and both accounts by their last four digits, above one confirm button](docs/screenshots/23-move-money-review.png) | ![Four credit products, what each application asks, and what happens after applying](docs/screenshots/26-explore-credit.png) |
-
-| Guided credit application | An application and its history |
-|---|---|
-| ![The last of three steps, repeating every answer with a way to change it](docs/screenshots/27-credit-application.png) | ![An application's own page with its history from stored timestamps, and the offer's terms above Accept and Decline](docs/screenshots/33-application-detail.png) |
-
-| Paying a loan | Staff review of a referred application |
-|---|---|
-| ![A loan offering the rest of a part-paid instalment, another amount, or payoff at today's figure](docs/screenshots/34-loan-payment.png) | ![A referred application with the applicant, what they stated, the policy's reason code, and Approve or Reject](docs/screenshots/31-staff-review-workbench.png) |
-
-### The credit journey
-
-```text
-Explore credit → Apply (3 steps) → Underwrite → Staff review if referred
-      → Offer → Customer accepts or declines → Provision → Service the loan or card
-```
-
-- **Underwriting** is a deterministic, versioned policy: score, debt-to-income,
-  loan-to-value, amount and term, and identity check. Each decision is stored as an
-  immutable record with its reason codes.
-- **An offer's terms are stored once.** Only the applicant can accept or decline, and
-  accepts exactly those terms; staff and admins cannot act on the customer's behalf.
-- **Provisioning happens once.** The card or loan service creates the product from the
-  accepted terms and confirms its real ID.
-- **Servicing is in the console**: receive a loan, pay an instalment or any amount, pay
-  the loan off, and pay a card.
-
-## AWS Reference Deployment
-
-Terraform-defined reference architecture; not currently deployed.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-aws-reference-dark.svg">
-  <img src="docs/architecture/northbank-aws-reference.svg" width="1000" alt="Northbank AWS reference deployment from the Terraform in infrastructure/aws, not currently deployed. Clients resolve the API name through Route 53, which aliases it to CloudFront. CloudFront terminates HTTPS with an ACM certificate (TLS 1.2 minimum), has an AWS WAF web ACL attached (common, SQL injection and known-bad-input managed rules, an /api/auth rate limit and a geo block), and forwards to the origin over HTTPS only. The internet-facing Application Load Balancer in the public subnets has an HTTPS listener and an HTTP listener that redirects to HTTPS, and forwards to the API gateway target group over HTTP. In the private subnets an ECS Fargate cluster with no public IPs runs api-gateway, eureka-server registered in Cloud Map private DNS, and the eleven business services. Tasks reach RDS PostgreSQL 16 (Multi-AZ, storage encrypted) over JDBC, ElastiCache Redis 7 (single node), and Amazon MSK (two brokers, TLS between clients and brokers, KMS key at rest). A NAT gateway provides egress. Regional services: ECR, Secrets Manager for the database password and JWT secret, and CloudWatch Logs, reached through VPC endpoints, plus IAM task roles and the KMS key.">
-</picture>
-
-[`infrastructure/aws/`](infrastructure/aws/) describes how the platform would run on AWS:
-
-- **Edge**: Route 53 → CloudFront with an ACM certificate and AWS WAF → an
-  internet-facing ALB. Viewer and origin connections are HTTPS (TLS 1.2+), and the ALB
-  redirects HTTP to HTTPS before forwarding to the gateway inside the VPC.
-- **Compute**: the gateway, Eureka (via Cloud Map private DNS) and the 11 services as
-  ECS Fargate tasks in private subnets with no public IPs, images from ECR, secrets from
-  Secrets Manager, logs to CloudWatch.
-- **Data**: RDS PostgreSQL 16 (Multi-AZ, encrypted storage), ElastiCache Redis 7, and
-  Amazon MSK with TLS between clients and brokers and a customer-managed KMS key at
-  rest. RDS, ElastiCache and MSK sit in private subnets, and security groups admit
-  database, cache and broker traffic only from the ECS tasks.
-
-Terraform defines the core AWS reference topology and is scanned for misconfiguration
-in CI; it has not been deployed or validated end to end at runtime.
-
 ## Project scope
 
 Runs locally on Docker Compose with synthetic financial data and simulated wire, ACH
@@ -250,6 +211,8 @@ in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 | [Events](docs/EVENTS.md) | Kafka contracts, delivery, retry, dead-letter topics, idempotency |
 | [Observability](docs/OBSERVABILITY.md) | Metrics, tracing, dashboards |
 | [Development](docs/DEVELOPMENT.md) | Local setup, ports, commands, troubleshooting |
+| [Product experience](docs/PRODUCT-EXPERIENCE.md) | Money movement, credit application, offers and servicing, screen by screen |
+| [AWS infrastructure](infrastructure/aws/) | Terraform for the AWS reference model |
 
 ## Copyright & Usage
 
