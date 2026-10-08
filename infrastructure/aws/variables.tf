@@ -38,8 +38,8 @@ variable "origin_subdomain" {
   default     = "origin-api"
 
   validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.origin_subdomain))
-    error_message = "origin_subdomain must be a single DNS label (no dots) so the wildcard certificate covers it."
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.origin_subdomain))
+    error_message = "origin_subdomain must be one lowercase DNS label of 1-63 characters ([a-z0-9-], not starting or ending with a hyphen, no dots) so the *.<domain> certificate covers it."
   }
 }
 

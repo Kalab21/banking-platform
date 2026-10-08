@@ -64,6 +64,11 @@ resource "aws_lb" "main" {
     enabled = true
   }
 
+  # ELB checks it can write to the bucket when logging is enabled, so the
+  # policy granting that must exist first. The bucket reference alone does not
+  # order the ALB after the policy.
+  depends_on = [aws_s3_bucket_policy.alb_logs]
+
   tags = { Name = "banking-alb-${var.environment}" }
 }
 
@@ -83,17 +88,31 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "alb_logs" {
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
+}
+
+# ALB access-log delivery writes as the Elastic Load Balancing log-delivery
+# service principal, only under this ALB's prefix and account.
 resource "aws_s3_bucket_policy" "alb_logs" {
   bucket = aws_s3_bucket.alb_logs.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "delivery.logs.amazonaws.com" }
+      Principal = { Service = "logdelivery.elasticloadbalancing.amazonaws.com" }
       Action    = "s3:PutObject"
       Resource  = "${aws_s3_bucket.alb_logs.arn}/banking-alb/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
     }]
   })
+
+  # Applying the policy while the public-access block is being set can conflict.
+  depends_on = [aws_s3_bucket_public_access_block.alb_logs]
 }
 
 # ── Target Group — API Gateway ────────────────────────────────────────────────
