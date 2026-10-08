@@ -1,7 +1,17 @@
 variable "aws_region" {
-  description = "Primary AWS region"
+  description = "Primary AWS region. This model is pinned to us-east-1."
   type        = string
   default     = "us-east-1"
+
+  # One ACM certificate serves CloudFront (which requires us-east-1) and the
+  # ALB listener (which requires the ALB's region), and the availability zone
+  # defaults are us-east-1 zones. Supporting another region would need a
+  # regional ALB certificate and different zones; until then, refuse it rather
+  # than fail at apply time.
+  validation {
+    condition     = var.aws_region == "us-east-1"
+    error_message = "This AWS model is pinned to us-east-1: the ACM certificate is shared by CloudFront and the ALB."
+  }
 }
 
 variable "environment" {
@@ -20,6 +30,17 @@ variable "api_subdomain" {
   description = "Subdomain for the public API endpoint"
   type        = string
   default     = "api"
+}
+
+variable "origin_subdomain" {
+  description = "Subdomain CloudFront uses to reach the ALB origin; a single label, so the *.<domain> certificate covers it"
+  type        = string
+  default     = "origin-api"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+$", var.origin_subdomain))
+    error_message = "origin_subdomain must be a single DNS label (no dots) so the wildcard certificate covers it."
+  }
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────

@@ -1,4 +1,10 @@
-# ── ACM Certificate (must be in us-east-1 for CloudFront) ────────────────────
+# ── ACM Certificate ──────────────────────────────────────────────────────────
+#
+# One certificate serves both TLS endpoints: CloudFront's viewer certificate
+# (which must be in us-east-1) and the ALB's HTTPS listener (which must be in
+# the ALB's region). That only works because this model is pinned to us-east-1;
+# see the validation on var.aws_region. Moving the ALB to another region would
+# need a second, regional certificate for the listener.
 
 resource "aws_acm_certificate" "main" {
   provider          = aws.us_east_1
@@ -118,23 +124,12 @@ resource "aws_lb_target_group" "api_gateway" {
 
 # ── Listeners ─────────────────────────────────────────────────────────────────
 
-# HTTP → HTTPS redirect
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
-}
-
-# HTTPS — forward to API Gateway target group
+# HTTPS only. There is no HTTP listener: CloudFront redirects viewers to HTTPS
+# and reaches this origin over HTTPS, and the security group admits only
+# CloudFront's origin-facing servers on 443.
+#
+# The certificate covers origin-api.<domain> through its *.<domain> SAN, which
+# is the hostname CloudFront connects to (route53.tf).
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.main.arn
   port              = 443
@@ -142,7 +137,32 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
 
+  # Anything that does not carry CloudFront's origin secret is refused.
   default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Forbidden"
+      status_code  = "403"
+    }
+  }
+}
+
+# Forward only requests that came through this CloudFront distribution: it adds
+# X-Origin-Verify with a generated secret (cloudfront.tf). The value lives in
+# Terraform state, never in source or outputs.
+resource "aws_lb_listener_rule" "from_cloudfront" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 1
+
+  condition {
+    http_header {
+      http_header_name = "X-Origin-Verify"
+      values           = [random_password.cf_origin_secret.result]
+    }
+  }
+
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api_gateway.arn
   }

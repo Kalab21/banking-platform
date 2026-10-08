@@ -59,9 +59,12 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 
 locals {
   # RDS endpoint without port suffix
-  rds_host    = aws_db_instance.main.address
-  redis_host  = aws_elasticache_cluster.main.cache_nodes[0].address
-  msk_brokers = aws_msk_cluster.main.bootstrap_brokers
+  rds_host   = aws_db_instance.main.address
+  redis_host = aws_elasticache_cluster.main.cache_nodes[0].address
+  # The brokers accept TLS only (client_broker = "TLS" in msk.tf), so clients
+  # must use the TLS bootstrap list and speak SSL. The plaintext list is empty
+  # for a TLS-only cluster.
+  msk_brokers = aws_msk_cluster.main.bootstrap_brokers_tls
   eureka_url  = "http://eureka.banking.local:8761/eureka/"
 
   # Common environment variables injected into every service
@@ -93,11 +96,14 @@ locals {
       extra_env = []
     }
     user-service = {
-      port      = 8081
-      db        = true
-      db_name   = "user_db"
-      kafka     = false
-      redis     = false
+      port    = 8081
+      db      = true
+      db_name = "user_db"
+      kafka   = false
+      # The per-account sign-in throttle (RedisLoginAttemptService) needs Redis
+      # and fails closed without it. Inside a task, the application.yml fallback
+      # of localhost:6379 is the task itself, not ElastiCache.
+      redis     = true
       cpu       = 512
       memory    = 1024
       cloud_map = false
@@ -249,6 +255,10 @@ resource "aws_ecs_task_definition" "services" {
         ] : [],
         each.value.kafka ? [
           { name = "SPRING_KAFKA_BOOTSTRAP_SERVERS", value = local.msk_brokers },
+          # spring.kafka.security.protocol (Spring Boot 3.3). Boot applies it to
+          # the producer and consumer factories, and common-kafka's dead-letter
+          # and outbox relay producers copy those factories' configuration.
+          { name = "SPRING_KAFKA_SECURITY_PROTOCOL", value = "SSL" },
         ] : [],
         each.value.redis ? [
           { name = "SPRING_DATA_REDIS_HOST", value = local.redis_host },

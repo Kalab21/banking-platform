@@ -30,14 +30,26 @@ resource "aws_route53_record" "api_aaaa" {
   }
 }
 
-# Health check on the ALB — Route 53 can failover to a DR region if needed
-resource "aws_route53_health_check" "api" {
-  fqdn              = aws_lb.main.dns_name
-  port              = 443
-  type              = "HTTPS"
-  resource_path     = "/actuator/health"
-  failure_threshold = 3
-  request_interval  = 30
-
-  tags = { Name = "banking-api-health-check" }
+locals {
+  # One label under the domain, so the certificate's *.<domain> SAN covers it.
+  origin_hostname = "${var.origin_subdomain}.${var.domain_name}"
 }
+
+# origin-api.yourbank.com -> ALB. CloudFront's origin, not a public entry point:
+# the ALB admits only CloudFront's origin-facing servers and requires the
+# X-Origin-Verify header. The ALB is IPv4-only, so there is no AAAA record.
+resource "aws_route53_record" "origin" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = local.origin_hostname
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = false
+  }
+}
+
+# There is no Route 53 health check. No record uses failover routing and there
+# is no second region to fail over to, and a checker hitting the ALB directly
+# would now be refused by its security group and listener rule.
