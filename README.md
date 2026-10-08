@@ -33,14 +33,16 @@ movement stays correct under retries, concurrency and partial failure.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/northbank-end-to-end-dark.svg">
-  <img src="docs/architecture/northbank-end-to-end.svg" width="1000" alt="Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and talks only to the Next.js backend-for-frontend, an application BFF outside the current AWS Terraform. The BFF makes server-side API requests through the AWS API edge: Route 53, CloudFront with AWS WAF and an ACM certificate, and an Application Load Balancer, which forwards to the Spring Cloud Gateway. The gateway validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. Eleven Spring Boot services are grouped by domain: identity (user-service); accounts and money movement (account-service, the only writer of balances, transaction-service, payment-service, integration-service); lending and cards (application-service, loan-service, credit-card-service); and risk and insight (fraud-detection, statistics-service, notification-service). REST and OpenFeign carry immediate authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns a logical PostgreSQL 16 database; in the AWS model the 11 logical databases share one RDS PostgreSQL instance. Redis holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate in private subnets, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling.">
+  <img src="docs/architecture/northbank-end-to-end.svg" width="1000" alt="Northbank end-to-end architecture. Customers and staff use a web browser that holds no bearer token and talks only to the Next.js backend-for-frontend, an application BFF outside the current AWS Terraform. The BFF resolves the API hostname through Route 53 (DNS) and sends server-side HTTPS requests to CloudFront, with AWS WAF and an ACM certificate, which forwards to an Application Load Balancer that accepts only CloudFront's origin traffic, which forwards to the Spring Cloud Gateway. The gateway validates the JWT, forwards trusted identity headers, rate-limits and discovers services through Eureka. Eleven Spring Boot services are grouped by domain: identity (user-service); accounts and money movement (account-service, the only writer of balances, transaction-service, payment-service, integration-service); lending and cards (application-service, loan-service, credit-card-service); and risk and insight (fraud-detection, statistics-service, notification-service). REST and OpenFeign carry immediate authoritative operations; Kafka events carry derived, asynchronous workflows. Each service owns a logical PostgreSQL 16 database; in the AWS model the 11 logical databases share one RDS PostgreSQL deployment with Multi-AZ enabled by default. Redis holds rate limits, counters and cache (ElastiCache); Kafka uses a transactional outbox, idempotent consumers, retry and dead-letter topics (Amazon MSK). A runtime and operations rail shows ECS Fargate in private subnets, ECR, Secrets Manager, CloudWatch Logs, Prometheus, Grafana and Zipkin, and delivery tooling.">
 </picture>
 
 The diagram combines Northbank's application topology with its AWS infrastructure model;
 service-level calls, event contracts and infrastructure details are documented separately.
+The BFF resolves the API hostname through Route 53 and sends server-side API requests
+through CloudFront/WAF and the ALB, which accepts only CloudFront's origin traffic.
 Terraform models the AWS infrastructure across CloudFront/WAF, ALB, ECS Fargate, RDS
-PostgreSQL (11 service-owned logical databases on one shared instance), ElastiCache, MSK,
-ECR, Secrets Manager and CloudWatch.
+PostgreSQL, ElastiCache, MSK, ECR, Secrets Manager and CloudWatch; the 11 service-owned
+logical databases share one RDS PostgreSQL deployment, with Multi-AZ enabled by default.
 
 Requests enter through the Next.js backend-for-frontend, which makes every banking API
 call server-side. The API gateway is the only routed entry to the service network: it
@@ -175,8 +177,9 @@ than on every push. See [docs/TESTING.md](docs/TESTING.md).
 ## Project scope
 
 Runs on synthetic financial data with simulated wire, ACH and SWIFT rails. Local
-execution uses Docker Compose; the AWS infrastructure is modeled in Terraform and scanned
-for misconfiguration in CI. No production, regulatory or compliance claim is made.
+execution uses Docker Compose; the AWS infrastructure is modeled in Terraform, and CI
+formats, validates and scans it and checks its architecture invariants against mocked
+providers. No production, regulatory or compliance claim is made.
 
 ## Run locally
 
