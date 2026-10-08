@@ -27,9 +27,14 @@ variable "domain_name" {
 }
 
 variable "api_subdomain" {
-  description = "Subdomain for the public API endpoint"
+  description = "Subdomain for the public API endpoint; a single label, like origin_subdomain"
   type        = string
   default     = "api"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.api_subdomain))
+    error_message = "api_subdomain must be one lowercase DNS label of 1-63 characters ([a-z0-9-], not starting or ending with a hyphen, no dots)."
+  }
 }
 
 variable "origin_subdomain" {

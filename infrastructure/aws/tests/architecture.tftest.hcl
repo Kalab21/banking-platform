@@ -319,11 +319,56 @@ run "origin_subdomain_rejects_long_label" {
   expect_failures = [var.origin_subdomain]
 }
 
+run "api_subdomain_rejects_leading_hyphen" {
+  command = plan
+  variables { api_subdomain = "-api" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_trailing_hyphen" {
+  command = plan
+  variables { api_subdomain = "api-" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_dots" {
+  command = plan
+  variables { api_subdomain = "api.prod" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_empty_label" {
+  command = plan
+  variables { api_subdomain = "api..prod" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_uppercase" {
+  command = plan
+  variables { api_subdomain = "API" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_long_label" {
+  command = plan
+  variables { api_subdomain = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  expect_failures = [var.api_subdomain]
+}
+
 run "origin_hostname_must_differ_from_api_hostname" {
   command = plan
   variables {
     api_subdomain    = "api"
     origin_subdomain = "api"
+  }
+  expect_failures = [aws_route53_record.origin]
+}
+
+run "origin_hostname_must_differ_from_custom_api_hostname" {
+  command = plan
+  variables {
+    api_subdomain    = "origin-api"
+    origin_subdomain = "origin-api"
   }
   expect_failures = [aws_route53_record.origin]
 }

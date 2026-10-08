@@ -83,12 +83,15 @@ output "next_steps" {
     1. Build and push the 13 service images to ECR:
        bash infrastructure/aws/scripts/push-images.sh ${var.aws_region} ${var.ecr_registry} ${var.image_tag}
 
-    2. Create the 11 service-owned logical databases on the RDS deployment
-       (from a host with network access to the private RDS endpoint):
+    2. Create the 11 service-owned logical databases on the RDS deployment.
+       Run this from an explicitly authorized execution context with network
+       reachability to the private RDS endpoint. In the current model, RDS
+       ingress is limited to the ECS task security group; a separate
+       administrative runner is not modeled.
        PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id ${aws_secretsmanager_secret.db_password.name} --query SecretString --output text)          psql -h ${aws_db_instance.main.address} -U ${var.db_username} -d postgres          -f infrastructure/aws/scripts/init-databases.sql
 
-    3. Start a new deployment of every service (Eureka first, then the gateway
-       and the business services) and wait for steady state:
+    3. Force a new deployment of the ECS services after the images and
+       databases exist, then wait for the services to reach steady state:
        for s in $(aws ecs list-services --cluster ${aws_ecs_cluster.main.name} --query 'serviceArns[]' --output text); do
          aws ecs update-service --cluster ${aws_ecs_cluster.main.name} --service "$s" --force-new-deployment > /dev/null
        done

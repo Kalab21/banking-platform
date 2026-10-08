@@ -47,7 +47,7 @@ resource "aws_route53_record" "origin" {
   # same name would collide and make CloudFront's origin resolve to itself.
   lifecycle {
     precondition {
-      condition     = var.origin_subdomain != var.api_subdomain
+      condition     = lower(var.origin_subdomain) != lower(var.api_subdomain)
       error_message = "origin_subdomain must differ from api_subdomain: the API hostname aliases CloudFront and the origin hostname aliases the ALB."
     }
   }
