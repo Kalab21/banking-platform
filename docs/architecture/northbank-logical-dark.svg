@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1210" width="1400" height="1210" role="img" aria-label="Northbank logical architecture. Customers and staff use a browser that talks only to the Next.js backend-for-frontend, which keeps the JWT in an httpOnly cookie and calls the API gateway server-side. The Spring Cloud Gateway validates the JWT, overwrites the X-User identity headers, rate-limits with Redis and discovers services through Eureka. Eleven Spring Boot services sit on a private network, grouped by domain: identity (user), accounts and money movement (account, transaction, payment, integration), lending and cards (application, loan, credit-card), and risk and insight (fraud-detection, statistics, notification). Authoritative operations are synchronous REST calls into account-service; derived workflows consume Kafka events published through a transactional outbox. Each service owns its own PostgreSQL database; Redis holds rate limits, login throttling, fraud velocity counters and the statistics cache. Prometheus, Grafana, Zipkin and CI with CodeQL and Trivy run across the platform.">
+<style>text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}</style>
+<rect width="1400" height="1210" fill="#0d1117"/>
+<rect x="30" y="16" width="1340" height="128" rx="16" fill="none" stroke="#6b7487" stroke-width="1.6" stroke-dasharray="7 6"/>
+<text x="46" y="40" font-size="13" font-weight="700" fill="#6b7487" text-anchor="start">PUBLIC</text>
+<rect x="30" y="160" width="1340" height="168" rx="16" fill="none" stroke="#6b7487" stroke-width="1.6" stroke-dasharray="7 6"/>
+<text x="46" y="184" font-size="13" font-weight="700" fill="#6b7487" text-anchor="start">APPLICATION EDGE</text>
+<rect x="30" y="346" width="1340" height="446" rx="16" fill="none" stroke="#6b7487" stroke-width="1.6" stroke-dasharray="7 6"/>
+<text x="46" y="370" font-size="13" font-weight="700" fill="#6b7487" text-anchor="start">PRIVATE SERVICE NETWORK</text>
+<rect x="30" y="812" width="1340" height="196" rx="16" fill="none" stroke="#6b7487" stroke-width="1.6" stroke-dasharray="7 6"/>
+<text x="46" y="836" font-size="13" font-weight="700" fill="#6b7487" text-anchor="start">DATA AND MESSAGING</text>
+<rect x="60" y="48" width="380" height="80" rx="12" fill="#11161d" stroke="#8b93e8" stroke-width="2"/>
+<text x="250.0" y="83.3" font-size="18" font-weight="700" fill="#e6edf3" text-anchor="middle">Customers and staff</text>
+<text x="250.0" y="105.3" font-size="15" font-weight="400" fill="#9aa4b2" text-anchor="middle">web browser · no bearer token</text>
+<rect x="60" y="196" width="380" height="112" rx="12" fill="#11161d" stroke="#8b93e8" stroke-width="2"/>
+<text x="250.0" y="236.3" font-size="18" font-weight="700" fill="#8b93e8" text-anchor="middle">Next.js BFF</text>
+<text x="250.0" y="258.3" font-size="15" font-weight="400" fill="#9aa4b2" text-anchor="middle">server components + server actions</text>
+<text x="250.0" y="280.3" font-size="15" font-weight="400" fill="#9aa4b2" text-anchor="middle">JWT held in an httpOnly cookie</text>
+<rect x="540" y="196" width="440" height="112" rx="12" fill="#11161d" stroke="#8b93e8" stroke-width="2"/>
+<text x="760.0" y="236.3" font-size="18" font-weight="700" fill="#8b93e8" text-anchor="middle">API Gateway</text>
+<text x="760.0" y="258.3" font-size="15" font-weight="400" fill="#9aa4b2" text-anchor="middle">Spring Cloud Gateway · validates JWT</text>
+<text x="760.0" y="280.3" font-size="15" font-weight="400" fill="#9aa4b2" text-anchor="middle">overwrites X-User-* · Redis rate limit</text>
+<rect x="1080" y="210" width="260" height="84" rx="12" fill="#11161d" stroke="#8b93e8" stroke-width="2"/>
+<text x="1210.0" y="247.3" font-size="18" font-weight="700" fill="#e6edf3" text-anchor="middle">Eureka</text>
+<text x="1210.0" y="269.3" font-size="15" font-weight="400" fill="#9aa4b2" text-anchor="middle">service registry</text>
+<path d="M250.0,196.0 L257.0,183.0 L243.0,183.0 z" fill="#8b93e8"/>
+<path d="M250.0,128.0 L250.0,183.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<text x="264" y="168" font-size="14" font-weight="600" fill="#8b93e8" text-anchor="start">session cookie</text>
+<path d="M540.0,252.0 L527.0,245.0 L527.0,259.0 z" fill="#8b93e8"/>
+<path d="M440.0,252.0 L527.0,252.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<text x="490" y="240" font-size="14" font-weight="600" fill="#8b93e8" text-anchor="middle">REST</text>
+<text x="490" y="274" font-size="13" font-weight="400" fill="#7d8796" text-anchor="middle">server-side</text>
+<path d="M1080.0,252.0 L1067.0,245.0 L1067.0,259.0 z" fill="#7d8796"/>
+<path d="M980.0,252.0 L1067.0,252.0" fill="none" stroke="#7d8796" stroke-width="2.5" stroke-dasharray="8 6"/>
+<text x="1030" y="240" font-size="13" font-weight="600" fill="#7d8796" text-anchor="middle">discovery</text>
+<path d="M760.0,308.0 L760.0,392.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<path d="M170.0,392.0 L1205.0,392.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<path d="M170.0,418.0 L177.0,405.0 L163.0,405.0 z" fill="#8b93e8"/>
+<path d="M170.0,392.0 L170.0,405.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<path d="M485.0,418.0 L492.0,405.0 L478.0,405.0 z" fill="#8b93e8"/>
+<path d="M485.0,392.0 L485.0,405.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<path d="M880.0,418.0 L887.0,405.0 L873.0,405.0 z" fill="#8b93e8"/>
+<path d="M880.0,392.0 L880.0,405.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<path d="M1205.0,418.0 L1212.0,405.0 L1198.0,405.0 z" fill="#8b93e8"/>
+<path d="M1205.0,392.0 L1205.0,405.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<text x="774" y="340" font-size="14" font-weight="600" fill="#8b93e8" text-anchor="start">routes /api/** · caller identity in headers</text>
+<rect x="50" y="418" width="240" height="356" rx="14" fill="#11161d" stroke="#4a5280" stroke-width="2"/>
+<text x="170.0" y="445" font-size="16" font-weight="700" fill="#8b93e8" text-anchor="middle">Identity</text>
+<rect x="320" y="418" width="330" height="356" rx="14" fill="#11161d" stroke="#4a5280" stroke-width="2"/>
+<text x="485.0" y="445" font-size="16" font-weight="700" fill="#8b93e8" text-anchor="middle">Accounts and money movement</text>
+<rect x="730" y="418" width="300" height="356" rx="14" fill="#11161d" stroke="#4a5280" stroke-width="2"/>
+<text x="880.0" y="445" font-size="16" font-weight="700" fill="#8b93e8" text-anchor="middle">Lending and cards</text>
+<rect x="1060" y="418" width="290" height="356" rx="14" fill="#11161d" stroke="#4a5280" stroke-width="2"/>
+<text x="1205.0" y="445" font-size="16" font-weight="700" fill="#8b93e8" text-anchor="middle">Risk and insight</text>
+<rect x="62" y="462" width="216" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="170.0" y="487.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">user-service</text>
+<text x="170.0" y="508.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">sign-in · issues JWT</text>
+<text x="170.0" y="552" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">TOTP 2FA · BCrypt</text>
+<text x="170.0" y="574" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">login throttle · KYC</text>
+<rect x="332" y="462" width="306" height="60" rx="12" fill="#11161d" stroke="#8b93e8" stroke-width="2"/>
+<text x="485.0" y="487.1" font-size="16" font-weight="700" fill="#8b93e8" text-anchor="middle">account-service</text>
+<text x="485.0" y="508.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">only writer of balances · row locks</text>
+<rect x="332" y="568" width="306" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="485.0" y="593.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">transaction-service</text>
+<text x="485.0" y="614.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">deposits · transfers · idempotency</text>
+<rect x="332" y="634" width="306" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="485.0" y="659.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">payment-service</text>
+<text x="485.0" y="680.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">payees · scheduled payments</text>
+<rect x="332" y="700" width="306" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="485.0" y="725.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">integration-service</text>
+<text x="485.0" y="746.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">simulated wire · ACH · SWIFT</text>
+<path d="M380.0,522.0 L373.0,535.0 L387.0,535.0 z" fill="#8b93e8"/>
+<path d="M380.0,568.0 L380.0,535.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<text x="394" y="550" font-size="13.5" font-weight="600" fill="#8b93e8" text-anchor="start">OpenFeign · circuit breaker</text>
+<rect x="742" y="462" width="276" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="880.0" y="487.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">application-service</text>
+<text x="880.0" y="508.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">underwriting · offers</text>
+<rect x="742" y="568" width="276" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="880.0" y="593.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">loan-service</text>
+<text x="880.0" y="614.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">amortization · repayment</text>
+<rect x="742" y="634" width="276" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="880.0" y="659.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">credit-card-service</text>
+<text x="880.0" y="680.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">cards · statements</text>
+<path d="M650.0,492.0 L663.0,499.0 L663.0,485.0 z" fill="#8b93e8"/>
+<path d="M742.0,492.0 L663.0,492.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<text x="690" y="482" font-size="13.5" font-weight="600" fill="#8b93e8" text-anchor="middle">REST</text>
+<text x="880.0" y="546" font-size="13" font-weight="400" fill="#7d8796" text-anchor="middle" font-style="italic">offer accepted → provisioning</text>
+<rect x="1072" y="462" width="266" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="1205.0" y="487.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">fraud-detection</text>
+<text x="1205.0" y="508.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">rules · velocity · freezes</text>
+<rect x="1072" y="568" width="266" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="1205.0" y="593.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">statistics-service</text>
+<text x="1205.0" y="614.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">read models · cached</text>
+<rect x="1072" y="634" width="266" height="60" rx="12" fill="#161b22" stroke="#8b93e8" stroke-width="2"/>
+<text x="1205.0" y="659.1" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">notification-service</text>
+<text x="1205.0" y="680.1" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">customer alerts</text>
+<rect x="60" y="852" width="230" height="136" rx="12" fill="#0f2430" stroke="#4fb3cf" stroke-width="2"/>
+<text x="175.0" y="894.45" font-size="17" font-weight="700" fill="#4fb3cf" text-anchor="middle">Redis 7</text>
+<text x="175.0" y="915.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">rate limit · throttle</text>
+<text x="175.0" y="936.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">fraud velocity</text>
+<text x="175.0" y="957.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">statistics cache</text>
+<rect x="320" y="852" width="330" height="136" rx="12" fill="#0f2430" stroke="#4fb3cf" stroke-width="2"/>
+<text x="485.0" y="894.45" font-size="17" font-weight="700" fill="#4fb3cf" text-anchor="middle">PostgreSQL 16</text>
+<text x="485.0" y="915.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">one database per service</text>
+<text x="485.0" y="936.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">Flyway migrations</text>
+<text x="485.0" y="957.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">SELECT … FOR UPDATE</text>
+<rect x="730" y="852" width="620" height="136" rx="12" fill="#2b2410" stroke="#e3b341" stroke-width="2"/>
+<text x="1040.0" y="894.45" font-size="17" font-weight="700" fill="#e3b341" text-anchor="middle">Apache Kafka</text>
+<text x="1040.0" y="915.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">transactional outbox → topic → idempotent consumer</text>
+<text x="1040.0" y="936.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">bounded retry → dead-letter topic</text>
+<text x="1040.0" y="957.45" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="middle">derived state only: never the money path</text>
+<path d="M255.0,852.0 L262.0,839.0 L248.0,839.0 z" fill="#4fb3cf"/>
+<path d="M255.0,774.0 L255.0,839.0" fill="none" stroke="#4fb3cf" stroke-width="2.5"/>
+<path d="M485.0,852.0 L492.0,839.0 L478.0,839.0 z" fill="#4fb3cf"/>
+<path d="M485.0,774.0 L485.0,839.0" fill="none" stroke="#4fb3cf" stroke-width="2.5"/>
+<text x="473" y="826" font-size="14" font-weight="600" fill="#4fb3cf" text-anchor="end">JDBC · own DB each</text>
+<path d="M790.0,852.0 L797.0,839.0 L783.0,839.0 z" fill="#e3b341"/>
+<path d="M620.0,774.0 L620.0,800.0 L790.0,800.0 L790.0,839.0" fill="none" stroke="#e3b341" stroke-width="2.5" stroke-dasharray="8 6"/>
+<path d="M880.0,852.0 L887.0,839.0 L873.0,839.0 z" fill="#e3b341"/>
+<path d="M880.0,774.0 L873.0,787.0 L887.0,787.0 z" fill="#e3b341"/>
+<path d="M880.0,787.0 L880.0,839.0" fill="none" stroke="#e3b341" stroke-width="2.5" stroke-dasharray="8 6"/>
+<text x="894" y="832" font-size="13.5" font-weight="600" fill="#e3b341" text-anchor="start">provisioning</text>
+<path d="M1205.0,774.0 L1198.0,787.0 L1212.0,787.0 z" fill="#e3b341"/>
+<path d="M1205.0,852.0 L1205.0,787.0" fill="none" stroke="#e3b341" stroke-width="2.5" stroke-dasharray="8 6"/>
+<text x="1191" y="832" font-size="14" font-weight="600" fill="#e3b341" text-anchor="end">Kafka events (derived)</text>
+<text x="48" y="1034" font-size="13" font-weight="700" fill="#6b7487" text-anchor="start">OPERATIONS · CROSS-CUTTING</text>
+<rect x="48" y="1048" width="640" height="82" rx="12" fill="#11161d" stroke="#4a5280" stroke-width="2"/>
+<text x="368.0" y="1083.6" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">Observability</text>
+<text x="368.0" y="1105.6" font-size="14.5" font-weight="400" fill="#9aa4b2" text-anchor="middle">Micrometer → Prometheus → Grafana · Zipkin · X-Request-Id</text>
+<rect x="712" y="1048" width="640" height="82" rx="12" fill="#11161d" stroke="#4a5280" stroke-width="2"/>
+<text x="1032.0" y="1083.6" font-size="16" font-weight="700" fill="#e6edf3" text-anchor="middle">Delivery and supply chain</text>
+<text x="1032.0" y="1105.6" font-size="14.5" font-weight="400" fill="#9aa4b2" text-anchor="middle">GitHub Actions · CodeQL · Trivy · Docker Compose · Terraform</text>
+<path d="M60.0,1178.0 L110.0,1178.0" fill="none" stroke="#8b93e8" stroke-width="2.5"/>
+<text x="120" y="1183" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="start">REST · authoritative, synchronous</text>
+<path d="M440.0,1178.0 L490.0,1178.0" fill="none" stroke="#e3b341" stroke-width="2.5" stroke-dasharray="8 6"/>
+<text x="500" y="1183" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="start">Kafka event · derived, asynchronous</text>
+<path d="M830.0,1178.0 L880.0,1178.0" fill="none" stroke="#4fb3cf" stroke-width="2.5"/>
+<text x="890" y="1183" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="start">data access</text>
+<rect x="1040" y="1169" width="40" height="18" rx="5" fill="none" stroke="#6b7487" stroke-width="1.6" stroke-dasharray="7 6"/>
+<text x="1090" y="1183" font-size="14" font-weight="400" fill="#9aa4b2" text-anchor="start">trust boundary</text>
+</svg>
