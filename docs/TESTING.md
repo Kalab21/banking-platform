@@ -1,10 +1,15 @@
 # Testing
 
-1482 automated tests run in CI: 1028 backend (870 unit and web-slice, 158
+1482 application tests run in CI: 1028 backend (870 unit and web-slice, 158
 integration against real PostgreSQL, Redis and an embedded Kafka broker), 385
 frontend unit/component and 69 offline end-to-end. A further 46 live-stack
 Playwright scenarios and a 200-assertion PowerShell full-stack suite run on
 demand and are not counted in the CI total.
+
+CI also runs the Terraform architecture-invariant tests in
+[`infrastructure/aws/tests/`](../infrastructure/aws/tests/) (`terraform test`
+against mocked AWS providers). They check the infrastructure model rather than
+the application and are not part of the 1482.
 
 Counts are per test case as the runners report them — JUnit `tests` in the
 surefire and failsafe XML, Vitest test cases, Playwright tests. They are not

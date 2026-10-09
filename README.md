@@ -25,9 +25,10 @@ movement stays correct under retries, concurrency and partial failure.
 - **A defended edge**: the JWT is validated once at the gateway, identity headers are
   overwritten, a BFF keeps the bearer token out of the browser, and every service
   checks ownership against stored records.
-- **Verification and delivery**: 1,482 automated tests in CI (JUnit, Testcontainers,
-  Vitest, Playwright), live full-stack suites, CodeQL and Trivy, Docker Compose for the
-  whole stack, and Terraform-backed AWS infrastructure.
+- **Verification and delivery**: 1,482 application tests in CI (JUnit, Testcontainers,
+  Vitest, Playwright), plus Terraform architecture-invariant tests, live full-stack
+  suites, CodeQL and Trivy, Docker Compose for the whole stack, and Terraform-backed AWS
+  infrastructure.
 
 ## End-to-End Architecture
 
@@ -156,12 +157,14 @@ Details: [docs/EVENTS.md](docs/EVENTS.md) and [docs/OBSERVABILITY.md](docs/OBSER
 | Backend integration (Testcontainers, PostgreSQL, Redis, embedded Kafka) | CI | 158 |
 | Frontend unit and component | CI | 385 |
 | Playwright against a production build, no backend | CI | 69 |
-| **Total in CI** | | **1,482** |
+| **Application tests in CI** | | **1,482** |
 | Playwright against the full running stack | on demand | 46 |
 | PowerShell full-stack suite (assertions) | on demand | 200 |
 
 The live suites need all 13 backend processes running, so they are run on demand rather
-than on every push. See [docs/TESTING.md](docs/TESTING.md).
+than on every push. CI also runs Terraform architecture-invariant tests against mocked
+AWS providers; they check the infrastructure model, not the application, and are not
+counted above. See [docs/TESTING.md](docs/TESTING.md).
 
 ## Technology
 

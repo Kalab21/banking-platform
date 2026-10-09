@@ -1,6 +1,6 @@
-# Banking Platform — Frontend
+# Northbank — Frontend
 
-Next.js console for the `banking-platform` microservices backend. Part of the
+Next.js console and backend-for-frontend for Northbank's microservices backend. Part of the
 [banking-platform](https://github.com/Kalab21/banking-platform) repository; see the root
 README for the full system.
 
