@@ -43,6 +43,15 @@ resource "aws_route53_record" "origin" {
   name    = local.origin_hostname
   type    = "A"
 
+  # The public hostname aliases CloudFront and this one aliases the ALB; the
+  # same name would collide and make CloudFront's origin resolve to itself.
+  lifecycle {
+    precondition {
+      condition     = lower(var.origin_subdomain) != lower(var.api_subdomain)
+      error_message = "origin_subdomain must differ from api_subdomain: the API hostname aliases CloudFront and the origin hostname aliases the ALB."
+    }
+  }
+
   alias {
     name                   = aws_lb.main.dns_name
     zone_id                = aws_lb.main.zone_id
