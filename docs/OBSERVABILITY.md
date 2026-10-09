@@ -1,6 +1,6 @@
 # Observability
 
-Metrics, tracing and request correlation for the Banking Platform. The telemetry
+Metrics, tracing and request correlation for Northbank. The telemetry
 stack runs from its own Compose file; the application behaves the same whether or
 not it is running.
 
@@ -51,7 +51,8 @@ excluded.
 
 ## Request correlation
 
-Every request carries an `X-Request-Id` from the edge through to the database:
+Every synchronous request carries an `X-Request-Id` from the gateway across
+service and Feign boundaries and back on the response:
 
 ```
 browser → BFF → gateway (mints or reuses) → service → Feign → downstream service
