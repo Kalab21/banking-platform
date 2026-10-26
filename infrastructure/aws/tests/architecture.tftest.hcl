@@ -247,4 +247,128 @@ run "architecture_invariants" {
     condition     = one(aws_route53_record.api.alias).name == aws_cloudfront_distribution.main.domain_name
     error_message = "The public API hostname must alias CloudFront."
   }
+
+  # ── ALB access logs: the right delivery principal, bucket and prefix ───────
+
+  assert {
+    condition = (
+      one(aws_lb.main.access_logs).enabled == true &&
+      one(aws_lb.main.access_logs).bucket == aws_s3_bucket.alb_logs.id &&
+      one(aws_lb.main.access_logs).prefix == "banking-alb"
+    )
+    error_message = "ALB access logging must stay enabled, into the ALB log bucket, under the banking-alb prefix."
+  }
+
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_s3_bucket_policy.alb_logs.policy).Statement :
+      st.Effect == "Allow" && st.Action == "s3:PutObject" &&
+      st.Principal == { Service = "logdelivery.elasticloadbalancing.amazonaws.com" } &&
+      st.Resource == "${aws_s3_bucket.alb_logs.arn}/banking-alb/AWSLogs/123456789012/*"
+    ]) && aws_s3_bucket_policy.alb_logs.bucket == aws_s3_bucket.alb_logs.id
+    error_message = "Only the ELB log-delivery service may write, and only under banking-alb/AWSLogs/<account-id>/."
+  }
+
+  assert {
+    condition = (
+      aws_s3_bucket_public_access_block.alb_logs.bucket == aws_s3_bucket.alb_logs.id &&
+      aws_s3_bucket_public_access_block.alb_logs.block_public_acls &&
+      aws_s3_bucket_public_access_block.alb_logs.ignore_public_acls &&
+      aws_s3_bucket_public_access_block.alb_logs.block_public_policy &&
+      aws_s3_bucket_public_access_block.alb_logs.restrict_public_buckets
+    )
+    error_message = "The ALB log bucket must block every form of public access."
+  }
+}
+
+# ── Hostname inputs: one valid label, distinct from the public API name ──────
+
+run "origin_subdomain_rejects_leading_hyphen" {
+  command = plan
+  variables { origin_subdomain = "-origin" }
+  expect_failures = [var.origin_subdomain]
+}
+
+run "origin_subdomain_rejects_trailing_hyphen" {
+  command = plan
+  variables { origin_subdomain = "origin-" }
+  expect_failures = [var.origin_subdomain]
+}
+
+run "origin_subdomain_rejects_dots" {
+  command = plan
+  variables { origin_subdomain = "origin.api" }
+  expect_failures = [var.origin_subdomain]
+}
+
+run "origin_subdomain_rejects_empty_label" {
+  command = plan
+  variables { origin_subdomain = "origin..api" }
+  expect_failures = [var.origin_subdomain]
+}
+
+run "origin_subdomain_rejects_uppercase" {
+  command = plan
+  variables { origin_subdomain = "Origin-API" }
+  expect_failures = [var.origin_subdomain]
+}
+
+run "origin_subdomain_rejects_long_label" {
+  command = plan
+  variables { origin_subdomain = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  expect_failures = [var.origin_subdomain]
+}
+
+run "api_subdomain_rejects_leading_hyphen" {
+  command = plan
+  variables { api_subdomain = "-api" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_trailing_hyphen" {
+  command = plan
+  variables { api_subdomain = "api-" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_dots" {
+  command = plan
+  variables { api_subdomain = "api.prod" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_empty_label" {
+  command = plan
+  variables { api_subdomain = "api..prod" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_uppercase" {
+  command = plan
+  variables { api_subdomain = "API" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "api_subdomain_rejects_long_label" {
+  command = plan
+  variables { api_subdomain = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  expect_failures = [var.api_subdomain]
+}
+
+run "origin_hostname_must_differ_from_api_hostname" {
+  command = plan
+  variables {
+    api_subdomain    = "api"
+    origin_subdomain = "api"
+  }
+  expect_failures = [aws_route53_record.origin]
+}
+
+run "origin_hostname_must_differ_from_custom_api_hostname" {
+  command = plan
+  variables {
+    api_subdomain    = "origin-api"
+    origin_subdomain = "origin-api"
+  }
+  expect_failures = [aws_route53_record.origin]
 }

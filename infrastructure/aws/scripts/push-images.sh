@@ -57,5 +57,6 @@ for SERVICE in "${SERVICES[@]}"; do
 done
 
 echo ""
-echo "==> All images pushed. Update ECS services to deploy:"
-echo "    aws ecs update-service --cluster banking-platform-prod --service <name> --force-new-deployment"
+echo "==> All images pushed. Once the logical databases also exist (init-databases.sql),"
+echo "    start a new deployment of each ECS service (see the next_steps Terraform output):"
+echo "    aws ecs update-service --cluster banking-platform-<environment> --service <name> --force-new-deployment"

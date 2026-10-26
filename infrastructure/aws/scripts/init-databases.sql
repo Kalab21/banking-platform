@@ -1,4 +1,6 @@
--- Run against RDS master (postgres db) after first terraform apply
+-- Run against RDS master (postgres db) after first terraform apply. The ECS
+-- services cannot reach steady state until these databases and the service
+-- images exist; see the next_steps Terraform output for the full order.
 -- PGPASSWORD=<password> psql -h <rds_endpoint> -U bankingadmin -d postgres -f init-databases.sql
 
 CREATE DATABASE user_db;
