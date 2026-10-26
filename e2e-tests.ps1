@@ -95,6 +95,88 @@ function Wait-For($label, [scriptblock]$condition, $timeoutSeconds = 180, $inter
 $script:READ_TIMEOUT = 60
 $script:WRITE_TIMEOUT = 120
 
+<#
+    Registers the shared user once the gateway can route, and waits until it can
+    route to transaction-service too. Returns the registration response.
+
+    Straight after `docker compose up` the gateway may not be listening yet, and
+    a container can be healthy while the gateway has not yet picked up its Eureka
+    registration, so calls to it answer 503 "No servers available". That is
+    startup order, not behaviour, and it failed whole flows that had nothing
+    wrong with them.
+
+    Two stages share one deadline. Registration is the first call the suite
+    makes and it needs user-service, so it is retried while the answer is 0 (no
+    connection) or any 5xx (nothing to route to); a 4xx refusal ends the retries
+    and is left to the suite's own assertion. Then the probe reads the history of
+    an account that cannot exist. Money movement is gateway -> transaction-service
+    -> account-service, and so is this read: transaction-service checks the
+    account with account-service before it answers. Once both hops resolve the
+    answer is 404, an application answer. Anything below 500 is the services
+    speaking for themselves, so it proves the path is live; 0 and every 5xx mean
+    not ready. That includes a 500, which comes back when a hop still has no
+    instance to call, or Eureka lists one that has stopped, and the connection is
+    refused. Probing only the first hop is not enough: transaction-service
+    discovers account-service on its own schedule, and deposits failed with 500
+    while the gateway route was already live. The probe needs the new token
+    because the gateway turns an anonymous request away with 401 before it ever
+    looks for a route.
+
+    One good answer is not enough either. transaction-service guards its calls
+    to account-service with a circuit breaker, and the failures this probe
+    collects while waiting count against it: left alone it opens, and the
+    suite's first requests meet an open breaker and a 503. So ready means
+    several answers in a row, which outlasts the breaker's open state and
+    leaves it letting calls through.
+
+    The 300-second budget is a cold start: thirteen JVMs booting on one
+    development machine take the better part of two minutes before the last
+    service registers. Bounded, so a stack that never becomes routable fails the
+    run here with a reason instead of as dozens of unrelated 503s. After this
+    passes, a 503 is a real failure and is reported as one.
+#>
+function Wait-ForGatewayRoutes($registration, $timeoutSeconds = 300, $intervalSeconds = 2, $stableAnswers = 3) {
+    $started = Get-Date
+    $stable = 0
+    $elapsed = { [int]((Get-Date) - $started).TotalSeconds }
+    $attempts = 0
+    $auth = $null
+    $status = 0
+    while (((Get-Date) - $started).TotalSeconds -lt $timeoutSeconds) {
+        $attempts++
+        if (-not $auth) {
+            $step = "registration"
+            try {
+                $auth = Invoke-RestMethod "$GW/api/auth/register" -Method POST -Body ($registration | ConvertTo-Json -Depth 10) `
+                    -Headers @{ "Content-Type" = "application/json" } -TimeoutSec $script:WRITE_TIMEOUT
+            } catch {
+                $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+                if ($status -gt 0 -and $status -lt 500) {
+                    return $null   # an answer, not an outage: the suite's own assertion reports it
+                }
+            }
+        }
+        if ($auth) {
+            $step = "transaction-service -> account-service path"
+            $status = Status "GET" "$GW/api/transactions/account/999999999" $auth.token
+            if ($status -gt 0 -and $status -lt 500) {
+                $stable++
+                if ($stable -ge $stableAnswers) {
+                    Write-Host "  [ready] gateway -> transaction-service -> account-service answers (HTTP $status, $(& $elapsed)s, $attempts attempt(s))" -ForegroundColor DarkGray
+                    return $auth
+                }
+                Start-Sleep -Seconds 1
+                continue
+            }
+            $stable = 0
+        }
+        Write-Host "  [wait] $step not ready yet (HTTP $status, $(& $elapsed)s of ${timeoutSeconds}s)" -ForegroundColor DarkGray
+        Start-Sleep -Seconds $intervalSeconds
+    }
+    Write-Host "  [FAIL] the stack was not routable within ${timeoutSeconds}s (stuck on $step, last HTTP $status); check the stack is up and the services registered with Eureka" -ForegroundColor Red
+    exit 1
+}
+
 function Post($url, $body, $token = $null) {
     # Money movement requires an Idempotency-Key; the other endpoints ignore it.
     # A new value per call, because each step here is a distinct operation.
@@ -175,7 +257,7 @@ $regBody = @{
     postalCode    = "20910"
     ssn           = "123-45-6789"
 }
-$auth = Post "$GW/api/auth/register" $regBody
+$auth = Wait-ForGatewayRoutes $regBody
 Assert "Register user" ($auth -and $auth.token)
 $TOKEN = $auth.token
 $USER_ID = $auth.userId
