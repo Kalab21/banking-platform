@@ -45,7 +45,7 @@
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>2.9.1</springdoc.version>
         <mapstruct.version>1.6.3</mapstruct.version>
-        <maven-failsafe.version>3.6.0</maven-failsafe.version>
+        <maven-failsafe.version>3.6.1</maven-failsafe.version>
         <!-- Spring Boot 3.3 manages Testcontainers 1.19.8, whose docker-java
              speaks API 1.32. Docker Engine 29 refuses anything below 1.40, so
              the integration tests cannot start a container on a current daemon
